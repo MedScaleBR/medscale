@@ -268,6 +268,7 @@ create table public.waitlist (
   notes           text,
   status          text not null default 'waiting'
                   check (status in ('waiting','scheduled','cancelled')),
+  notified_at     timestamptz,                        -- último aviso de vaga (cron/waitlist)
   created_at      timestamptz not null default now()
 );
 

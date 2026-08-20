@@ -97,7 +97,7 @@ node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
 ```
 
 ```bash
-# CRON_SECRET — protege /api/cron/reminders contra chamadas externas (qualquer string forte serve)
+# CRON_SECRET — protege /api/cron/{reminders,noshow,waitlist} contra chamadas externas (qualquer string forte serve)
 node -e "console.log(require('crypto').randomBytes(24).toString('hex'))"
 ```
 
@@ -366,10 +366,13 @@ Se algo não funcionar, veja a seção [14. Solução de problemas](#14-soluçã
 4. Deploy.
 5. Volte no **Google Cloud Console** (passo 5.4) e no **App Meta** (passo 6.2) e adicione as
    URLs de produção que ainda não estavam lá (redirect URIs, callback do webhook).
-6. **Cron de lembretes**: o arquivo [`vercel.json`](vercel.json) já declara
-   `/api/cron/reminders` rodando a cada hora — nenhuma configuração extra é necessária além de
-   `CRON_SECRET` estar nas env vars do projeto na Vercel (a própria Vercel envia esse valor no
-   header `Authorization` automaticamente quando bate o horário).
+6. **Crons (lembretes, no-show, lista de espera)**: rodam via Supabase pg_cron, não Vercel Cron
+   (o plano Hobby só permite frequência diária, e os crons do MedScale precisam rodar de hora em
+   hora). No SQL Editor do projeto Supabase, rode o script [`supabase/cron.sql`](supabase/cron.sql):
+   ele habilita as extensões `pg_cron`/`pg_net`, salva `CRON_SECRET` como `app.cron_secret` no
+   banco (troque pelo mesmo valor da env var) e registra os três jobs (`appointment-reminders`,
+   `mark-noshow`, `waitlist-notify`) apontando para `https://<seu-domínio>/api/cron/*`. Ajuste a
+   URL base no script antes de rodar se o domínio de produção for diferente do exemplo.
 7. Depois do primeiro deploy, repita o passo 10 (onboarding) para cada médico em produção — os
    dados de dev (Supabase local/projeto de teste) não migram automaticamente para produção a
    menos que você aponte para o mesmo projeto Supabase.
@@ -389,7 +392,7 @@ Se algo não funcionar, veja a seção [14. Solução de problemas](#14-soluçã
 - [ ] Mensagem de teste recebida no WhatsApp do médico
 - [ ] Agendamento de teste criado via bot e visível em `/agenda`
 - [ ] Handoff testado (conversa marcada como "Atenção humana")
-- [ ] (Produção) Cron de lembretes com `CRON_SECRET` configurado na Vercel
+- [ ] (Produção) `supabase/cron.sql` rodado — três jobs pg_cron registrados com `CRON_SECRET` configurado no banco e na Vercel
 - [ ] (Produção) Todas as redirect URIs de produção adicionadas no Google e na Meta
 
 ---
@@ -431,8 +434,9 @@ Rode `npm run lint` e `npx tsc --noEmit` separadamente para isolar se é erro de
 ESLint; o build roda os dois e para no primeiro erro.
 
 **Lembretes automáticos não estão sendo enviados**
-- Confirme que o projeto está na Vercel (o cron declarado em `vercel.json` só roda lá, não em
-  outros hosts) e que `CRON_SECRET` está nas env vars de produção.
+- Confirme que `supabase/cron.sql` foi executado (`select * from cron.job;` no SQL Editor deve
+  listar os três jobs) e que `CRON_SECRET` é o mesmo valor em `app.cron_secret` no banco e nas
+  env vars de produção da Vercel.
 - O lembrete só é enviado para consultas entre 23h e 25h no futuro (janela de ~1h em torno de
   24h antes) — não espere um envio imediato ao criar a consulta.
 - O template `appointment_reminder` precisa estar **aprovado** pela Meta antes de poder ser
