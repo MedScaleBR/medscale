@@ -369,6 +369,7 @@ export interface Database {
           preferred_times: string[] | null
           notes: string | null
           status: WaitlistStatus
+          notified_at: string | null
           created_at: string
         }
         Insert: Partial<Database['public']['Tables']['waitlist']['Row']> & {

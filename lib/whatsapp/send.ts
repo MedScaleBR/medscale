@@ -83,3 +83,56 @@ export async function sendReminderTemplate({
 
   return response.json()
 }
+
+interface SendWaitlistParams {
+  to: string
+  phoneNumberId: string
+  token: string
+  patientName: string
+  workspaceName: string
+  slots: string
+}
+
+// Aviso de vaga aberta para quem está na lista de espera — também iniciado
+// pelo sistema fora da janela de 24h, precisa de template aprovado pela Meta.
+export async function sendWaitlistTemplate({
+  to,
+  phoneNumberId,
+  token,
+  patientName,
+  workspaceName,
+  slots,
+}: SendWaitlistParams) {
+  const url = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to,
+      type: 'template',
+      template: {
+        name: 'waitlist_slot_available', // template aprovado pela Meta
+        language: { code: 'pt_BR' },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', text: patientName },
+              { type: 'text', text: workspaceName },
+              { type: 'text', text: slots },
+            ],
+          },
+        ],
+      },
+    }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(`WhatsApp API error: ${JSON.stringify(error)}`)
+  }
+
+  return response.json()
+}

@@ -3,10 +3,10 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { sendReminderTemplate } from '@/lib/whatsapp/send'
 import { decryptToken } from '@/lib/crypto'
 
-// Disparado pelo Vercel Cron (ver vercel.json) uma vez por hora.
-// Envia lembrete de consulta a pacientes com consulta entre 23h e 25h no futuro
-// e ainda sem lembrete enviado.
-export async function GET(req: NextRequest) {
+// Disparado pelo Supabase pg_cron (ver supabase/cron.sql) uma vez por hora, no
+// ponto. Envia lembrete de consulta a pacientes com consulta entre 23h e 25h no
+// futuro e ainda sem lembrete enviado.
+export async function POST(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
