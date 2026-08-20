@@ -1,0 +1,28 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@/lib/supabase/server'
+import { getAuthenticatedClient } from '@/lib/google/auth'
+import { requireWorkspaceSession } from '@/lib/session/api'
+
+export async function DELETE(req: NextRequest) {
+  const result = await requireWorkspaceSession(req)
+  if ('error' in result) return result.error
+  const { session } = result
+
+  const supabase = await createClient()
+
+  try {
+    // Revogar o token na Google antes de deletar do banco
+    const auth = await getAuthenticatedClient(session.workspaceId)
+    const { token } = await auth.getAccessToken()
+    if (token) {
+      await fetch(`https://oauth2.googleapis.com/revoke?token=${token}`, { method: 'POST' })
+    }
+  } catch {
+    // Continua mesmo se a revogação falhar (ex.: já desconectado)
+  }
+
+  const { error } = await supabase.from('google_tokens').delete().eq('workspace_id', session.workspaceId)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  return NextResponse.json({ ok: true })
+}

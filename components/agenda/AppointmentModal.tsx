@@ -1,0 +1,193 @@
+'use client'
+
+import { useState } from 'react'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+import type { AppointmentType, AppointmentStatus } from '@/types/database'
+
+export interface AppointmentFormValues {
+  id?: string
+  patient_name: string
+  patient_phone: string
+  scheduled_at: string // datetime-local value
+  duration_min: number
+  type: AppointmentType
+  status: AppointmentStatus
+  notes: string
+  price: string
+}
+
+interface AppointmentModalProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  initialValues?: Partial<AppointmentFormValues>
+  onSave: (values: AppointmentFormValues) => Promise<void>
+  onDelete?: () => Promise<void>
+}
+
+const EMPTY: AppointmentFormValues = {
+  patient_name: '',
+  patient_phone: '',
+  scheduled_at: '',
+  duration_min: 30,
+  type: 'consulta',
+  status: 'agendado',
+  notes: '',
+  price: '',
+}
+
+export function AppointmentModal({ open, onOpenChange, initialValues, onSave, onDelete }: AppointmentModalProps) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        {open && (
+          <AppointmentForm initialValues={initialValues} onSave={onSave} onDelete={onDelete} onOpenChange={onOpenChange} />
+        )}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+interface AppointmentFormProps {
+  initialValues?: Partial<AppointmentFormValues>
+  onSave: (values: AppointmentFormValues) => Promise<void>
+  onDelete?: () => Promise<void>
+  onOpenChange: (open: boolean) => void
+}
+
+function AppointmentForm({ initialValues, onSave, onDelete, onOpenChange }: AppointmentFormProps) {
+  const [values, setValues] = useState<AppointmentFormValues>({ ...EMPTY, ...initialValues })
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    if (!values.patient_name || !values.patient_phone || !values.scheduled_at) return
+    setSaving(true)
+    try {
+      await onSave(values)
+      onOpenChange(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <>
+      <DialogHeader>
+        <DialogTitle>{values.id ? 'Editar consulta' : 'Nova consulta'}</DialogTitle>
+      </DialogHeader>
+
+      <div className="space-y-3">
+          <div>
+            <Label htmlFor="patient_name">Nome do paciente</Label>
+            <Input
+              id="patient_name"
+              value={values.patient_name}
+              onChange={(e) => setValues((v) => ({ ...v, patient_name: e.target.value }))}
+            />
+          </div>
+          <div>
+            <Label htmlFor="patient_phone">Telefone (E.164)</Label>
+            <Input
+              id="patient_phone"
+              placeholder="+5511999999999"
+              value={values.patient_phone}
+              onChange={(e) => setValues((v) => ({ ...v, patient_phone: e.target.value }))}
+            />
+          </div>
+          <div>
+            <Label htmlFor="scheduled_at">Data e hora</Label>
+            <Input
+              id="scheduled_at"
+              type="datetime-local"
+              value={values.scheduled_at}
+              onChange={(e) => setValues((v) => ({ ...v, scheduled_at: e.target.value }))}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label>Duração (min)</Label>
+              <Input
+                type="number"
+                value={values.duration_min}
+                onChange={(e) => setValues((v) => ({ ...v, duration_min: Number(e.target.value) }))}
+              />
+            </div>
+            <div>
+              <Label>Tipo</Label>
+              <Select value={values.type} onValueChange={(t) => setValues((v) => ({ ...v, type: t as AppointmentType }))}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="consulta">Consulta</SelectItem>
+                  <SelectItem value="retorno">Retorno</SelectItem>
+                  <SelectItem value="avaliacao">Avaliação</SelectItem>
+                  <SelectItem value="procedimento">Procedimento</SelectItem>
+                  <SelectItem value="outro">Outro</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div>
+            <Label>Status</Label>
+            <Select
+              value={values.status}
+              onValueChange={(s) => setValues((v) => ({ ...v, status: s as AppointmentStatus }))}
+            >
+              <SelectTrigger>
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="agendado">Agendado</SelectItem>
+                <SelectItem value="confirmado">Confirmado</SelectItem>
+                <SelectItem value="realizado">Realizado</SelectItem>
+                <SelectItem value="cancelado">Cancelado</SelectItem>
+                <SelectItem value="no_show">No-show</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="notes">Observações</Label>
+            <Textarea
+              id="notes"
+              value={values.notes}
+              onChange={(e) => setValues((v) => ({ ...v, notes: e.target.value }))}
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 sm:justify-between">
+          {onDelete && values.id ? (
+            <Button variant="ghost" className="text-red-600 hover:text-red-700" onClick={onDelete}>
+              Cancelar consulta
+            </Button>
+          ) : (
+            <span />
+          )}
+          <Button
+            onClick={handleSave}
+            disabled={saving}
+            className="bg-[var(--cyan)] text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
+          >
+            {saving ? 'Salvando...' : 'Salvar'}
+          </Button>
+      </DialogFooter>
+    </>
+  )
+}
