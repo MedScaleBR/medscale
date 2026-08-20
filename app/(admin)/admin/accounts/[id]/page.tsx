@@ -3,31 +3,66 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft, MapPin } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { AccountDetailForm } from '@/components/admin/AccountDetailForm'
-import { MembersList, type MemberRow } from '@/components/admin/MembersList'
+import { MembersList, type MemberRow, type PendingInvite } from '@/components/admin/MembersList'
 import type { ModuleSlug } from '@/types/database'
 
 export default async function AdminAccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
 
-  const [{ data: account }, { data: membershipsRaw }] = await Promise.all([
+  const [
+    { data: account },
+    { data: membershipsRaw, error: membershipsError },
+    { data: invitesRaw },
+  ] = await Promise.all([
     supabase.from('accounts').select('*').eq('id', id).single(),
     supabase
       .from('memberships')
-      .select('id, role, status, user_id, profiles:user_id(full_name, email)')
+      .select('id, role, status, user_id')
       .eq('account_id', id)
       .order('invited_at'),
+    supabase
+      .from('invites')
+      .select('id, email, role, expires_at')
+      .eq('account_id', id)
+      .is('accepted_at', null)
+      .order('created_at', { ascending: false }),
   ])
+
+  if (membershipsError) console.error('Erro ao buscar memberships:', membershipsError.message)
 
   if (!account) notFound()
 
-  type MembershipRow = { id: string; role: MemberRow['role']; status: MemberRow['status']; profiles: { full_name: string; email: string | null } | null }
-  const members: MemberRow[] = ((membershipsRaw ?? []) as unknown as MembershipRow[]).map((m) => ({
-    id: m.id,
-    role: m.role,
-    status: m.status,
-    userName: m.profiles?.full_name ?? 'Sem nome',
-    userEmail: m.profiles?.email ?? '—',
+  // Busca separada em vez de embed (profiles:user_id(...)) — memberships.user_id
+  // e profiles.id referenciam auth.users cada um por si, sem FK direta entre
+  // memberships e profiles, então o PostgREST não consegue resolver esse
+  // embed automaticamente (retorna erro de relacionamento não encontrado).
+  const userIds = (membershipsRaw ?? []).map((m) => m.user_id)
+  const { data: profilesRaw, error: profilesError } =
+    userIds.length > 0
+      ? await supabase.from('profiles').select('id, full_name, email').in('id', userIds)
+      : { data: [], error: null }
+
+  if (profilesError) console.error('Erro ao buscar profiles:', profilesError.message)
+
+  const profilesById = new Map((profilesRaw ?? []).map((p) => [p.id, p]))
+
+  const members: MemberRow[] = (membershipsRaw ?? []).map((m) => {
+    const profile = profilesById.get(m.user_id)
+    return {
+      id: m.id,
+      role: m.role,
+      status: m.status,
+      userName: profile?.full_name ?? 'Sem nome',
+      userEmail: profile?.email ?? '—',
+    }
+  })
+
+  const pendingInvites: PendingInvite[] = (invitesRaw ?? []).map((i) => ({
+    id: i.id,
+    email: i.email,
+    role: i.role,
+    expired: new Date(i.expires_at) < new Date(),
   }))
 
   return (
@@ -59,7 +94,7 @@ export default async function AdminAccountDetailPage({ params }: { params: Promi
         initialIsActive={account.is_active}
       />
 
-      <MembersList accountId={id} initialMembers={members} />
+      <MembersList accountId={id} initialMembers={members} initialInvites={pendingInvites} />
     </div>
   )
 }

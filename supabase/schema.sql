@@ -572,6 +572,11 @@ create policy "invites: medscale admin full" on public.invites
 -- Profiles: cada um gerencia o próprio
 create policy "profiles: own" on public.profiles
   for all using (id = auth.uid());
+-- Sem isto, o admin MedScale não consegue ler nome/e-mail de outros usuários
+-- ao listar membros em /admin/accounts/[id] — qualquer leitura de profiles de
+-- outro auth.uid() volta vazia.
+create policy "profiles: medscale admin full" on public.profiles
+  for all using (public.is_medscale_admin());
 
 -- Patients: qualquer membro ativo do account (compartilhado entre workspaces)
 create policy "patients: account members" on public.patients
@@ -637,6 +642,18 @@ grant all on all sequences in schema public to authenticated;
 
 alter default privileges in schema public grant all on tables to authenticated;
 alter default privileges in schema public grant all on sequences to authenticated;
+
+-- 'service_role' (createAdminClient() em lib/supabase/server.ts) ignora RLS
+-- mas ainda precisa destes grants básicos — usado por app/api/cron/*,
+-- app/api/admin/accounts/*, app/(auth)/invite/[token], app/api/invites/*,
+-- app/api/whatsapp/webhook, lib/llm/agent.ts, lib/bot/*, lib/google/*. Sem
+-- isto, todas essas rotas falham com "permission denied for table X".
+grant usage on schema public to service_role;
+grant all on all tables in schema public to service_role;
+grant all on all sequences in schema public to service_role;
+
+alter default privileges in schema public grant all on tables to service_role;
+alter default privileges in schema public grant all on sequences to service_role;
 
 -- 'anon' propositalmente não recebe grants — nenhuma tabela deste app deve
 -- ser lida por usuários não autenticados.

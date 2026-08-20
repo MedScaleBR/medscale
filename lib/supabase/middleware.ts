@@ -34,6 +34,12 @@ export async function updateSession(request: NextRequest) {
   // recuperação) e não deve redirecionar o usuário autenticado para longe dela.
   const AUTH_ROUTES = ['/login', '/registrar', '/esqueci-senha']
   const isAuthRoute = AUTH_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+  // /invite/[token] precisa ficar acessível tanto deslogado (pra ver o convite
+  // e escolher Entrar/Criar conta) quanto logado (pra aceitar) — por isso é
+  // uma rota pública separada, e não entra em AUTH_ROUTES (que redireciona
+  // usuário já logado para o dashboard).
+  const PUBLIC_ROUTES = ['/invite']
+  const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
   const isApiRoute = pathname.startsWith('/api')
   const isWebhook = pathname.startsWith('/api/whatsapp')
   // Troca o code por sessão — por definição o usuário AINDA não está
@@ -46,7 +52,7 @@ export async function updateSession(request: NextRequest) {
   // Webhooks da Meta e o callback de OAuth não usam autenticação de sessão
   if (isWebhook || isAuthCallback) return response
 
-  if (!user && !isAuthRoute && !isApiRoute) {
+  if (!user && !isAuthRoute && !isPublicRoute && !isApiRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 

@@ -8,10 +8,14 @@ import { AuthLayout } from '@/components/auth/AuthLayout'
 export default async function RegisterPage({
   searchParams,
 }: {
-  searchParams: Promise<{ redirect?: string }>
+  searchParams: Promise<{ redirect?: string; email?: string }>
 }) {
-  const { redirect: redirectTo } = await searchParams
+  const { redirect: redirectTo, email } = await searchParams
   const destination = redirectTo && redirectTo.startsWith('/') ? redirectTo : '/dashboard'
+  const query = new URLSearchParams()
+  if (redirectTo) query.set('redirect', redirectTo)
+  if (email) query.set('email', email)
+  const loginHref = query.toString() ? `/login?${query.toString()}` : '/login'
   const supabase = await createClient()
   const {
     data: { user },
@@ -25,10 +29,7 @@ export default async function RegisterPage({
       footer={
         <>
           Já tem uma conta?{' '}
-          <Link
-            href={redirectTo ? `/login?redirect=${encodeURIComponent(redirectTo)}` : '/login'}
-            className="font-medium text-[var(--cyan-dark)] hover:underline"
-          >
+          <Link href={loginHref} className="font-medium text-[var(--cyan-dark)] hover:underline">
             Entrar
           </Link>
         </>
@@ -43,7 +44,7 @@ export default async function RegisterPage({
           <div className="h-px flex-1 bg-gray-200" />
         </div>
 
-        <AuthForm mode="signup" redirectTo={destination} />
+        <AuthForm mode="signup" redirectTo={destination} initialEmail={email} />
 
         <p className="text-center text-xs text-gray-400">
           Ao criar sua conta, você concorda com o uso responsável dos dados dos seus pacientes e

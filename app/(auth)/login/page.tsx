@@ -8,15 +8,20 @@ import { AuthLayout } from '@/components/auth/AuthLayout'
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; redirect?: string }>
+  searchParams: Promise<{ error?: string; redirect?: string; email?: string }>
 }) {
-  const { error, redirect: redirectTo } = await searchParams
+  const { error, redirect: redirectTo, email } = await searchParams
   const destination = redirectTo && redirectTo.startsWith('/') ? redirectTo : '/dashboard'
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
   if (user) redirect(destination)
+
+  const query = new URLSearchParams()
+  if (redirectTo) query.set('redirect', redirectTo)
+  if (email) query.set('email', email)
+  const registerHref = query.toString() ? `/registrar?${query.toString()}` : '/registrar'
 
   return (
     <AuthLayout
@@ -25,10 +30,7 @@ export default async function LoginPage({
       footer={
         <>
           Ainda não tem uma conta?{' '}
-          <Link
-            href={redirectTo ? `/registrar?redirect=${encodeURIComponent(redirectTo)}` : '/registrar'}
-            className="font-medium text-[var(--cyan-dark)] hover:underline"
-          >
+          <Link href={registerHref} className="font-medium text-[var(--cyan-dark)] hover:underline">
             Criar conta
           </Link>
         </>
@@ -50,7 +52,7 @@ export default async function LoginPage({
           <div className="h-px flex-1 bg-gray-200" />
         </div>
 
-        <AuthForm mode="login" redirectTo={destination} />
+        <AuthForm mode="login" redirectTo={destination} initialEmail={email} />
       </div>
     </AuthLayout>
   )

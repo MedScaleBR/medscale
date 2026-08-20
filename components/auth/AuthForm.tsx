@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 interface AuthFormProps {
   mode: 'login' | 'signup'
   redirectTo?: string
+  initialEmail?: string
 }
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -21,10 +22,11 @@ function translateError(message: string) {
   return ERROR_MESSAGES[message] ?? message
 }
 
-export function AuthForm({ mode, redirectTo = '/dashboard' }: AuthFormProps) {
+export function AuthForm({ mode, redirectTo = '/dashboard', initialEmail }: AuthFormProps) {
   const router = useRouter()
   const [fullName, setFullName] = useState('')
-  const [email, setEmail] = useState('')
+  const [email, setEmail] = useState(initialEmail ?? '')
+  const emailLocked = Boolean(initialEmail)
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
@@ -58,7 +60,13 @@ export function AuthForm({ mode, redirectTo = '/dashboard' }: AuthFormProps) {
           password,
           options: {
             data: { full_name: fullName },
-            emailRedirectTo: `${location.origin}/auth/callback`,
+            // Se a confirmação de e-mail estiver ativada no projeto, é este
+            // link que o usuário clica no e-mail do Supabase — precisa levar
+            // o destino (ex: /invite/token) senão ele confirma e cai no
+            // dashboard sem nunca ver o convite. Quando confirmação está
+            // desativada, `data.session` já vem preenchido e isto nem entra
+            // em jogo.
+            emailRedirectTo: `${location.origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
           },
         })
 
@@ -68,7 +76,6 @@ export function AuthForm({ mode, redirectTo = '/dashboard' }: AuthFormProps) {
         }
 
         if (data.session) {
-          // Confirmação de e-mail desativada no projeto — já entra direto
           router.push(redirectTo)
           router.refresh()
         } else {
@@ -117,11 +124,12 @@ export function AuthForm({ mode, redirectTo = '/dashboard' }: AuthFormProps) {
             id="email"
             type="email"
             required
+            readOnly={emailLocked}
             autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             placeholder="voce@clinica.com"
-            className="w-full rounded-lg border border-gray-200 py-2.5 pl-10 pr-3 text-sm outline-none transition-shadow focus:border-[var(--cyan)] focus:ring-2 focus:ring-[var(--cyan-20)]"
+            className={`w-full rounded-lg border border-gray-200 py-2.5 pl-10 pr-3 text-sm outline-none transition-shadow focus:border-[var(--cyan)] focus:ring-2 focus:ring-[var(--cyan-20)] ${emailLocked ? 'bg-gray-50 text-gray-500' : ''}`}
           />
         </div>
       </div>

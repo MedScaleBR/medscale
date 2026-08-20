@@ -11,6 +11,14 @@ export async function POST(req: NextRequest) {
   if ('error' in result) return result.error
   const { session } = result
 
+  // A policy de RLS de `workspaces` só permite update para admin do account —
+  // sem este gate, um membro comum faria a chamada, o RLS bloquearia as 0
+  // linhas silenciosamente (sem lançar erro), e a rota ainda responderia
+  // ok: true como se tivesse salvo.
+  if (session.role === 'member') {
+    return NextResponse.json({ error: 'Apenas admins da account podem configurar o WhatsApp.' }, { status: 403 })
+  }
+
   const supabase = await createClient()
   const { phone_number_id, meta_token } = await req.json()
   if (!phone_number_id || !meta_token) {

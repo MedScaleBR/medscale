@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { AuthLayout } from '@/components/auth/AuthLayout'
 import { AcceptInviteButton } from '@/components/auth/AcceptInviteButton'
@@ -66,7 +67,29 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
     data: { user },
   } = await supabase.auth.getUser()
 
+  // Aceite automático: se o usuário já está logado com o e-mail do convite —
+  // não importa se chegou aqui por senha direto, link de confirmação de
+  // e-mail do Supabase, ou login com Google — vira membro sem precisar
+  // clicar em nada. O AcceptInviteButton abaixo continua como fallback caso
+  // o insert falhe por algum motivo (ex: corrida com outra aba).
+  if (user && user.email?.toLowerCase() === invite.email.toLowerCase()) {
+    const { error: membershipError } = await admin.from('memberships').insert({
+      account_id: invite.account_id,
+      user_id: user.id,
+      role: invite.role,
+      status: 'active',
+      invited_by: invite.invited_by,
+      accepted_at: new Date().toISOString(),
+    })
+
+    if (!membershipError) {
+      await admin.from('invites').update({ accepted_at: new Date().toISOString() }).eq('id', invite.id)
+      redirect('/dashboard')
+    }
+  }
+
   const redirectPath = `/invite/${token}`
+  const emailQuery = `&email=${encodeURIComponent(invite.email)}`
 
   return (
     <AuthLayout
@@ -88,13 +111,13 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
             Entre ou crie uma conta com o e-mail <strong>{invite.email}</strong> para aceitar.
           </p>
           <Link
-            href={`/login?redirect=${encodeURIComponent(redirectPath)}`}
+            href={`/login?redirect=${encodeURIComponent(redirectPath)}${emailQuery}`}
             className="block w-full rounded-lg bg-[var(--navy-dark)] py-2.5 text-center text-sm font-medium text-white hover:bg-[var(--navy)]"
           >
             Entrar
           </Link>
           <Link
-            href={`/registrar?redirect=${encodeURIComponent(redirectPath)}`}
+            href={`/registrar?redirect=${encodeURIComponent(redirectPath)}${emailQuery}`}
             className="block w-full rounded-lg border border-gray-200 py-2.5 text-center text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Criar conta
