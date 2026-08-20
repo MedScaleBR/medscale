@@ -38,8 +38,14 @@ export async function updateSession(request: NextRequest) {
   // e escolher Entrar/Criar conta) quanto logado (pra aceitar) — por isso é
   // uma rota pública separada, e não entra em AUTH_ROUTES (que redireciona
   // usuário já logado para o dashboard).
-  const PUBLIC_ROUTES = ['/invite']
+  // /politica-privacidade.html é servido de public/ (cópia do arquivo estático
+  // original em medscale-site/, sem alterá-lo) e é linkado pela landing page.
+  const PUBLIC_ROUTES = ['/invite', '/politica-privacidade.html']
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
+  // "/" é a landing page estática (app/route.ts) — não pode entrar em
+  // PUBLIC_ROUTES (que usa prefixo) porque "/" como prefixo bateria com
+  // qualquer rota do sistema.
+  const isRoot = pathname === '/'
   const isApiRoute = pathname.startsWith('/api')
   const isWebhook = pathname.startsWith('/api/whatsapp')
   // Troca o code por sessão — por definição o usuário AINDA não está
@@ -52,7 +58,7 @@ export async function updateSession(request: NextRequest) {
   // Webhooks da Meta e o callback de OAuth não usam autenticação de sessão
   if (isWebhook || isAuthCallback) return response
 
-  if (!user && !isAuthRoute && !isPublicRoute && !isApiRoute) {
+  if (!user && !isAuthRoute && !isPublicRoute && !isRoot && !isApiRoute) {
     return NextResponse.redirect(new URL('/login', request.url))
   }
 

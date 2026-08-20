@@ -1,0 +1,2623 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="A MedScale assume todo o crescimento do seu consultório — marketing, agenda, secretária com IA e tecnologia. Você cuida do paciente, a gente cuida do resto.">
+  <meta property="og:title" content="MedScale — Sua agenda cheia. Seu tempo de volta.">
+  <meta property="og:description" content="Assessoria médica especialista em crescimento de consultórios. Marketing, tráfego, secretária com IA e inteligência financeira sob um único parceiro.">
+  <meta property="og:type" content="website">
+  <title>MedScale — A empresa por trás do médico | Sua agenda cheia. Seu tempo de volta.</title>
+
+  <!-- Preconnect for fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
+
+  <!-- Tailwind CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Alpine.js -->
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Plus Jakarta Sans', 'ui-sans-serif', 'system-ui'] },
+          colors: {
+            navy:  { DEFAULT: '#1B3068', dark: '#0F1E45', mid: '#162755', light: '#243d7d' },
+            brand: { DEFAULT: '#00B9D8', dark: '#0094AF', light: '#33C7E2' },
+          },
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* ── Reset & Base ─────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; }
+    html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+    body { margin: 0; font-family: 'Plus Jakarta Sans', ui-sans-serif, system-ui; color: #0F172A; background: #fff; -webkit-font-smoothing: antialiased; }
+
+    /* ── @property (animatable CSS vars para ShinyButton) ───────────── */
+    @property --gradient-angle {
+      syntax: "<angle>";
+      initial-value: 0deg;
+      inherits: false;
+    }
+    @property --gradient-angle-offset {
+      syntax: "<angle>";
+      initial-value: 0deg;
+      inherits: false;
+    }
+    @property --gradient-percent {
+      syntax: "<percentage>";
+      initial-value: 5%;
+      inherits: false;
+    }
+    @property --gradient-shine {
+      syntax: "<color>";
+      initial-value: white;
+      inherits: false;
+    }
+
+    /* ── CSS Tokens ───────────────────────────────────────────────────── */
+    :root {
+      --navy:       #1B3068;
+      --navy-dark:  #0F1E45;
+      --navy-mid:   #162755;
+      --navy-light: #243d7d;
+      --cyan:       #00B9D8;
+      --cyan-dark:  #0094AF;
+      --cyan-10:    rgba(0,185,216,.10);
+      --cyan-20:    rgba(0,185,216,.20);
+      --cyan-30:    rgba(0,185,216,.30);
+      --navy-06:    rgba(27,48,104,.06);
+      --navy-10:    rgba(27,48,104,.10);
+      --w10:        rgba(255,255,255,.10);
+      --w15:        rgba(255,255,255,.15);
+      --w60:        rgba(255,255,255,.60);
+      --w70:        rgba(255,255,255,.70);
+      --shadow-sm:  0 1px 4px rgba(15,30,69,.06), 0 4px 16px rgba(15,30,69,.05);
+      --shadow-md:  0 2px 8px rgba(15,30,69,.07), 0 10px 28px rgba(15,30,69,.07);
+      --shadow-lg:  0 4px 16px rgba(15,30,69,.10), 0 20px 48px rgba(15,30,69,.09);
+    }
+
+    /* ── Skip link (a11y) ─────────────────────────────────────────────── */
+    .skip-link {
+      position: absolute; top: -99px; left: 1rem; z-index: 9999;
+      padding: .5rem 1rem; background: var(--cyan); color: var(--navy-dark);
+      font-weight: 700; font-size: .875rem; border-radius: 8px;
+      text-decoration: none; transition: top .1s;
+    }
+    .skip-link:focus { top: 1rem; }
+
+    /* ── Focus states ─────────────────────────────────────────────────── */
+    :focus-visible { outline: 2px solid var(--cyan); outline-offset: 3px; border-radius: 4px; }
+    button:focus-visible, a:focus-visible { border-radius: 8px; }
+
+    /* ── Alpine cloak ─────────────────────────────────────────────────── */
+    [x-cloak] { display: none !important; }
+
+    /* ── Hero ─────────────────────────────────────────────────────────── */
+    .hero {
+      background-color: var(--navy-dark);
+      background-image:
+        radial-gradient(ellipse 55% 70% at 12% 65%, rgba(0,185,216,.18) 0%, transparent 60%),
+        radial-gradient(ellipse 45% 55% at 88% 12%, rgba(0,185,216,.10) 0%, transparent 50%),
+        radial-gradient(ellipse 35% 45% at 60% 88%, rgba(27,48,104,.6) 0%, transparent 50%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='14' cy='14' r='1' fill='white' fill-opacity='.04'/%3E%3C/svg%3E");
+    }
+
+    /* ── Text gradient ────────────────────────────────────────────────── */
+    .text-gradient {
+      background: linear-gradient(100deg, #00B9D8 0%, #5CD9EE 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    /* ── Dark section ─────────────────────────────────────────────────── */
+    .section-dark {
+      background-color: var(--navy-dark);
+      background-image:
+        radial-gradient(ellipse 60% 80% at 90% 20%, rgba(0,185,216,.12) 0%, transparent 55%),
+        radial-gradient(ellipse 40% 60% at 10% 80%, rgba(0,185,216,.07) 0%, transparent 45%);
+    }
+
+    /* ── Badge ────────────────────────────────────────────────────────── */
+    .badge {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: var(--w10); border: 1px solid var(--w15);
+      border-radius: 99px; padding: 6px 14px;
+    }
+    .badge-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--cyan); flex-shrink: 0;
+      animation: pulse-dot 2s ease-in-out infinite;
+    }
+    @keyframes pulse-dot {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: .6; transform: scale(.85); }
+    }
+
+    /* ── Buttons ──────────────────────────────────────────────────────── */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+      font-family: inherit; font-weight: 700; border: none; cursor: pointer;
+      border-radius: 12px; transition: transform .12s ease, background .12s ease, box-shadow .12s ease;
+      min-height: 48px; padding: 0 28px; font-size: .9375rem; text-decoration: none;
+      white-space: nowrap; position: relative;
+    }
+    .btn:active { transform: scale(.97); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; transform: none !important; }
+
+    .btn-cyan {
+      background: var(--cyan); color: var(--navy-dark);
+      box-shadow: 0 4px 16px rgba(0,185,216,.30);
+    }
+    .btn-cyan:hover:not(:disabled) { background: var(--cyan-dark); box-shadow: 0 6px 24px rgba(0,185,216,.40); transform: translateY(-1px); }
+
+    .btn-navy {
+      background: var(--navy); color: #fff;
+      box-shadow: 0 4px 16px rgba(27,48,104,.30);
+    }
+    .btn-navy:hover:not(:disabled) { background: var(--navy-light); box-shadow: 0 6px 24px rgba(27,48,104,.40); transform: translateY(-1px); }
+
+    .btn-ghost {
+      background: var(--w10); color: #fff; border: 1px solid var(--w15);
+      box-shadow: none;
+    }
+    .btn-ghost:hover { background: var(--w15); }
+
+    .btn-outline {
+      background: transparent; color: var(--navy); border: 2px solid var(--navy);
+    }
+    .btn-outline:hover { background: var(--navy-06); }
+
+    /* ── ShinyButton (port do componente React shiny-button) ─────────── */
+    .shiny {
+      --shiny-highlight:        var(--cyan);
+      --shiny-highlight-subtle: #5CD9EE;
+      --shiny-bg:               var(--navy-dark);
+      --shiny-bg-subtle:        var(--navy-light);
+      --shiny-anim:             gradient-angle linear infinite;
+      --shiny-dur:              3s;
+      --shiny-tr:               800ms cubic-bezier(0.25, 1, 0.5, 1);
+      /* Override @property defaults: maior arco visível em repouso + cor cyan (não branco) */
+      --gradient-percent:       12%;
+      --gradient-shine:         var(--shiny-highlight);
+
+      isolation: isolate;
+      overflow: hidden;
+      color: #fff !important;
+      background:
+        linear-gradient(var(--shiny-bg), var(--shiny-bg)) padding-box,
+        conic-gradient(
+          from calc(var(--gradient-angle) - var(--gradient-angle-offset)),
+          transparent,
+          var(--shiny-highlight) var(--gradient-percent),
+          var(--gradient-shine) calc(var(--gradient-percent) * 2),
+          var(--shiny-highlight) calc(var(--gradient-percent) * 3),
+          transparent calc(var(--gradient-percent) * 4)
+        ) border-box !important;
+      border: 1px solid transparent !important;
+      box-shadow:
+        inset 0 0 0 1px var(--shiny-bg-subtle),
+        0 0 20px rgba(0,185,216,.18) !important;
+      transition-property: --gradient-angle-offset, --gradient-percent, --gradient-shine;
+      transition-duration: var(--shiny-tr);
+      transition-timing-function: cubic-bezier(0.25, 1, 0.5, 1);
+      animation: var(--shiny-anim) var(--shiny-dur),
+                 var(--shiny-anim) calc(var(--shiny-dur) / 0.4) reverse paused;
+      animation-composition: add;
+    }
+
+    .shiny::before,
+    .shiny::after {
+      content: '';
+      pointer-events: none;
+      position: absolute;
+      inset-inline-start: 50%;
+      inset-block-start: 50%;
+      translate: -50% -50%;
+      z-index: -1;
+    }
+
+    /* Dots pattern */
+    .shiny::before {
+      --s: calc(100% - 6px);
+      --p: 2px;
+      width: var(--s);
+      height: var(--s);
+      background: radial-gradient(
+        circle at var(--p) var(--p),
+        white calc(var(--p) / 4),
+        transparent 0
+      ) padding-box;
+      background-size: calc(var(--p) * 2) calc(var(--p) * 2);
+      background-repeat: space;
+      mask-image: conic-gradient(
+        from calc(var(--gradient-angle) + 45deg),
+        black,
+        transparent 10% 90%,
+        black
+      );
+      border-radius: inherit;
+      opacity: 0.4;
+      animation: var(--shiny-anim) var(--shiny-dur),
+                 var(--shiny-anim) calc(var(--shiny-dur) / 0.4) reverse paused;
+      animation-composition: add;
+    }
+
+    /* Inner shimmer */
+    .shiny::after {
+      width: 100%;
+      aspect-ratio: 1;
+      background: linear-gradient(-50deg, transparent, var(--shiny-highlight), transparent);
+      mask-image: radial-gradient(circle at bottom, transparent 40%, black);
+      opacity: 0.6;
+      animation: shimmer-s linear infinite var(--shiny-dur),
+                 shimmer-s calc(var(--shiny-dur) / 0.4) linear reverse paused;
+      animation-composition: add;
+    }
+
+    .shiny span {
+      z-index: 1;
+      position: relative;
+    }
+
+    .shiny span::before {
+      content: '';
+      pointer-events: none;
+      position: absolute;
+      inset-inline-start: 50%;
+      inset-block-start: 50%;
+      translate: -50% -50%;
+      z-index: -1;
+      width: calc(100% + 1rem);
+      height: calc(100% + 1rem);
+      box-shadow: inset 0 -1ex 2rem 4px var(--shiny-highlight);
+      opacity: 0;
+      transition: opacity var(--shiny-tr);
+      animation: calc(var(--shiny-dur) * 1.5) breathe-s linear infinite;
+    }
+
+    .shiny:is(:hover, :focus-visible) {
+      --gradient-percent: 22%;
+      --gradient-angle-offset: 95deg;
+      --gradient-shine: var(--shiny-highlight-subtle);
+      box-shadow:
+        inset 0 0 0 1px var(--shiny-bg-subtle),
+        0 0 32px rgba(0,185,216,.35) !important;
+    }
+
+    .shiny:is(:hover, :focus-visible),
+    .shiny:is(:hover, :focus-visible)::before,
+    .shiny:is(:hover, :focus-visible)::after {
+      animation-play-state: running;
+    }
+
+    .shiny:is(:hover, :focus-visible) span::before { opacity: 1; }
+
+    .shiny:active { translate: 0 1px; }
+
+    @keyframes gradient-angle {
+      to { --gradient-angle: 360deg; }
+    }
+    @keyframes shimmer-s {
+      to { rotate: 360deg; }
+    }
+    @keyframes breathe-s {
+      from, to { scale: 1; }
+      50%       { scale: 1.2; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .shiny, .shiny::before, .shiny::after { animation: none !important; transition: none !important; }
+      .shiny span::before                    { animation: none; transition: none; }
+    }
+
+    /* ── Cards ────────────────────────────────────────────────────────── */
+    .card {
+      background: #fff; border: 1.5px solid #E2E8F0; border-radius: 16px;
+      transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+    }
+    .card:hover { transform: translateY(-4px); box-shadow: var(--shadow-md); border-color: #CBD5E1; }
+
+    .card-accent {
+      border-color: var(--cyan-30); background: var(--cyan-10);
+    }
+    .card-accent:hover { border-color: rgba(0,185,216,.5); }
+
+    .card-dark {
+      background: var(--navy); border-color: var(--navy-light);
+    }
+
+    /* ── Pain card left border ────────────────────────────────────────── */
+    .card-pain { border-left: 3px solid var(--cyan); }
+
+    /* ── Icon boxes ───────────────────────────────────────────────────── */
+    .icon-box {
+      width: 44px; height: 44px; border-radius: 12px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .icon-box-navy { background: rgba(27,48,104,.08); }
+    .icon-box-cyan  { background: var(--cyan-20); }
+
+    /* ── Step connector ───────────────────────────────────────────────── */
+    .step-connector {
+      flex: 1; height: 2px; background: #E2E8F0;
+      background-image: linear-gradient(90deg, var(--cyan) 0%, var(--cyan) var(--fill, 0%), #E2E8F0 var(--fill, 0%));
+    }
+
+    /* ── Form inputs ──────────────────────────────────────────────────── */
+    .f-input {
+      width: 100%; border: 2px solid #E2E8F0; border-radius: 12px;
+      padding: 13px 16px; font-size: .9375rem; font-family: inherit;
+      color: #0F172A; background: #fff; min-height: 48px;
+      transition: border-color .15s ease; outline: none;
+    }
+    .f-input:focus { border-color: var(--cyan); }
+    .f-input::placeholder { color: #94A3B8; }
+
+    /* ── Option card (radio / checkbox) ──────────────────────────────── */
+    .opt {
+      display: flex; align-items: center; gap: 10px; padding: 12px 14px;
+      border: 2px solid #E2E8F0; border-radius: 12px; cursor: pointer;
+      transition: border-color .15s ease, background .15s ease;
+      min-height: 48px; user-select: none;
+    }
+    .opt:hover { border-color: #CBD5E1; }
+    .opt.selected { border-color: var(--cyan); background: var(--cyan-10); }
+
+    .opt-dot {
+      width: 18px; height: 18px; border-radius: 50%; border: 2px solid #CBD5E1;
+      flex-shrink: 0; transition: all .15s ease; display: flex;
+      align-items: center; justify-content: center; background: #fff;
+    }
+    .opt-dot.on { border-color: var(--cyan); background: var(--cyan); }
+
+    .opt-box {
+      width: 18px; height: 18px; border-radius: 5px; border: 2px solid #CBD5E1;
+      flex-shrink: 0; transition: all .15s ease; display: flex;
+      align-items: center; justify-content: center; background: #fff;
+    }
+    .opt-box.on { border-color: var(--cyan); background: var(--cyan); }
+
+    /* ── Form progress dots ───────────────────────────────────────────── */
+    .prog-step {
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+    }
+    .prog-dot {
+      width: 32px; height: 32px; border-radius: 50%; border: 2px solid #E2E8F0;
+      display: flex; align-items: center; justify-content: center;
+      font-size: .75rem; font-weight: 700; color: #94A3B8;
+      transition: all .2s ease; background: #fff;
+    }
+    .prog-dot.active { border-color: var(--cyan); color: var(--navy); background: var(--cyan-10); }
+    .prog-dot.done { border-color: var(--cyan); background: var(--cyan); color: var(--navy-dark); }
+    .prog-line { flex: 1; height: 2px; background: #E2E8F0; transition: background .3s ease; }
+    .prog-line.done { background: var(--cyan); }
+
+    /* ── Reveal animations ────────────────────────────────────────────── */
+    .reveal {
+      opacity: 0; transform: translateY(22px);
+      transition: opacity .55s ease, transform .55s ease;
+    }
+    .reveal.in { opacity: 1; transform: none; }
+    .d1 { transition-delay: .08s; }
+    .d2 { transition-delay: .16s; }
+    .d3 { transition-delay: .24s; }
+    .d4 { transition-delay: .32s; }
+    .d5 { transition-delay: .40s; }
+    .d6 { transition-delay: .48s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reveal, .reveal.in { opacity: 1; transform: none; transition: none; }
+      .badge-dot { animation: none; }
+      .btn { transition: background .1s; }
+      .card { transition: box-shadow .1s; }
+    }
+
+    /* ── Spinner ──────────────────────────────────────────────────────── */
+    .spinner {
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2.5px solid rgba(15,30,69,.3);
+      border-top-color: var(--navy-dark);
+      animation: spin .6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Nav ──────────────────────────────────────────────────────────── */
+    .nav-wrap {
+      position: fixed; inset: 0 0 auto 0; z-index: 50;
+      background: rgba(15,30,69,.94); backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--w10);
+    }
+    .nav-link {
+      font-size: .875rem; font-weight: 600; text-decoration: none;
+      color: rgba(255,255,255,.62); white-space: nowrap;
+      transition: color .15s ease;
+    }
+    .nav-link:hover { color: #fff; }
+
+    /* Compensa a nav fixa ao pular por âncora */
+    section[id], div[id] { scroll-margin-top: 84px; }
+
+    /* ── Sections ─────────────────────────────────────────────────────── */
+    .section { padding: 80px 24px; }
+    .section-sm { padding: 64px 24px; }
+    @media (max-width: 640px) {
+      .section { padding: 60px 20px; }
+      .section-sm { padding: 48px 20px; }
+    }
+
+    /* ── Trust bar ────────────────────────────────────────────────────── */
+    .trust-bar {
+      background: #fff;
+      border-bottom: 1px solid #E2E8F0;
+      padding: 14px 24px;
+    }
+    .trust-item {
+      display: flex; align-items: center; gap: 8px;
+      font-size: .8125rem; font-weight: 600; color: #475569;
+      white-space: nowrap;
+    }
+    .trust-icon {
+      width: 28px; height: 28px; border-radius: 8px;
+      background: var(--cyan-10);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .trust-divider {
+      width: 1px; height: 28px; background: #E2E8F0; flex-shrink: 0;
+    }
+
+    /* ── Result metrics ───────────────────────────────────────────────── */
+    .result-card {
+      background: #fff; border: 1.5px solid #E2E8F0; border-radius: 20px;
+      padding: 28px 24px; text-align: center;
+      transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+    }
+    .result-card:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); border-color: var(--cyan-30); }
+    .result-number {
+      font-size: 2.5rem; font-weight: 800; line-height: 1;
+      color: var(--navy); letter-spacing: -0.03em; margin-bottom: 6px;
+    }
+    .result-number span { color: var(--cyan); }
+
+    /* ── Evidência (gráficos com fonte) ───────────────────────────────── */
+    .ev-card {
+      background: #fff; border: 1.5px solid #E2E8F0; border-radius: 20px;
+      padding: 30px 26px; display: flex; flex-direction: column; height: 100%;
+      transition: border-color .2s ease, box-shadow .2s ease;
+    }
+    .ev-card:hover { border-color: var(--cyan-30); box-shadow: var(--shadow-md); }
+    .ev-kicker {
+      font-size: .6875rem; font-weight: 800; letter-spacing: .12em;
+      text-transform: uppercase; color: var(--cyan); margin-bottom: 14px;
+    }
+    .ev-chart { display: flex; flex-direction: column; gap: 14px; margin: 8px 0 20px; }
+    .ev-row { display: flex; flex-direction: column; gap: 6px; }
+    .ev-row-top {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 10px;
+    }
+    .ev-name { font-size: .8125rem; font-weight: 600; color: #475569; }
+    .ev-val {
+      font-size: .8125rem; font-weight: 800; color: var(--navy);
+      font-variant-numeric: tabular-nums; white-space: nowrap;
+    }
+    .ev-track { height: 30px; border-radius: 8px; background: #F1F5F9; overflow: hidden; }
+    .ev-fill {
+      height: 100%; border-radius: 8px; min-width: 7px;
+      background: linear-gradient(90deg, var(--cyan) 0%, #5CD9EE 100%);
+      transform-origin: left;
+      animation: ev-grow .9s cubic-bezier(.22,1,.36,1) both;
+    }
+    .ev-fill.muted { background: #CBD5E1; }
+    @keyframes ev-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+    @media (prefers-reduced-motion: reduce) { .ev-fill { animation: none; } }
+    .ev-note {
+      margin-top: auto; padding-top: 16px; border-top: 1px dashed #E2E8F0;
+      font-size: .8125rem; line-height: 1.6; color: #64748B;
+    }
+    .ev-cite {
+      display: block; margin-top: 10px;
+      font-size: .6875rem; line-height: 1.5; color: #94A3B8;
+    }
+    .ev-cite a { color: #94A3B8; text-underline-offset: 2px; }
+    .ev-cite a:hover { color: var(--cyan-dark); }
+
+    /* ── Marquee ──────────────────────────────────────────────────────── */
+    .mq {
+      overflow: hidden; background: var(--navy-dark);
+      border-top: 1px solid var(--w10); border-bottom: 1px solid var(--w10);
+      padding: 13px 0;
+    }
+    .mq-track {
+      display: flex; width: max-content;
+      animation: mq-scroll 44s linear infinite;
+    }
+    .mq-track:hover { animation-play-state: paused; }
+    .mq-item {
+      display: inline-flex; align-items: center; gap: 26px;
+      padding-right: 26px; white-space: nowrap;
+      font-size: .8125rem; font-weight: 700; letter-spacing: .08em;
+      text-transform: uppercase; color: rgba(255,255,255,.55);
+    }
+    .mq-sep { color: var(--cyan); font-size: .625rem; }
+    @keyframes mq-scroll { to { transform: translateX(-50%); } }
+    @media (prefers-reduced-motion: reduce) {
+      .mq-track { animation: none; }
+      .mq { overflow-x: auto; }
+    }
+
+    /* ── Stack de tecnologia ──────────────────────────────────────────── */
+    .tech-row {
+      display: flex; flex-wrap: wrap; align-items: center;
+      justify-content: center; gap: 18px 40px;
+    }
+    .tech-mark {
+      display: inline-flex; align-items: center; gap: 9px;
+      font-size: .9375rem; font-weight: 700; color: #94A3B8;
+      letter-spacing: -0.01em; white-space: nowrap;
+      transition: color .2s ease;
+    }
+    .tech-row:hover .tech-mark { color: #CBD5E1; }
+    .tech-row .tech-mark:hover { color: var(--navy); }
+    .tech-mark svg { flex-shrink: 0; }
+
+    /* ── FAQ ──────────────────────────────────────────────────────────── */
+    .faq-item { border-bottom: 1px solid #E2E8F0; }
+    .faq-item:first-child { border-top: 1px solid #E2E8F0; }
+    .faq-q {
+      width: 100%; display: flex; align-items: flex-start; gap: 16px;
+      padding: 22px 4px; background: none; border: none; cursor: pointer;
+      text-align: left; font-family: inherit;
+      font-size: 1.0625rem; font-weight: 700; color: var(--navy);
+      line-height: 1.45; letter-spacing: -0.01em;
+      transition: color .15s ease;
+    }
+    .faq-q:hover { color: var(--cyan-dark); }
+    .faq-icon {
+      flex-shrink: 0; margin-left: auto; width: 26px; height: 26px;
+      border-radius: 50%; background: var(--cyan-10);
+      display: flex; align-items: center; justify-content: center;
+      transition: transform .25s ease, background .2s ease;
+    }
+    .faq-icon.open { transform: rotate(45deg); background: var(--cyan-20); }
+    .faq-a {
+      padding: 0 60px 24px 4px;
+      font-size: .9375rem; line-height: 1.7; color: #64748B;
+    }
+    .faq-a strong { color: var(--navy); font-weight: 600; }
+
+    /* ── Sócios ───────────────────────────────────────────────────────── */
+    .fnd-figure {
+      margin: 0; position: relative;
+      border-radius: 20px; overflow: hidden;
+      background: var(--navy-dark);
+      box-shadow: var(--shadow-lg);
+    }
+    .fnd-figure img {
+      display: block; width: 100%; height: auto;
+      object-fit: cover;
+    }
+    /* Faixa de nomes sobre o rodapé da foto */
+    .fnd-figure figcaption {
+      position: absolute; inset: auto 0 0 0;
+      padding: 56px 26px 22px;
+      display: flex; flex-direction: column; align-items: center; gap: 6px;
+      text-align: center;
+      background: linear-gradient(to top,
+        rgba(11,23,53,.94) 0%, rgba(11,23,53,.78) 45%, rgba(11,23,53,0) 100%);
+    }
+    .fnd-role {
+      font-size: .6875rem; font-weight: 800; letter-spacing: .18em;
+      text-transform: uppercase; color: var(--cyan);
+    }
+    .fnd-names {
+      font-size: 1.0625rem; font-weight: 700; color: #fff;
+      letter-spacing: -0.01em; line-height: 1.45;
+    }
+    .fnd-names i { font-style: normal; color: rgba(255,255,255,.35); padding: 0 4px; }
+    @media (max-width: 560px) {
+      .fnd-figure figcaption { padding: 40px 18px 16px; }
+      .fnd-names { font-size: .875rem; }
+    }
+
+    /* ── Mockups (browser / device) ───────────────────────────────────── */
+    .mk-frame {
+      border-radius: 14px; overflow: hidden;
+      background: var(--navy-dark);
+      border: 1px solid rgba(255,255,255,.10);
+      box-shadow: 0 18px 44px rgba(15,30,69,.28);
+    }
+    .mk-bar {
+      display: flex; align-items: center; gap: 6px;
+      padding: 10px 13px; background: rgba(255,255,255,.05);
+      border-bottom: 1px solid rgba(255,255,255,.06);
+    }
+    .mk-dot { width: 8px; height: 8px; border-radius: 50%; background: rgba(255,255,255,.18); }
+    .mk-url {
+      margin-left: 8px; padding: 3px 12px; border-radius: 99px;
+      background: rgba(255,255,255,.06); color: rgba(255,255,255,.45);
+      font-size: .625rem; font-weight: 600; letter-spacing: .02em;
+    }
+    .mk-body { padding: 18px 16px; display: flex; flex-direction: column; gap: 9px; }
+    .mk-line {
+      display: flex; align-items: center; gap: 10px;
+      font-size: .8125rem; color: rgba(255,255,255,.72);
+    }
+    .mk-check {
+      width: 18px; height: 18px; border-radius: 50%; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: var(--cyan-20);
+    }
+    .mk-check.pending { background: rgba(255,255,255,.07); }
+    .mk-bar-track {
+      height: 5px; border-radius: 99px; background: rgba(255,255,255,.08);
+      overflow: hidden; margin-top: 4px;
+    }
+    .mk-bar-fill {
+      height: 100%; border-radius: 99px;
+      background: linear-gradient(90deg, var(--cyan) 0%, #5CD9EE 100%);
+    }
+
+    /* ── Jornada do paciente ──────────────────────────────────────────── */
+    .jor-grid {
+      display: grid; gap: 16px; grid-template-columns: 1fr;
+      position: relative;
+    }
+    @media (min-width: 900px) {
+      .jor-grid { grid-template-columns: repeat(4, 1fr); gap: 20px; }
+    }
+    .jor-card {
+      position: relative; display: flex; flex-direction: column; gap: 10px;
+      background: #fff; border: 1.5px solid #E2E8F0; border-radius: 16px;
+      padding: 24px 22px;
+      transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
+    }
+    .jor-card:hover {
+      transform: translateY(-4px); box-shadow: var(--shadow-md);
+      border-color: var(--cyan-30);
+    }
+    /* Seta ligando as etapas (desktop) */
+    @media (min-width: 900px) {
+      .jor-card:not(:last-child)::after {
+        content: ''; position: absolute; z-index: 1;
+        top: 50%; right: -14px; width: 8px; height: 8px;
+        border-top: 2px solid #CBD5E1; border-right: 2px solid #CBD5E1;
+        transform: translateY(-50%) rotate(45deg);
+      }
+    }
+    .jor-num {
+      font-size: .6875rem; font-weight: 800; letter-spacing: .14em;
+      color: var(--cyan); font-variant-numeric: tabular-nums;
+    }
+    .jor-card h3 {
+      margin: 0; font-size: 1.0625rem; font-weight: 700;
+      color: var(--navy); letter-spacing: -0.01em;
+    }
+    .jor-card p { margin: 0; font-size: .875rem; line-height: 1.6; color: #64748B; }
+    .jor-leak {
+      margin-top: auto; padding-top: 14px;
+      border-top: 1px dashed #E2E8F0;
+      display: flex; align-items: flex-start; gap: 7px;
+      font-size: .75rem; line-height: 1.5; color: #94A3B8;
+    }
+    .jor-leak svg { flex-shrink: 0; margin-top: 2px; }
+    .jor-pill {
+      display: inline-flex; align-items: center; align-self: flex-start;
+      padding: 4px 11px; border-radius: 99px;
+      background: var(--cyan-10); border: 1px solid var(--cyan-20);
+      font-size: .6875rem; font-weight: 700; color: var(--navy);
+      line-height: 1.4;
+    }
+
+    /* ── Secretária IA — mockup de conversa ───────────────────────────── */
+    .wa-phone {
+      max-width: 344px; margin: 0 auto; padding: 10px;
+      background: #0B141A; border: 1px solid var(--w10);
+      border-radius: 30px; box-shadow: 0 24px 64px rgba(0,0,0,.45);
+    }
+    .wa-screen {
+      border-radius: 22px; overflow: hidden; background: #0B141A;
+      background-image: radial-gradient(ellipse 80% 50% at 30% 0%, rgba(0,185,216,.10) 0%, transparent 65%);
+    }
+    .wa-top {
+      display: flex; align-items: center; gap: 10px;
+      padding: 12px 14px; background: rgba(255,255,255,.05);
+      border-bottom: 1px solid rgba(255,255,255,.06);
+    }
+    .wa-avatar {
+      width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
+      background: var(--cyan-20); color: var(--cyan);
+      display: flex; align-items: center; justify-content: center;
+      font-size: .6875rem; font-weight: 800; letter-spacing: .02em;
+    }
+    .wa-log {
+      display: flex; flex-direction: column; gap: 8px;
+      padding: 16px 12px 20px;
+    }
+    .wa-msg {
+      max-width: 84%; padding: 8px 11px 5px;
+      border-radius: 12px; font-size: .8125rem; line-height: 1.45;
+    }
+    .wa-in  { align-self: flex-start; background: #202C33; color: rgba(255,255,255,.92); border-top-left-radius: 4px; }
+    .wa-out { align-self: flex-end;  background: #0B4A55; color: #fff; border-top-right-radius: 4px; }
+    .wa-stamp {
+      display: block; text-align: right; margin-top: 3px;
+      font-size: .625rem; font-variant-numeric: tabular-nums;
+      color: rgba(255,255,255,.45);
+    }
+    .wa-day {
+      align-self: center; margin: 4px 0;
+      padding: 3px 12px; border-radius: 99px;
+      background: rgba(255,255,255,.06); color: rgba(255,255,255,.45);
+      font-size: .625rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
+    }
+
+    /* ── Secretária IA — mapa de cobertura ────────────────────────────── */
+    .cov-block { display: flex; flex-direction: column; gap: 10px; }
+    .cov-head {
+      display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+    }
+    .cov-label { font-size: .8125rem; font-weight: 600; color: rgba(255,255,255,.55); }
+    .cov-hours {
+      font-size: .8125rem; font-weight: 700; font-variant-numeric: tabular-nums;
+      color: rgba(255,255,255,.45); white-space: nowrap;
+    }
+    .cov-hours strong { font-size: 1.0625rem; font-weight: 800; }
+    .cov-grid {
+      display: grid; grid-template-columns: repeat(24, 1fr);
+      gap: 2px; padding: 10px;
+      border: 1px solid var(--w10); border-radius: 12px;
+      background: rgba(255,255,255,.03);
+    }
+    .cov-cell {
+      aspect-ratio: 1; border-radius: 1.5px;
+      background: rgba(255,255,255,.06);
+    }
+    .cov-cell.on { background: rgba(255,255,255,.30); }
+    .cov-new .cov-hours, .cov-new .cov-label { color: #fff; }
+    .cov-new .cov-grid { border-color: var(--cyan-30); background: rgba(0,185,216,.05); }
+    .cov-new .cov-cell.on {
+      background: var(--cyan);
+      box-shadow: 0 0 5px rgba(0,185,216,.55);
+    }
+    .cov-axis {
+      display: flex; justify-content: space-between;
+      font-size: .625rem; font-variant-numeric: tabular-nums;
+      color: rgba(255,255,255,.30); padding: 0 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <!-- Skip to main (a11y) -->
+  <a href="#main" class="skip-link">Ir para o conteúdo principal</a>
+
+  <!-- ─────────────────────────────────────────────────────────── NAV ── -->
+  <nav class="nav-wrap" role="navigation" aria-label="Navegação principal">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
+
+      <a href="#" aria-label="MedScale — página inicial" class="flex items-center gap-3 no-underline">
+        <!-- Símbolo real do logo (M + seta + cruz) cropado do logo.png, fundo transparente -->
+        <img src="logo-icon.png"
+             alt=""
+             aria-hidden="true"
+             width="69" height="48"
+             style="flex-shrink:0">
+
+        <!-- Wordmark -->
+        <span class="text-white font-black text-xl tracking-tight leading-none">
+          Med<span style="color:var(--cyan)">Scale</span>
+        </span>
+        <span class="hidden sm:block text-xs font-semibold tracking-widest" style="color:rgba(255,255,255,.35); padding-top:2px">
+          ASSESSORIA MÉDICA
+        </span>
+      </a>
+
+      <!-- Âncoras (desktop) -->
+      <div class="hidden lg:flex items-center gap-7" role="list">
+        <a href="#jornada" class="nav-link">Jornada</a>
+        <a href="#pilares" class="nav-link">O que fazemos</a>
+        <a href="#secretaria" class="nav-link">Secretária IA</a>
+        <a href="#como-funciona" class="nav-link">Como começa</a>
+        <a href="#faq" class="nav-link">Dúvidas</a>
+      </div>
+
+      <a href="#diagnostico" class="btn shiny text-sm px-5" style="min-height:40px">
+        <span>Quero começar</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- ─────────────────────────────────────────────────────────── MAIN ── -->
+  <main id="main">
+
+    <!-- ─────────────────────────────────────────────────────── HERO ── -->
+    <section class="hero" aria-labelledby="hero-h1" style="padding: 140px 24px 96px">
+      <div class="max-w-3xl mx-auto text-center">
+
+        <!-- Headline -->
+        <h1 id="hero-h1" class="font-black text-white leading-tight mb-6"
+            style="font-size: clamp(2.4rem, 6vw, 4rem); letter-spacing: -0.02em">
+          Sua agenda cheia.<br>
+          <span class="text-gradient">Seu tempo de volta.</span>
+        </h1>
+
+        <!-- Sub -->
+        <p class="text-lg sm:text-xl leading-relaxed mb-10 max-w-2xl mx-auto"
+           style="color:rgba(255,255,255,.65)">
+          A empresa por trás do seu consultório — marketing, agenda, secretária e tecnologia.
+          Dados em tempo real, previsão de faturamento e conformidade CFM.
+          Não um PDF no fim do mês.
+          Você se concentra no que só você faz:
+          <strong style="color:#fff; font-weight:600">cuidar do paciente.</strong>
+        </p>
+
+        <!-- CTAs -->
+        <div class="flex flex-col sm:flex-row gap-3 justify-center">
+          <a href="#diagnostico" class="btn shiny">
+            <span>Quero encher minha agenda
+            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg></span>
+          </a>
+          <a href="#como-funciona" class="btn btn-ghost">
+            Ver como funciona
+          </a>
+        </div>
+
+        <!-- Micro social -->
+        <p class="mt-7 text-sm" style="color:rgba(255,255,255,.35)">
+          Sem fidelidade · Diagnóstico gratuito · Cancele quando quiser
+        </p>
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────────────────────── TRUST BAR ── -->
+    <div class="trust-bar" aria-label="Diferenciais MedScale">
+      <div class="max-w-5xl mx-auto flex items-center justify-center gap-4 sm:gap-8 flex-wrap">
+
+        <div class="trust-item">
+          <span class="trust-icon" aria-hidden="true">
+            <svg width="14" height="14" fill="none" stroke="var(--cyan)" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+            </svg>
+          </span>
+          Onboarding em 14 dias
+        </div>
+
+        <div class="trust-divider hidden sm:block" aria-hidden="true"></div>
+
+        <div class="trust-item">
+          <span class="trust-icon" aria-hidden="true">
+            <svg width="14" height="14" fill="none" stroke="var(--cyan)" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+            </svg>
+          </span>
+          Dados em tempo real
+        </div>
+
+        <div class="trust-divider hidden sm:block" aria-hidden="true"></div>
+
+        <div class="trust-item">
+          <span class="trust-icon" aria-hidden="true">
+            <svg width="14" height="14" fill="none" stroke="var(--cyan)" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+          </span>
+          Retorno em até 1 hora
+        </div>
+
+        <div class="trust-divider hidden sm:block" aria-hidden="true"></div>
+
+        <div class="trust-item">
+          <span class="trust-icon" aria-hidden="true">
+            <svg width="14" height="14" fill="none" stroke="var(--cyan)" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z"/>
+            </svg>
+          </span>
+          Suporte de seg. a seg.
+        </div>
+
+        <div class="trust-divider hidden sm:block" aria-hidden="true"></div>
+
+        <div class="trust-item">
+          <span class="trust-icon" aria-hidden="true">
+            <svg width="14" height="14" fill="none" stroke="var(--cyan)" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"/>
+            </svg>
+          </span>
+          CFM-compliant
+        </div>
+
+      </div>
+    </div>
+
+    <!-- ───────────────────────────────────────────────────── MARQUEE ── -->
+    <div class="mq" aria-hidden="true">
+      <div class="mq-track">
+        <span class="mq-item">
+          A empresa por trás do médico <span class="mq-sep">◆</span>
+          Diagnóstico gratuito <span class="mq-sep">◆</span>
+          Sem fidelidade <span class="mq-sep">◆</span>
+          Conteúdo em conformidade com o CFM <span class="mq-sep">◆</span>
+          Secretária com IA 24/7 <span class="mq-sep">◆</span>
+          Onboarding em 14 dias <span class="mq-sep">◆</span>
+          Seu resultado é o nosso resultado <span class="mq-sep">◆</span>
+        </span>
+        <span class="mq-item">
+          A empresa por trás do médico <span class="mq-sep">◆</span>
+          Diagnóstico gratuito <span class="mq-sep">◆</span>
+          Sem fidelidade <span class="mq-sep">◆</span>
+          Conteúdo em conformidade com o CFM <span class="mq-sep">◆</span>
+          Secretária com IA 24/7 <span class="mq-sep">◆</span>
+          Onboarding em 14 dias <span class="mq-sep">◆</span>
+          Seu resultado é o nosso resultado <span class="mq-sep">◆</span>
+        </span>
+      </div>
+    </div>
+
+    <!-- ─────────────────────────────────────────────────────── STATS ── -->
+    <section class="section-sm" style="background:#F8FAFC; border-top:1px solid #E2E8F0; border-bottom:1px solid #E2E8F0"
+             aria-label="Dados do mercado médico">
+      <div class="max-w-4xl mx-auto">
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-10 text-center">
+
+          <div class="reveal">
+            <p class="font-black mb-2" style="font-size:3rem; line-height:1; color:var(--navy); letter-spacing:-0.03em">
+              85%<span style="color:var(--cyan)">+</span>
+            </p>
+            <p class="text-sm leading-snug" style="color:#64748B">
+              dos médicos no Brasil sem presença digital ativa — pacientes escolhem quem comunica melhor
+            </p>
+          </div>
+
+          <div class="reveal d1" style="border-left:1px solid #E2E8F0; border-right:1px solid #E2E8F0">
+            <p class="font-black mb-2" style="font-size:3rem; line-height:1; color:var(--navy); letter-spacing:-0.03em">
+              1 <span style="font-size:1.6rem; font-weight:400; color:#94A3B8">em</span> 4
+            </p>
+            <p class="text-sm leading-snug" style="color:#64748B">
+              consultas vira falta sem confirmação automática — agenda furada é receita perdida
+            </p>
+          </div>
+
+          <div class="reveal d2">
+            <p class="font-black mb-2" style="font-size:3rem; line-height:1; color:var(--navy); letter-spacing:-0.03em">
+              10h<span style="color:var(--cyan)">+</span>
+            </p>
+            <p class="text-sm leading-snug" style="color:#64748B">
+              por semana gastas em tarefas que não são medicina — tempo que não volta pra sua vida
+            </p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────────────────────────────── PAIN ── -->
+    <section class="section" aria-labelledby="pain-heading">
+      <div class="max-w-5xl mx-auto">
+
+        <div class="text-center mb-14 reveal">
+          <h2 id="pain-heading" class="font-black leading-tight mb-3"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            Você é um excelente médico.<br>
+            <span style="color:#475569; font-weight:700">Mas o consultório virou um segundo emprego.</span>
+          </h2>
+          <p class="text-lg" style="color:#64748B">Reconhece algum desses cenários?</p>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-5">
+
+          <article class="card card-pain p-7 reveal">
+            <div class="icon-box icon-box-navy mb-5" aria-hidden="true">
+              <svg width="20" height="20" fill="none" stroke="var(--navy)" stroke-width="1.8" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+              </svg>
+            </div>
+            <h3 class="font-bold mb-2 text-lg" style="color:var(--navy)">Agenda imprevisível</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              Meses cheios e meses fracos. Você depende de indicação — um canal que não se controla e não escala.
+            </p>
+          </article>
+
+          <article class="card card-pain p-7 reveal d1">
+            <div class="icon-box icon-box-navy mb-5" aria-hidden="true">
+              <svg width="20" height="20" fill="none" stroke="var(--navy)" stroke-width="1.8" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/>
+              </svg>
+            </div>
+            <h3 class="font-bold mb-2 text-lg" style="color:var(--navy)">Paciente que escapa</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              Quem não é respondido rápido no WhatsApp marca com outro. Todo dia entram leads e somem sem agendar.
+            </p>
+          </article>
+
+          <article class="card card-pain p-7 reveal d2">
+            <div class="icon-box icon-box-navy mb-5" aria-hidden="true">
+              <svg width="20" height="20" fill="none" stroke="var(--navy)" stroke-width="1.8" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+              </svg>
+            </div>
+            <h3 class="font-bold mb-2 text-lg" style="color:var(--navy)">Sufocado de operação</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              Marketing, secretária, agenda, redes, finanças. Horas todo dia em tarefas que não exigem o seu CRM.
+            </p>
+          </article>
+
+          <article class="card card-pain p-7 reveal d3">
+            <div class="icon-box icon-box-navy mb-5" aria-hidden="true">
+              <svg width="20" height="20" fill="none" stroke="var(--navy)" stroke-width="1.8" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z"/>
+              </svg>
+            </div>
+            <h3 class="font-bold mb-2 text-lg" style="color:var(--navy)">Vida pessoal no fim da fila</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              O consultório invade a noite e o fim de semana. Crescer virou sinônimo de trabalhar mais — e isso não é sustentável.
+            </p>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────────────────── FRAGMENTAÇÃO ── -->
+    <section class="section-sm" style="background:#F1F5F9; border-top:1px solid #E2E8F0; border-bottom:1px solid #E2E8F0;">
+      <div class="max-w-3xl mx-auto text-center reveal">
+        <p class="text-xs font-semibold tracking-widest uppercase mb-4" style="color:var(--cyan)">O padrão do mercado</p>
+        <h2 class="font-black leading-tight mb-5"
+            style="font-size:clamp(1.35rem,3.2vw,1.9rem); color:var(--navy); letter-spacing:-0.02em; line-height:1.25">
+          Você já recebeu a proposta do bot de atendimento.<br>
+          Depois da agência de tráfego.<br>
+          Depois da social media.
+        </h2>
+        <p class="text-base leading-relaxed mb-5 mx-auto" style="color:#64748B; max-width:520px">
+          Cada um entregando a parte deles — e ninguém olhando o consultório inteiro.
+          Três fornecedores, três mensalidades e a agenda ainda imprevisível.
+        </p>
+        <p class="font-bold text-base" style="color:var(--navy)">
+          A MedScale é a solução inteira. Não mais um pedaço.
+        </p>
+      </div>
+    </section>
+
+    <!-- ────────────────────────────────────────────────────── VIRADA ── -->
+    <section class="section section-dark" aria-labelledby="virada-heading">
+      <div class="max-w-2xl mx-auto text-center reveal">
+        <p class="text-xs font-semibold tracking-widest mb-4 uppercase" style="color:var(--cyan)">A virada</p>
+        <h2 id="virada-heading" class="font-black leading-tight mb-6"
+            style="font-size:clamp(1.9rem,4.5vw,3rem); color:#fff; letter-spacing:-0.02em">
+          Você cuida do paciente.<br>
+          <span class="text-gradient">A MedScale cuida do resto.</span>
+        </h2>
+        <p class="text-lg leading-relaxed m-0" style="color:rgba(255,255,255,.65)">
+          Marketing, tráfego, conteúdo, site, secretária treinada, agendamento e controle financeiro —
+          uma estrutura inteira operando o crescimento do seu consultório, sob um único parceiro.
+          Você não gerencia nada disso. <strong style="color:#fff; font-weight:600">Você só atende.</strong>
+        </p>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────── FORMULÁRIO ── -->
+    <section id="diagnostico" class="section-dark" aria-labelledby="form-heading"
+             style="padding:0 24px 80px">
+      <div class="max-w-lg mx-auto">
+
+        <!-- Section intro -->
+        <div class="text-center mb-10 reveal" style="padding-top:52px">
+          <p class="text-xs font-semibold tracking-widest mb-3 uppercase" style="color:var(--cyan)">Diagnóstico gratuito</p>
+          <h2 id="form-heading" class="font-black mb-4" style="font-size:clamp(1.75rem,4vw,2.5rem); color:#fff; letter-spacing:-0.02em">
+            Vamos encher a sua agenda?
+          </h2>
+          <p style="color:rgba(255,255,255,.60); font-size:1.0625rem">
+            Responda 4 perguntas rápidas. Em dias úteis, nosso retorno pelo WhatsApp
+            sai <strong style="color:#fff; font-weight:600">em até 1 hora.</strong>
+          </p>
+          <p class="text-sm mt-4" style="color:rgba(255,255,255,.40)">
+            Prefere escrever direto?
+            <a href="mailto:medscalebr@gmail.com" class="font-semibold no-underline" style="color:var(--cyan)">medscalebr@gmail.com</a>
+          </p>
+        </div>
+
+        <!-- ── Alpine Form ── -->
+        <div x-data="leadForm()"
+             x-cloak
+             class="reveal d1"
+             style="background:#fff; border-radius:24px; padding:32px; box-shadow:0 24px 64px rgba(0,0,0,.25)">
+
+          <!-- ── Progress indicator ── -->
+          <div x-show="step < 5" class="mb-8">
+            <div class="flex items-center justify-between mb-3">
+              <span class="text-xs font-medium" style="color:#94A3B8">
+                Passo <span x-text="step"></span> de 4
+              </span>
+              <span class="text-xs font-semibold" style="color:var(--cyan)" x-text="Math.round(step/4*100) + '%'"></span>
+            </div>
+
+            <!-- Dots progress -->
+            <div class="flex items-center gap-1.5">
+              <template x-for="n in [1,2,3,4]" :key="n">
+                <div class="flex items-center" :class="n < 4 ? 'flex-1' : ''">
+                  <div class="prog-dot"
+                       :class="{ 'active': step === n, 'done': step > n }"
+                       :aria-current="step === n ? 'step' : undefined">
+                    <template x-if="step > n">
+                      <svg width="10" height="10" fill="none" stroke="var(--navy-dark)" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                      </svg>
+                    </template>
+                    <template x-if="step <= n">
+                      <span x-text="n"></span>
+                    </template>
+                  </div>
+                  <div x-show="n < 4" class="prog-line" :class="{ 'done': step > n }"></div>
+                </div>
+              </template>
+            </div>
+          </div>
+
+          <!-- ── Steps wrapper (fades on transition) ── -->
+          <div :style="fading ? 'opacity:0;transition:opacity .15s ease' : 'opacity:1;transition:opacity .2s ease'">
+
+            <!-- ── STEP 1: Especialidade ── -->
+            <div x-show="step === 1" role="group" aria-labelledby="step1-label">
+              <h3 id="step1-label" class="font-bold mb-1 text-lg" style="color:var(--navy)">Qual é a sua especialidade?</h3>
+              <p class="text-sm mb-6" style="color:#94A3B8">Selecione a que mais se aproxima da sua prática principal.</p>
+
+              <div class="grid grid-cols-2 gap-2 mb-6" role="radiogroup" aria-label="Especialidade médica">
+                <template x-for="opt in especialidades" :key="opt">
+                  <label class="opt" :class="{ 'selected': form.especialidade === opt }">
+                    <input type="radio" name="especialidade" :value="opt" x-model="form.especialidade" class="sr-only"
+                           :aria-checked="form.especialidade === opt">
+                    <span class="opt-dot" :class="{ 'on': form.especialidade === opt }" aria-hidden="true"></span>
+                    <span class="text-sm font-medium" style="color:#334155" x-text="opt"></span>
+                  </label>
+                </template>
+              </div>
+
+              <button @click="nextStep()" :disabled="!form.especialidade"
+                      class="btn shiny w-full" style="min-height:52px">
+                <span>Continuar
+                <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                </svg></span>
+              </button>
+            </div>
+
+            <!-- ── STEP 2: Consultório ── -->
+            <div x-show="step === 2" role="group" aria-labelledby="step2-label">
+              <h3 id="step2-label" class="font-bold mb-1 text-lg" style="color:var(--navy)">Como é o seu consultório?</h3>
+              <p class="text-sm mb-6" style="color:#94A3B8">Nos ajuda a entender o momento atual da sua prática.</p>
+
+              <!-- Consultas por mês -->
+              <fieldset class="mb-5 border-none p-0 m-0">
+                <legend class="text-sm font-semibold mb-3" style="color:#334155">Consultas por mês</legend>
+                <div class="grid grid-cols-2 gap-2" role="radiogroup">
+                  <template x-for="opt in consultasMes" :key="opt">
+                    <label class="opt" :class="{ 'selected': form.consultasMes === opt }">
+                      <input type="radio" name="consultas" :value="opt" x-model="form.consultasMes" class="sr-only">
+                      <span class="opt-dot" :class="{ 'on': form.consultasMes === opt }" aria-hidden="true"></span>
+                      <span class="text-sm font-medium" style="color:#334155" x-text="opt"></span>
+                    </label>
+                  </template>
+                </div>
+              </fieldset>
+
+              <!-- Tipo de consultório -->
+              <fieldset class="mb-5 border-none p-0 m-0">
+                <legend class="text-sm font-semibold mb-3" style="color:#334155">Você tem consultório próprio?</legend>
+                <div class="space-y-2" role="radiogroup">
+                  <template x-for="opt in tiposConsultorio" :key="opt">
+                    <label class="opt" :class="{ 'selected': form.tipoConsultorio === opt }">
+                      <input type="radio" name="tipo" :value="opt" x-model="form.tipoConsultorio" class="sr-only">
+                      <span class="opt-dot" :class="{ 'on': form.tipoConsultorio === opt }" aria-hidden="true"></span>
+                      <span class="text-sm font-medium" style="color:#334155" x-text="opt"></span>
+                    </label>
+                  </template>
+                </div>
+              </fieldset>
+
+              <!-- Cidade -->
+              <div class="mb-6">
+                <label for="cidade" class="block text-sm font-semibold mb-2" style="color:#334155">
+                  Cidade em que atende
+                </label>
+                <input id="cidade" type="text" x-model="form.cidade" placeholder="Ex: Salvador, BA"
+                       class="f-input" autocomplete="address-level2"
+                       :aria-invalid="form.cidade === '' && step > 2 ? 'true' : 'false'">
+              </div>
+
+              <div class="flex gap-2">
+                <button @click="prevStep()" class="btn btn-outline" style="min-height:52px; min-width:80px" aria-label="Voltar para especialidade">
+                  ←
+                </button>
+                <button @click="nextStep()" :disabled="!form.consultasMes || !form.tipoConsultorio || !form.cidade"
+                        class="btn shiny flex-1" style="min-height:52px">
+                  <span>Continuar
+                  <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                  </svg></span>
+                </button>
+              </div>
+            </div>
+
+            <!-- ── STEP 3: Marketing ── -->
+            <div x-show="step === 3" role="group" aria-labelledby="step3-label">
+              <h3 id="step3-label" class="font-bold mb-1 text-lg" style="color:var(--navy)">Sobre seu marketing hoje</h3>
+              <p class="text-sm mb-6" style="color:#94A3B8">Sem julgamento — só precisamos entender o ponto de partida.</p>
+
+              <!-- Situação -->
+              <fieldset class="mb-5 border-none p-0 m-0">
+                <legend class="text-sm font-semibold mb-3" style="color:#334155">Você já investe em marketing médico?</legend>
+                <div class="space-y-2" role="radiogroup">
+                  <template x-for="opt in situacaoMarketing" :key="opt">
+                    <label class="opt" :class="{ 'selected': form.situacaoMarketing === opt }">
+                      <input type="radio" name="situacao" :value="opt" x-model="form.situacaoMarketing" class="sr-only">
+                      <span class="opt-dot" :class="{ 'on': form.situacaoMarketing === opt }" aria-hidden="true"></span>
+                      <span class="text-sm font-medium" style="color:#334155" x-text="opt"></span>
+                    </label>
+                  </template>
+                </div>
+              </fieldset>
+
+              <!-- Desafios (multi-select) -->
+              <fieldset class="mb-6 border-none p-0 m-0">
+                <legend class="text-sm font-semibold mb-1" style="color:#334155">
+                  Qual é o seu maior desafio?
+                  <span class="font-normal" style="color:#94A3B8"> (pode marcar mais de um)</span>
+                </legend>
+                <p class="text-xs mb-3" style="color:#94A3B8">Selecione todos que se aplicam</p>
+                <div class="space-y-2" role="group" aria-label="Desafios do consultório">
+                  <template x-for="opt in desafios" :key="opt">
+                    <label class="opt" :class="{ 'selected': form.desafios.includes(opt) }">
+                      <input type="checkbox" :value="opt" x-model="form.desafios" class="sr-only"
+                             :aria-checked="form.desafios.includes(opt)">
+                      <span class="opt-box" :class="{ 'on': form.desafios.includes(opt) }" aria-hidden="true">
+                        <template x-if="form.desafios.includes(opt)">
+                          <svg width="10" height="10" fill="none" stroke="var(--navy-dark)" stroke-width="2.8" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                          </svg>
+                        </template>
+                      </span>
+                      <span class="text-sm font-medium" style="color:#334155" x-text="opt"></span>
+                    </label>
+                  </template>
+                </div>
+              </fieldset>
+
+              <div class="flex gap-2">
+                <button @click="prevStep()" class="btn btn-outline" style="min-height:52px; min-width:80px" aria-label="Voltar para consultório">←</button>
+                <button @click="nextStep()" :disabled="!form.situacaoMarketing || form.desafios.length === 0"
+                        class="btn shiny flex-1" style="min-height:52px">
+                  <span>Continuar
+                  <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/>
+                  </svg></span>
+                </button>
+              </div>
+            </div>
+
+            <!-- ── STEP 4: Contato ── -->
+            <div x-show="step === 4" role="group" aria-labelledby="step4-label">
+              <h3 id="step4-label" class="font-bold mb-1 text-lg" style="color:var(--navy)">Quase lá! Como te encontramos?</h3>
+              <p class="text-sm mb-6" style="color:#94A3B8">Entraremos em contato pelo WhatsApp em até 24 horas.</p>
+
+              <div class="space-y-4 mb-2">
+
+                <div>
+                  <label for="nome" class="block text-sm font-semibold mb-2" style="color:#334155">
+                    Nome completo <span style="color:#EF4444" aria-hidden="true">*</span>
+                  </label>
+                  <input id="nome" type="text" x-model="form.nome"
+                         placeholder="Dr(a). Nome Sobrenome"
+                         class="f-input" autocomplete="name"
+                         :aria-required="true">
+                </div>
+
+                <div>
+                  <label for="whatsapp" class="block text-sm font-semibold mb-2" style="color:#334155">
+                    WhatsApp <span style="color:#EF4444" aria-hidden="true">*</span>
+                    <span class="font-normal" style="color:#94A3B8">(com DDD)</span>
+                  </label>
+                  <input id="whatsapp" type="tel" x-model="form.whatsapp"
+                         placeholder="(11) 99999-9999"
+                         class="f-input" autocomplete="tel"
+                         @input="maskPhone($event)"
+                         :aria-required="true" inputmode="tel">
+                </div>
+
+                <div>
+                  <label for="email" class="block text-sm font-semibold mb-2" style="color:#334155">
+                    E-mail <span class="font-normal" style="color:#94A3B8">(opcional)</span>
+                  </label>
+                  <input id="email" type="email" x-model="form.email"
+                         placeholder="seu@email.com"
+                         class="f-input" autocomplete="email" inputmode="email">
+                </div>
+              </div>
+
+              <p class="text-xs mb-5 flex items-center gap-1.5" style="color:#94A3B8">
+                <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+                </svg>
+                Informações confidenciais. Nunca compartilhadas com terceiros.
+              </p>
+
+              <!-- Error message -->
+              <div x-show="hasError" role="alert" aria-live="polite"
+                   class="mb-4 p-3 rounded-xl text-sm font-medium"
+                   style="background:#FEF2F2; color:#B91C1C; border:1px solid #FECACA">
+                Erro ao enviar. Por favor tente novamente ou entre em contato diretamente.
+              </div>
+
+              <div class="flex gap-2">
+                <button @click="prevStep()" class="btn btn-outline" style="min-height:52px; min-width:80px" aria-label="Voltar para marketing">←</button>
+                <button @click="submitForm()"
+                        :disabled="!form.nome || !form.whatsapp || isSubmitting"
+                        class="btn shiny flex-1" style="min-height:52px">
+                  <template x-if="!isSubmitting">
+                    <span>Quero começar →</span>
+                  </template>
+                  <template x-if="isSubmitting">
+                    <span class="flex items-center gap-2">
+                      <span class="spinner"></span>
+                      Enviando...
+                    </span>
+                  </template>
+                </button>
+              </div>
+            </div>
+
+            <!-- ── STEP 5: Sucesso ── -->
+            <div x-show="step === 5" class="text-center py-4">
+              <div class="w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-5"
+                   style="background:#DCFCE7">
+                <svg width="28" height="28" fill="none" stroke="#16A34A" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+                  <path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/>
+                </svg>
+              </div>
+              <h3 class="font-black text-2xl mb-3" style="color:var(--navy)">
+                Perfeito, <span x-text="firstNameFromForm()"></span>!
+              </h3>
+              <p class="leading-relaxed mb-6" style="color:#64748B">
+                Recebemos seu diagnóstico. Analisaremos seu perfil e entraremos em contato pelo WhatsApp
+                <strong style="color:var(--navy)" x-text="form.whatsapp"></strong>
+                em até 24 horas.
+              </p>
+              <div class="p-5 rounded-2xl text-sm font-medium" style="background:var(--cyan-10); border:1px solid var(--cyan-20); color:var(--navy)">
+                Siga a <strong>@medscalebrasil</strong> no Instagram para ver como outros médicos estão transformando seus consultórios.
+              </div>
+            </div>
+
+          </div><!-- /steps wrapper -->
+
+        </div><!-- /form card -->
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────────────────────────── JORNADA ── -->
+    <section id="jornada" class="section-sm" style="background:#F8FAFC; border-bottom:1px solid #E2E8F0"
+             aria-labelledby="jornada-heading">
+      <div class="max-w-6xl mx-auto">
+
+        <div class="text-center mb-12 reveal">
+          <p class="text-xs font-semibold tracking-widest mb-3 uppercase" style="color:var(--cyan)">O mecanismo</p>
+          <h2 id="jornada-heading" class="font-black mb-3"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            Todo paciente percorre o mesmo caminho<br class="hidden sm:block">
+            até a sua cadeira.
+          </h2>
+          <p class="text-lg mx-auto" style="color:#64748B; max-width:560px">
+            São quatro etapas. Não adianta ganhar uma e perder a seguinte —
+            e é sempre na etapa mais barata que o paciente escapa.
+          </p>
+        </div>
+
+        <div class="jor-grid mb-10">
+
+          <article class="jor-card reveal">
+            <span class="jor-num">ETAPA 01</span>
+            <h3>Descoberta</h3>
+            <p>
+              Ele tem um problema e ainda não sabe que você existe. Procura no Google,
+              rola o Instagram, pergunta para alguém.
+            </p>
+            <span class="jor-pill">Presença Digital · Tráfego</span>
+            <div class="jor-leak">
+              <svg width="12" height="12" fill="none" stroke="#CBD5E1" stroke-width="2.4" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+              Sem presença, você nem entra na lista dele.
+            </div>
+          </article>
+
+          <article class="jor-card reveal d1">
+            <span class="jor-num">ETAPA 02</span>
+            <h3>Confiança</h3>
+            <p>
+              Ele te achou — e está comparando com outros dois. Olha seu conteúdo,
+              seu site e o que dizem sobre você.
+            </p>
+            <span class="jor-pill">Presença Digital</span>
+            <div class="jor-leak">
+              <svg width="12" height="12" fill="none" stroke="#CBD5E1" stroke-width="2.4" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+              Sem autoridade, ele escolhe o outro nome.
+            </div>
+          </article>
+
+          <article class="jor-card reveal d2">
+            <span class="jor-num">ETAPA 03</span>
+            <h3>Agendamento</h3>
+            <p>
+              Ele manda mensagem. É aqui que a maior parte dos consultórios perde
+              o paciente que já estava decidido.
+            </p>
+            <span class="jor-pill">Operação &amp; Secretária</span>
+            <div class="jor-leak">
+              <svg width="12" height="12" fill="none" stroke="#CBD5E1" stroke-width="2.4" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+              Sem resposta rápida, ele marca com quem responder.
+            </div>
+          </article>
+
+          <article class="jor-card reveal d3">
+            <span class="jor-num">ETAPA 04</span>
+            <h3>Retorno</h3>
+            <p>
+              Ele foi bem atendido, volta quando precisa e indica. O paciente mais
+              barato de todos é o que você já tem.
+            </p>
+            <span class="jor-pill">Inteligência Clínica · Financeira</span>
+            <div class="jor-leak">
+              <svg width="12" height="12" fill="none" stroke="#CBD5E1" stroke-width="2.4" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+              </svg>
+              Sem acompanhamento, ele some da sua base.
+            </div>
+          </article>
+
+        </div>
+
+        <p class="text-center font-bold text-base sm:text-lg reveal m-0" style="color:var(--navy)">
+          A MedScale opera as quatro juntas — não uma de cada vez.
+        </p>
+
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────────────────────────── PILARES ── -->
+    <section id="pilares" class="section" aria-labelledby="pilares-heading">
+      <div class="max-w-5xl mx-auto">
+
+        <div class="text-center mb-14 reveal">
+          <h2 id="pilares-heading" class="font-black mb-3"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            Um ecossistema completo, em 6 frentes
+          </h2>
+          <p class="text-lg" style="color:#64748B">Tudo integrado e operado pelo nosso time.</p>
+        </div>
+
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+
+          <article class="card p-6 reveal">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">01</span>
+            </div>
+            <h3 class="font-bold mb-2" style="color:var(--navy)">Presença Digital</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              Site, branding, Google Meu Negócio, calendário editorial, roteiros de vídeo, edição e publicação programada. Autoridade construída sem você gastar tempo.
+            </p>
+          </article>
+
+          <article class="card card-accent p-6 reveal d1">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">02</span>
+            </div>
+            <h3 class="font-bold mb-2" style="color:var(--navy)">Tráfego & Agenda</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              Meta Ads e Google Ads gerenciados pelo nosso time. Landing pages otimizadas. Leads qualificados todo mês — sem depender só de indicação.
+            </p>
+          </article>
+
+          <article class="card p-6 reveal d2">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">03</span>
+            </div>
+            <h3 class="font-bold mb-2" style="color:var(--navy)">Operação & Secretária</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              Secretária treinada + agente de IA no WhatsApp 24/7. Confirmações automáticas, lembretes e remarcações. Nenhum horário desperdiçado.
+            </p>
+          </article>
+
+          <article class="card p-6 reveal d1">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">04</span>
+            </div>
+            <h3 class="font-bold mb-2" style="color:var(--navy)">Inteligência Clínica</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              Tecnologia que organiza e agiliza sua rotina clínica. Transcrições, resumos estruturados e análise de exames. A decisão é sempre, e só, sua.
+            </p>
+          </article>
+
+          <article class="card card-accent p-6 reveal d2">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">05</span>
+            </div>
+            <h3 class="font-bold mb-2" style="color:var(--navy)">Inteligência Financeira</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              Controle de PF e PJ sem planilha chata. Agente de IA no WhatsApp para lançar gastos. Você sabe exatamente para onde vai o seu dinheiro.
+            </p>
+          </article>
+
+          <article class="card p-6 reveal d3">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">06</span>
+            </div>
+            <h3 class="font-bold mb-2" style="color:var(--navy)">Suporte & Estratégia</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              Reunião estratégica mensal, suporte prioritário e onboarding em 2 semanas. Você não contrata uma agência — <strong style="color:var(--navy)">ganha um sócio de crescimento.</strong>
+            </p>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────── SECRETÁRIA IA ── -->
+    <section id="secretaria" class="section section-dark" aria-labelledby="secretaria-heading">
+      <div class="max-w-5xl mx-auto">
+
+        <div class="text-center mb-14 reveal">
+          <p class="text-xs font-semibold tracking-widest mb-4 uppercase" style="color:var(--cyan)">
+            Pilar 03 · em detalhe
+          </p>
+          <h2 id="secretaria-heading" class="font-black leading-tight mb-5"
+              style="font-size:clamp(1.9rem,4.5vw,3rem); color:#fff; letter-spacing:-0.02em">
+            O paciente manda mensagem às 23h47.<br>
+            <span class="text-gradient">Ele marca a consulta às 23h48.</span>
+          </h2>
+          <p class="text-lg leading-relaxed mx-auto" style="color:rgba(255,255,255,.65); max-width:600px">
+            Secretária treinada no horário comercial. Agente de IA nas outras
+            <strong style="color:#fff; font-weight:600">118 horas da semana.</strong>
+            Juntos, seu consultório nunca fica sem resposta.
+          </p>
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-12 lg:gap-14 items-start">
+
+          <!-- ── Mockup de conversa ── -->
+          <div class="reveal">
+            <div class="wa-phone">
+              <div class="wa-screen">
+
+                <div class="wa-top">
+                  <span class="wa-avatar" aria-hidden="true">DR</span>
+                  <div>
+                    <p class="font-semibold text-sm m-0" style="color:#fff">Consultório Dr. Ricardo</p>
+                    <p class="text-xs m-0" style="color:var(--cyan)">online</p>
+                  </div>
+                </div>
+
+                <div class="wa-log">
+                  <div class="wa-msg wa-in">
+                    Boa noite! Vi o perfil do Dr. Ricardo. Ele tem horário essa semana?
+                    <span class="wa-stamp">23:47</span>
+                  </div>
+                  <div class="wa-msg wa-out">
+                    Boa noite, Marina! Tenho quinta às 14h ou sexta às 9h30. Qual fica melhor?
+                    <span class="wa-stamp">23:47</span>
+                  </div>
+                  <div class="wa-msg wa-in">
+                    Quinta às 14h
+                    <span class="wa-stamp">23:48</span>
+                  </div>
+                  <div class="wa-msg wa-out">
+                    Perfeito. Consulta confirmada para quinta, 14h. Já te mando o endereço e um lembrete um dia antes.
+                    <span class="wa-stamp">23:48</span>
+                  </div>
+
+                  <span class="wa-day">Quarta-feira</span>
+
+                  <div class="wa-msg wa-out">
+                    Oi, Marina! Sua consulta é amanhã às 14h. Consegue confirmar?
+                    <span class="wa-stamp">09:00</span>
+                  </div>
+                  <div class="wa-msg wa-in">
+                    Confirmo!
+                    <span class="wa-stamp">09:04</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+            <p class="text-xs text-center mt-4" style="color:rgba(255,255,255,.35)">
+              Exemplo ilustrativo do agente MedScale em operação.
+            </p>
+          </div>
+
+          <!-- ── Como funciona + cobertura ── -->
+          <div class="flex flex-col gap-10">
+
+            <ul class="flex flex-col gap-6 m-0 p-0" role="list">
+
+              <li class="flex gap-4 reveal">
+                <span class="icon-box flex-shrink-0" style="background:var(--cyan-20)" aria-hidden="true">
+                  <svg width="20" height="20" fill="none" stroke="var(--cyan)" stroke-width="1.9" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                  </svg>
+                </span>
+                <div>
+                  <h3 class="font-bold mb-1.5" style="color:#fff">Responde em segundos, a qualquer hora</h3>
+                  <p class="text-sm leading-relaxed m-0" style="color:rgba(255,255,255,.60)">
+                    Quem chega às 23h, no domingo ou no feriado é atendido na hora. Sem fila e sem
+                    “retornaremos em breve”.
+                  </p>
+                </div>
+              </li>
+
+              <li class="flex gap-4 reveal d1">
+                <span class="icon-box flex-shrink-0" style="background:var(--cyan-20)" aria-hidden="true">
+                  <svg width="20" height="20" fill="none" stroke="var(--cyan)" stroke-width="1.9" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
+                  </svg>
+                </span>
+                <div>
+                  <h3 class="font-bold mb-1.5" style="color:#fff">Agenda, confirma e remarca sozinho</h3>
+                  <p class="text-sm leading-relaxed m-0" style="color:rgba(255,255,255,.60)">
+                    O agente escreve direto na sua agenda. O lembrete automático na véspera é o que
+                    derruba a taxa de falta.
+                  </p>
+                </div>
+              </li>
+
+              <li class="flex gap-4 reveal d2">
+                <span class="icon-box flex-shrink-0" style="background:var(--cyan-20)" aria-hidden="true">
+                  <svg width="20" height="20" fill="none" stroke="var(--cyan)" stroke-width="1.9" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+                  </svg>
+                </span>
+                <div>
+                  <h3 class="font-bold mb-1.5" style="color:#fff">Passa o bastão para a pessoa certa</h3>
+                  <p class="text-sm leading-relaxed m-0" style="color:rgba(255,255,255,.60)">
+                    Dúvida clínica, exceção ou caso sensível vai direto para a secretária treinada.
+                    A IA não decide nada que precisa de gente.
+                  </p>
+                </div>
+              </li>
+
+            </ul>
+
+            <!-- ── Mapa de cobertura ── -->
+            <div class="reveal d1">
+              <p class="text-xs font-semibold tracking-widest uppercase mb-5" style="color:rgba(255,255,255,.40)">
+                Cobertura de atendimento por semana
+              </p>
+
+              <div class="flex flex-col gap-6">
+
+                <div class="cov-block">
+                  <div class="cov-head">
+                    <span class="cov-label">Só secretária, horário comercial</span>
+                    <span class="cov-hours"><strong>50</strong> h</span>
+                  </div>
+                  <div class="cov-grid" id="cov-old" aria-hidden="true"></div>
+                </div>
+
+                <div class="cov-block cov-new">
+                  <div class="cov-head">
+                    <span class="cov-label">MedScale — secretária + agente</span>
+                    <span class="cov-hours"><strong>168</strong> h</span>
+                  </div>
+                  <div class="cov-grid" id="cov-new" aria-hidden="true"></div>
+                  <div class="cov-axis" aria-hidden="true">
+                    <span>00h</span><span>06h</span><span>12h</span><span>18h</span><span>24h</span>
+                  </div>
+                </div>
+
+              </div>
+
+              <p class="text-xs mt-4 m-0" style="color:rgba(255,255,255,.35)">
+                Cada quadrado é uma hora — 7 dias × 24 horas.
+              </p>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="text-center mt-14 reveal">
+          <a href="#diagnostico" class="btn shiny"><span>Quero um agente na minha agenda</span></a>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────── EVIDÊNCIA ── -->
+    <section id="evidencia" class="section" aria-labelledby="evidencia-heading">
+      <div class="max-w-5xl mx-auto">
+
+        <div class="text-center mb-14 reveal">
+          <p class="text-xs font-semibold tracking-widest mb-3 uppercase" style="color:var(--cyan)">A base do método</p>
+          <h2 id="evidencia-heading" class="font-black mb-3"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            Não é opinião nossa.
+          </h2>
+          <p class="text-lg mx-auto" style="color:#64748B; max-width:560px">
+            A MedScale é uma empresa nova. A evidência por trás do que a gente faz, não.
+          </p>
+        </div>
+
+        <div class="grid md:grid-cols-2 gap-5">
+
+          <!-- ── Velocidade de resposta ── -->
+          <article class="ev-card reveal">
+            <p class="ev-kicker">Velocidade de resposta</p>
+            <h3 class="font-bold mb-2" style="font-size:1.1875rem; color:var(--navy); letter-spacing:-0.01em">
+              Responder em até 1 hora muda o jogo
+            </h3>
+            <p class="text-sm leading-relaxed mb-2" style="color:#64748B">
+              Chance de qualificar um contato que chegou pela internet:
+            </p>
+
+            <div class="ev-chart">
+              <div class="ev-row">
+                <div class="ev-row-top">
+                  <span class="ev-name">Resposta em até 1 hora</span>
+                  <span class="ev-val">60×</span>
+                </div>
+                <div class="ev-track"><div class="ev-fill" style="width:100%"></div></div>
+              </div>
+              <div class="ev-row">
+                <div class="ev-row-top">
+                  <span class="ev-name">Resposta depois de 24 horas</span>
+                  <span class="ev-val">1×</span>
+                </div>
+                <div class="ev-track"><div class="ev-fill muted" style="width:1.7%"></div></div>
+              </div>
+            </div>
+
+            <div class="ev-note">
+              Mesmo <strong style="color:var(--navy)">uma única hora</strong> de atraso já corta a chance
+              em 7×. É exatamente por isso que o agente responde no minuto em que a mensagem chega —
+              inclusive às 23h de um domingo.
+              <span class="ev-cite">
+                Oldroyd, McElheran &amp; Elkington. <em>The Short Life of Online Sales Leads</em>,
+                Harvard Business Review, 2011 — análise de 1,25 milhão de contatos em 2.241 empresas.
+                <a href="https://hbr.org/2011/03/the-short-life-of-online-sales-leads" target="_blank" rel="noopener noreferrer">Ver estudo</a>
+              </span>
+            </div>
+          </article>
+
+          <!-- ── Lembrete e comparecimento ── -->
+          <article class="ev-card reveal d1">
+            <p class="ev-kicker">Confirmação de consulta</p>
+            <h3 class="font-bold mb-2" style="font-size:1.1875rem; color:var(--navy); letter-spacing:-0.01em">
+              Lembrete por mensagem derruba a falta
+            </h3>
+            <p class="text-sm leading-relaxed mb-2" style="color:#64748B">
+              Comparecimento a consultas médicas, com e sem lembrete:
+            </p>
+
+            <div class="ev-chart">
+              <div class="ev-row">
+                <div class="ev-row-top">
+                  <span class="ev-name">Com lembrete por mensagem</span>
+                  <span class="ev-val">+14%</span>
+                </div>
+                <div class="ev-track"><div class="ev-fill" style="width:100%"></div></div>
+              </div>
+              <div class="ev-row">
+                <div class="ev-row-top">
+                  <span class="ev-name">Sem lembrete</span>
+                  <span class="ev-val">referência</span>
+                </div>
+                <div class="ev-track"><div class="ev-fill muted" style="width:87.7%"></div></div>
+              </div>
+            </div>
+
+            <div class="ev-note">
+              Cada falta é um horário que não volta. O agente confirma na véspera e
+              <strong style="color:var(--navy)">reoferece o horário vago</strong> para quem está na fila
+              — sem ninguém precisar lembrar disso.
+              <span class="ev-cite">
+                Gurol-Urganci et al. <em>Mobile phone messaging reminders for attendance at healthcare
+                appointments</em>. Cochrane Database of Systematic Reviews, 2013 (CD007458) —
+                risco relativo 1,14; evidência de qualidade moderada.
+                <a href="https://www.cochranelibrary.com/cdsr/doi/10.1002/14651858.CD007458.pub3/full" target="_blank" rel="noopener noreferrer">Ver revisão</a>
+              </span>
+            </div>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────────────────────── PARA QUEM ── -->
+    <section class="section-sm" style="background:#F8FAFC; border-top:1px solid #E2E8F0; border-bottom:1px solid #E2E8F0"
+             aria-labelledby="perfil-heading">
+      <div class="max-w-4xl mx-auto">
+
+        <div class="text-center mb-12 reveal">
+          <h2 id="perfil-heading" class="font-black mb-3"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            E se você não quiser aparecer?
+          </h2>
+          <p class="text-lg" style="color:#64748B">
+            A MedScale se adapta ao seu perfil. O resultado em agenda vem dos dois jeitos.
+          </p>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-5">
+
+          <!-- Autoridade -->
+          <article class="card p-8 reveal">
+            <div class="icon-box mb-5" style="background:var(--navy)">
+              <svg width="20" height="20" fill="none" stroke="white" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+              </svg>
+            </div>
+            <h3 class="font-bold text-xl mb-1" style="color:var(--navy)">Quer construir autoridade</h3>
+            <p class="text-sm mb-6" style="color:#94A3B8">Para quem gosta de aparecer e quer virar referência.</p>
+            <ul class="space-y-3" role="list">
+              <li class="flex items-start gap-2.5 text-sm" style="color:#475569">
+                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
+                Conteúdo e vídeos com roteiro e edição nossa
+              </li>
+              <li class="flex items-start gap-2.5 text-sm" style="color:#475569">
+                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
+                Marca pessoal forte no Instagram e YouTube
+              </li>
+              <li class="flex items-start gap-2.5 text-sm" style="color:#475569">
+                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
+                Autoridade que justifica um ticket maior
+              </li>
+            </ul>
+          </article>
+
+          <!-- Bastidores -->
+          <article class="card card-dark p-8 reveal d1">
+            <div class="icon-box mb-5" style="background:var(--cyan)">
+              <svg width="20" height="20" fill="none" stroke="var(--navy-dark)" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+              </svg>
+            </div>
+            <h3 class="font-bold text-xl mb-1" style="color:#fff">Prefere os bastidores</h3>
+            <p class="text-sm mb-6" style="color:rgba(255,255,255,.45)">Para quem é mais reservado ou não tem tempo de gravar.</p>
+            <ul class="space-y-3" role="list">
+              <li class="flex items-start gap-2.5 text-sm" style="color:rgba(255,255,255,.80)">
+                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
+                Foco total em tráfego, site e agendamento
+              </li>
+              <li class="flex items-start gap-2.5 text-sm" style="color:rgba(255,255,255,.80)">
+                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
+                Secretária treinada e inteligência financeira
+              </li>
+              <li class="flex items-start gap-2.5 text-sm" style="color:rgba(255,255,255,.80)">
+                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
+                Sua agenda enche sem você aparecer em vídeo
+              </li>
+            </ul>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ────────────────────────────────────────────── COMO COMEÇA ── -->
+    <section id="como-funciona" class="section" aria-labelledby="steps-heading">
+      <div class="max-w-4xl mx-auto">
+
+        <div class="text-center mb-14 reveal">
+          <h2 id="steps-heading" class="font-black mb-3"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            Como começa
+          </h2>
+          <p class="text-lg" style="color:#64748B">
+            Onboarding leve e sem fricção. Em duas semanas, sua estrutura já está rodando.
+          </p>
+        </div>
+
+        <!-- Desktop timeline -->
+        <div class="hidden sm:flex items-start gap-0 reveal">
+
+          <div class="flex flex-col items-center text-center" style="flex:1">
+            <div class="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg mb-4"
+                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">01</div>
+            <div class="prog-line w-full" style="margin-bottom:16px; margin-top:-29px; z-index:-1; position:relative; top:-28px; margin-left:50%"></div>
+            <h3 class="font-bold mb-1.5 text-base" style="color:var(--navy)">Diagnóstico</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">Especialidade, metas e rotina. Definimos posicionamento e estratégia.</p>
+          </div>
+
+          <div class="flex flex-col items-center text-center" style="flex:1">
+            <div class="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg mb-4"
+                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">02</div>
+            <h3 class="font-bold mb-1.5 text-base" style="color:var(--navy)">Configuração</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">Acessos, agente WhatsApp, agenda, secretária e financeiro no seu fluxo.</p>
+          </div>
+
+          <div class="flex flex-col items-center text-center" style="flex:1">
+            <div class="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg mb-4"
+                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">03</div>
+            <h3 class="font-bold mb-1.5 text-base" style="color:var(--navy)">No ar</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">Site e Google Meu Negócio publicados. Primeiras campanhas rodando.</p>
+          </div>
+
+          <div class="flex flex-col items-center text-center" style="flex:1">
+            <div class="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg mb-4"
+                 style="background:var(--navy); color:#fff">04</div>
+            <h3 class="font-bold mb-1.5 text-base" style="color:var(--navy)">Crescimento</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">Otimização contínua, relatório e reunião mensal. Agenda enchendo.</p>
+          </div>
+
+        </div>
+
+        <!-- Mobile timeline -->
+        <div class="sm:hidden space-y-4 reveal">
+          <div class="flex gap-4 items-start">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0"
+                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">01</div>
+            <div>
+              <h3 class="font-bold mb-1" style="color:var(--navy)">Diagnóstico</h3>
+              <p class="text-sm" style="color:#64748B">Especialidade, metas e rotina. Definimos posicionamento e estratégia.</p>
+            </div>
+          </div>
+          <div class="flex gap-4 items-start">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0"
+                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">02</div>
+            <div>
+              <h3 class="font-bold mb-1" style="color:var(--navy)">Configuração</h3>
+              <p class="text-sm" style="color:#64748B">Acessos, agente WhatsApp, agenda, secretária e financeiro no seu fluxo.</p>
+            </div>
+          </div>
+          <div class="flex gap-4 items-start">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0"
+                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">03</div>
+            <div>
+              <h3 class="font-bold mb-1" style="color:var(--navy)">No ar</h3>
+              <p class="text-sm" style="color:#64748B">Site e Google Meu Negócio publicados. Primeiras campanhas rodando.</p>
+            </div>
+          </div>
+          <div class="flex gap-4 items-start">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0"
+                 style="background:var(--navy); color:#fff">04</div>
+            <div>
+              <h3 class="font-bold mb-1" style="color:var(--navy)">Crescimento</h3>
+              <p class="text-sm" style="color:#64748B">Otimização contínua, relatório e reunião mensal. Agenda enchendo.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Detalhe das duas primeiras etapas ── -->
+        <div class="grid md:grid-cols-2 gap-5 mt-16">
+
+          <article class="card p-7 sm:p-8 reveal">
+            <span class="jor-num">Etapa 01</span>
+            <h3 class="font-black mt-3 mb-3" style="font-size:1.375rem; color:var(--navy); letter-spacing:-0.02em">
+              Preencha o diagnóstico e receba nosso retorno <span style="color:var(--cyan)">em até 1 hora</span>
+            </h3>
+            <p class="text-sm leading-relaxed mb-7" style="color:#64748B">
+              São 4 perguntas rápidas. A partir delas montamos um plano específico para a sua
+              especialidade e a sua cidade. Gratuito e sem compromisso — se não fizer sentido,
+              a gente diz na hora.
+            </p>
+
+            <div class="mk-frame">
+              <div class="mk-bar" aria-hidden="true">
+                <span class="mk-dot"></span><span class="mk-dot"></span><span class="mk-dot"></span>
+                <span class="mk-url">medscalebr.com/diagnostico</span>
+              </div>
+              <div class="mk-body">
+                <div class="mk-line">
+                  <span class="mk-check" aria-hidden="true">
+                    <svg width="10" height="10" fill="none" stroke="var(--cyan)" stroke-width="3.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                  </span>
+                  Especialidade · Dermatologia
+                </div>
+                <div class="mk-line">
+                  <span class="mk-check" aria-hidden="true">
+                    <svg width="10" height="10" fill="none" stroke="var(--cyan)" stroke-width="3.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                  </span>
+                  Consultório próprio · Brasília, DF
+                </div>
+                <div class="mk-line">
+                  <span class="mk-check" aria-hidden="true">
+                    <svg width="10" height="10" fill="none" stroke="var(--cyan)" stroke-width="3.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                  </span>
+                  Hoje depende de indicação
+                </div>
+                <div class="mk-line" style="color:rgba(255,255,255,.40)">
+                  <span class="mk-check pending" aria-hidden="true">
+                    <svg width="10" height="10" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="2.6" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg>
+                  </span>
+                  Enviando para o time…
+                </div>
+              </div>
+            </div>
+          </article>
+
+          <article class="card p-7 sm:p-8 reveal d1">
+            <span class="jor-num">Etapa 02</span>
+            <h3 class="font-black mt-3 mb-3" style="font-size:1.375rem; color:var(--navy); letter-spacing:-0.02em">
+              Sua estrutura completa <span style="color:var(--cyan)">no ar em 14 dias</span>
+            </h3>
+            <p class="text-sm leading-relaxed mb-7" style="color:#64748B">
+              Você entrega os acessos uma vez e o time assume. Site, campanhas, agente de WhatsApp
+              e financeiro entram em operação em duas semanas — sem você acompanhar tarefa por tarefa.
+            </p>
+
+            <div class="mk-frame">
+              <div class="mk-bar" aria-hidden="true">
+                <span class="mk-dot"></span><span class="mk-dot"></span><span class="mk-dot"></span>
+                <span class="mk-url">onboarding · dia 9 de 14</span>
+              </div>
+              <div class="mk-body">
+                <div class="mk-line">
+                  <span class="mk-check" aria-hidden="true">
+                    <svg width="10" height="10" fill="none" stroke="var(--cyan)" stroke-width="3.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                  </span>
+                  Site e Google Meu Negócio publicados
+                </div>
+                <div class="mk-line">
+                  <span class="mk-check" aria-hidden="true">
+                    <svg width="10" height="10" fill="none" stroke="var(--cyan)" stroke-width="3.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                  </span>
+                  Agente de WhatsApp treinado
+                </div>
+                <div class="mk-line">
+                  <span class="mk-check" aria-hidden="true">
+                    <svg width="10" height="10" fill="none" stroke="var(--cyan)" stroke-width="3.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
+                  </span>
+                  Agenda e confirmações integradas
+                </div>
+                <div class="mk-line" style="color:rgba(255,255,255,.40)">
+                  <span class="mk-check pending" aria-hidden="true">
+                    <svg width="10" height="10" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="2.6" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg>
+                  </span>
+                  Campanhas em revisão final
+                </div>
+                <div class="mk-bar-track" aria-hidden="true">
+                  <div class="mk-bar-fill" style="width:64%"></div>
+                </div>
+              </div>
+            </div>
+          </article>
+
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ────────────────────────────────────────────── STACK TÉCNICO ── -->
+    <section class="section-sm" style="background:#F8FAFC; border-top:1px solid #E2E8F0; border-bottom:1px solid #E2E8F0"
+             aria-labelledby="stack-heading">
+      <div class="max-w-4xl mx-auto text-center reveal">
+        <h2 id="stack-heading" class="text-xs font-semibold tracking-widest uppercase mb-8" style="color:#94A3B8">
+          A operação roda nas ferramentas que o mercado usa
+        </h2>
+
+        <div class="tech-row">
+          <span class="tech-mark">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.7 6.6c-1.3 0-2.3.9-3.1 2.1-.6-.9-1.3-2.1-2.9-2.1-2 0-3.4 2.4-3.4 5 0 1.6.7 2.7 1.9 2.7 1 0 1.6-.5 2.4-1.9l.8-1.4c.2-.4.4-.5.6-.5.4 0 .7.4 1.1 1.4l.9 2.1c.3.7.8 1.1 1.5 1.1 1.3 0 2.1-1 2.1-2.9 0-2.5-1.4-5.6-3.9-5.6zm-6 5.9c-.4 0-.7-.4-.7-1.2 0-1.5.7-3.1 1.7-3.1.5 0 .9.4 1.4 1.4-.9 1.9-1.6 2.9-2.4 2.9zm5.9.1c-.5 0-.8-.5-1.2-1.5l-.5-1.2c.6-1 1.2-1.6 1.8-1.6 1 0 1.7 1.4 1.7 3 0 .9-.4 1.3-1.8 1.3z"/></svg>
+            Meta Ads
+          </span>
+          <span class="tech-mark">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.24 10.29v3.7h5.24c-.21 1.36-1.58 3.99-5.24 3.99-3.15 0-5.73-2.61-5.73-5.83s2.58-5.83 5.73-5.83c1.8 0 3 .77 3.69 1.43l2.51-2.42C16.83 3.77 14.72 2.8 12.24 2.8 6.98 2.8 2.72 7.06 2.72 12.3s4.26 9.5 9.52 9.5c5.5 0 9.14-3.86 9.14-9.3 0-.63-.07-1.1-.15-1.58l-8.99-.63z"/></svg>
+            Google Ads
+          </span>
+          <span class="tech-mark">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2zm5.8 14.03c-.24.68-1.42 1.3-1.95 1.35-.5.05-.98.24-3.3-.69-2.77-1.09-4.53-3.92-4.67-4.1-.13-.18-1.11-1.48-1.11-2.82s.7-2 .95-2.28c.25-.27.54-.34.72-.34.18 0 .36 0 .52.01.17.01.39-.06.61.47.24.55.79 1.92.86 2.06.07.14.12.3.02.48-.09.18-.14.3-.28.46-.14.16-.3.36-.42.48-.14.14-.29.29-.12.57.16.28.73 1.2 1.56 1.95 1.07.95 1.97 1.25 2.25 1.39.28.14.44.12.6-.07.17-.19.7-.82.89-1.1.18-.28.37-.23.62-.14.25.09 1.6.75 1.87.89.27.14.46.21.53.32.06.11.06.65-.18 1.33z"/></svg>
+            WhatsApp Business
+          </span>
+          <span class="tech-mark">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>
+            Google Meu Negócio
+          </span>
+          <span class="tech-mark">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41-.56-.22-.96-.48-1.38-.9-.42-.42-.68-.82-.9-1.38-.16-.42-.36-1.06-.41-2.23C2.17 15.58 2.16 15.2 2.16 12s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41C8.42 2.17 8.8 2.16 12 2.16zM12 0C8.74 0 8.33.01 7.05.07 5.78.13 4.9.33 4.14.63c-.79.3-1.46.72-2.13 1.38C1.35 2.68.93 3.35.63 4.14.33 4.9.13 5.78.07 7.05.01 8.33 0 8.74 0 12s.01 3.67.07 4.95c.06 1.27.26 2.15.56 2.91.3.79.72 1.46 1.38 2.13.67.66 1.34 1.08 2.13 1.38.76.3 1.64.5 2.91.56C8.33 23.99 8.74 24 12 24s3.67-.01 4.95-.07c1.27-.06 2.15-.26 2.91-.56.79-.3 1.46-.72 2.13-1.38.66-.67 1.08-1.34 1.38-2.13.3-.76.5-1.64.56-2.91.06-1.28.07-1.69.07-4.95s-.01-3.67-.07-4.95c-.06-1.27-.26-2.15-.56-2.91-.3-.79-.72-1.46-1.38-2.13C21.32 1.35 20.65.93 19.86.63c-.76-.3-1.64-.5-2.91-.56C15.67.01 15.26 0 12 0zm0 5.84a6.16 6.16 0 1 0 0 12.32 6.16 6.16 0 0 0 0-12.32zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm7.85-10.4a1.44 1.44 0 1 1-2.88 0 1.44 1.44 0 0 1 2.88 0z"/></svg>
+            Instagram
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────── RESULTADOS ESPERADOS ── -->
+    <section class="section-sm" style="background:#fff; border-top:1px solid #E2E8F0"
+             aria-labelledby="resultados-heading">
+      <div class="max-w-4xl mx-auto">
+
+        <div class="text-center mb-10 reveal">
+          <p class="text-xs font-semibold tracking-widest mb-3 uppercase" style="color:var(--cyan)">O que muda</p>
+          <h2 id="resultados-heading" class="font-black mb-3"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            O que passa a existir no seu consultório
+          </h2>
+          <p class="text-lg" style="color:#64748B">Quatro mudanças concretas, a partir do primeiro mês.</p>
+        </div>
+
+        <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+          <div class="result-card reveal">
+            <div class="result-number">1<span></span></div>
+            <p class="text-sm font-semibold mb-1" style="color:var(--navy)">parceiro, não quatro</p>
+            <p class="text-xs" style="color:#94A3B8">marketing, secretária, IA e financeiro sob o mesmo teto</p>
+          </div>
+
+          <div class="result-card reveal d1">
+            <div class="result-number">0<span>h</span></div>
+            <p class="text-sm font-semibold mb-1" style="color:var(--navy)">dedicadas a marketing</p>
+            <p class="text-xs" style="color:#94A3B8">o time cuida de tudo, você só atende</p>
+          </div>
+
+          <div class="result-card reveal d2">
+            <div class="result-number">24<span>/7</span></div>
+            <p class="text-sm font-semibold mb-1" style="color:var(--navy)">secretária no WhatsApp</p>
+            <p class="text-xs" style="color:#94A3B8">nenhum lead perde para o concorrente por falta de resposta</p>
+          </div>
+
+          <div class="result-card reveal d3">
+            <div class="result-number">14<span>d</span></div>
+            <p class="text-sm font-semibold mb-1" style="color:var(--navy)">para estar no ar</p>
+            <p class="text-xs" style="color:#94A3B8">site, campanhas e agente prontos. sem esperar meses</p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+    <!--
+    ── PROVA SOCIAL (ativar após o case piloto) ──────────────────────────
+    <section style="padding:80px 24px; background:#F8FAFC; border-top:1px solid #E2E8F0">
+      <div style="max-width:700px; margin:0 auto; text-align:center">
+        <p style="color:var(--cyan); font-size:.75rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; margin-bottom:16px">O que os médicos dizem</p>
+        <blockquote style="font-size:1.5rem; font-weight:700; color:var(--navy); line-height:1.4; margin-bottom:24px">
+          "Em 60 dias minha agenda estava cheia. Nunca mais dependi só de indicação."
+        </blockquote>
+        <div style="display:flex; align-items:center; justify-content:center; gap:12px">
+          <img src="foto-dr-piloto.jpg" alt="Dr. [Nome]" width="48" height="48"
+               style="border-radius:50%; object-fit:cover; border:2px solid var(--cyan-20)">
+          <div style="text-align:left">
+            <p style="font-weight:600; color:var(--navy); font-size:.875rem; margin:0">Dr. [Nome Sobrenome]</p>
+            <p style="color:#94A3B8; font-size:.75rem; margin:0">[Especialidade] · Salvador, BA</p>
+          </div>
+        </div>
+      </div>
+    </section>
+    ──────────────────────────────────────────────────────────────────── -->
+
+    <!--
+    ── SÓCIOS (fora do ar — aguardando definição societária) ────────────
+         Para reativar: apague esta linha de abertura e a de fechamento
+         lá embaixo. Antes disso, conferir:
+           1. a headline "Três sócios, um telefone" (muda se forem dois)
+           2. os nomes na figcaption
+           3. a foto socios-medscale.jpg, que mostra três pessoas
+           4. o parágrafo de origem, que ainda é texto genérico meu
+
+    <section id="socios" class="section" style="background:#fff; border-top:1px solid #E2E8F0"
+             aria-labelledby="socios-heading">
+      <div class="max-w-4xl mx-auto">
+
+        <div class="text-center mb-12 reveal">
+          <p class="text-xs font-semibold tracking-widest mb-3 uppercase" style="color:var(--cyan)">Quem está por trás</p>
+          <h2 id="socios-heading" class="font-black mb-5"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            Três sócios, um telefone
+          </h2>
+          <p class="text-lg leading-relaxed mx-auto" style="color:#64748B; max-width:620px">
+            A MedScale nasceu de uma constatação simples: o médico é formado para cuidar de gente —
+            não para gerir marketing, agenda, secretária e finanças ao mesmo tempo. Montamos a empresa
+            que faz essa parte inteira. Quando você contrata, fala direto com a gente.
+          </p>
+        </div>
+
+        <figure class="fnd-figure reveal">
+          <img src="socios-medscale.jpg"
+               alt="Os três co-fundadores da MedScale no escritório"
+               width="1600" height="1073"
+               loading="lazy" decoding="async">
+          <figcaption>
+            <span class="fnd-role">Co-fundadores</span>
+            <span class="fnd-names">
+              Giuliano Torres
+              <i aria-hidden="true">·</i> Arthur Costa
+              <i aria-hidden="true">·</i> João Victor Teixeira
+            </span>
+          </figcaption>
+        </figure>
+
+      </div>
+    </section>
+    ──────────────────────────────────────────────────────────────────── -->
+
+    <!-- ───────────────────────────────────────────────────────── FAQ ── -->
+    <section id="faq" class="section-sm" style="background:#F8FAFC; border-top:1px solid #E2E8F0"
+             aria-labelledby="faq-heading">
+      <div class="max-w-3xl mx-auto">
+
+        <div class="text-center mb-12 reveal">
+          <p class="text-xs font-semibold tracking-widest mb-3 uppercase" style="color:var(--cyan)">Antes de falar com a gente</p>
+          <h2 id="faq-heading" class="font-black mb-3"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            As perguntas que todo médico faz
+          </h2>
+        </div>
+
+        <div class="reveal" x-data="{ open: 1 }">
+
+          <div class="faq-item">
+            <button type="button" class="faq-q" @click="open = open === 1 ? null : 1"
+                    :aria-expanded="open === 1 ? 'true' : 'false'" aria-controls="faq-a1">
+              <span>Vocês garantem resultado?</span>
+              <span class="faq-icon" :class="{ 'open': open === 1 }" aria-hidden="true">
+                <svg width="12" height="12" fill="none" stroke="var(--cyan-dark)" stroke-width="2.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+              </span>
+            </button>
+            <div class="faq-a" id="faq-a1" x-show="open === 1" x-transition.opacity.duration.200ms x-cloak>
+              Não — e desconfie de quem garante. O que garantimos é a <strong>estrutura</strong>: as seis
+              frentes operando, um time dedicado e transparência total dos números. Você acompanha o que
+              entra, o que converte e o que custa. Resultado em saúde depende de especialidade, cidade,
+              concorrência e do seu próprio atendimento. O que está sob nosso controle, a gente entrega.
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button type="button" class="faq-q" @click="open = open === 2 ? null : 2"
+                    :aria-expanded="open === 2 ? 'true' : 'false'" aria-controls="faq-a2">
+              <span>A MedScale é uma agência de marketing?</span>
+              <span class="faq-icon" :class="{ 'open': open === 2 }" aria-hidden="true">
+                <svg width="12" height="12" fill="none" stroke="var(--cyan-dark)" stroke-width="2.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+              </span>
+            </button>
+            <div class="faq-a" id="faq-a2" x-show="open === 2" x-transition.opacity.duration.200ms x-cloak>
+              Não. Agência entrega um pedaço — tráfego, ou social media, ou site. A MedScale assume o
+              consultório inteiro: presença digital, captação, secretária, agendamento, tecnologia e
+              controle financeiro. <strong>Um contrato, um time, um responsável.</strong>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button type="button" class="faq-q" @click="open = open === 3 ? null : 3"
+                    :aria-expanded="open === 3 ? 'true' : 'false'" aria-controls="faq-a3">
+              <span>Preciso ter clínica? Eu atendo sozinho.</span>
+              <span class="faq-icon" :class="{ 'open': open === 3 }" aria-hidden="true">
+                <svg width="12" height="12" fill="none" stroke="var(--cyan-dark)" stroke-width="2.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+              </span>
+            </button>
+            <div class="faq-a" id="faq-a3" x-show="open === 3" x-transition.opacity.duration.200ms x-cloak>
+              Não precisa. Boa parte do que fazemos foi desenhada exatamente para o médico que atende
+              sozinho ou com uma secretária. Consultório próprio, sala alugada, atendimento em clínica
+              de terceiros ou telemedicina — <strong>a estrutura se adapta ao seu formato.</strong>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button type="button" class="faq-q" @click="open = open === 4 ? null : 4"
+                    :aria-expanded="open === 4 ? 'true' : 'false'" aria-controls="faq-a4">
+              <span>Quanto custa?</span>
+              <span class="faq-icon" :class="{ 'open': open === 4 }" aria-hidden="true">
+                <svg width="12" height="12" fill="none" stroke="var(--cyan-dark)" stroke-width="2.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+              </span>
+            </button>
+            <div class="faq-a" id="faq-a4" x-show="open === 4" x-transition.opacity.duration.200ms x-cloak>
+              Depende do que o seu consultório precisa. Quem já tem site e secretária não paga pelo mesmo
+              escopo de quem está começando do zero. Por isso o diagnóstico é gratuito: a partir dele
+              montamos uma proposta com <strong>escopo e valor fechados, sem surpresa e sem fidelidade.</strong>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button type="button" class="faq-q" @click="open = open === 5 ? null : 5"
+                    :aria-expanded="open === 5 ? 'true' : 'false'" aria-controls="faq-a5">
+              <span>Em quanto tempo eu vejo resultado?</span>
+              <span class="faq-icon" :class="{ 'open': open === 5 }" aria-hidden="true">
+                <svg width="12" height="12" fill="none" stroke="var(--cyan-dark)" stroke-width="2.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+              </span>
+            </button>
+            <div class="faq-a" id="faq-a5" x-show="open === 5" x-transition.opacity.duration.200ms x-cloak>
+              Sua estrutura entra no ar em <strong>14 dias.</strong> Daí em diante o ritmo depende de
+              especialidade, cidade e investimento em mídia. O que dá para prometer com honestidade é
+              acompanhamento: você vê os números desde a primeira semana e tem reunião de estratégia
+              todo mês.
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button type="button" class="faq-q" @click="open = open === 6 ? null : 6"
+                    :aria-expanded="open === 6 ? 'true' : 'false'" aria-controls="faq-a6">
+              <span>Vocês cuidam do meu Instagram?</span>
+              <span class="faq-icon" :class="{ 'open': open === 6 }" aria-hidden="true">
+                <svg width="12" height="12" fill="none" stroke="var(--cyan-dark)" stroke-width="2.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+              </span>
+            </button>
+            <div class="faq-a" id="faq-a6" x-show="open === 6" x-transition.opacity.duration.200ms x-cloak>
+              Sim — com foco em agenda cheia, não em número de seguidor. Roteiro, edição, calendário e
+              publicação são nossos. E se você não quiser aparecer em vídeo, tudo bem: existe uma trilha
+              inteira focada em tráfego, site e agendamento que <strong>funciona sem a sua imagem.</strong>
+            </div>
+          </div>
+
+          <div class="faq-item">
+            <button type="button" class="faq-q" @click="open = open === 7 ? null : 7"
+                    :aria-expanded="open === 7 ? 'true' : 'false'" aria-controls="faq-a7">
+              <span>Como funciona a IA? É segura para o paciente?</span>
+              <span class="faq-icon" :class="{ 'open': open === 7 }" aria-hidden="true">
+                <svg width="12" height="12" fill="none" stroke="var(--cyan-dark)" stroke-width="2.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
+              </span>
+            </button>
+            <div class="faq-a" id="faq-a7" x-show="open === 7" x-transition.opacity.duration.200ms x-cloak>
+              O agente de WhatsApp faz o que uma secretária faria fora do horário: responde dúvida
+              administrativa, mostra horários, agenda, confirma e lembra. <strong>Ele não dá orientação
+              clínica, não interpreta sintoma e não substitui você.</strong> Qualquer assunto que fuja
+              disso é repassado para a secretária treinada ou para você.
+            </div>
+          </div>
+
+        </div>
+
+        <p class="text-center text-sm mt-10 reveal" style="color:#64748B">
+          Ficou alguma dúvida? Escreva para
+          <a href="mailto:medscalebr@gmail.com" class="font-semibold no-underline" style="color:var(--cyan-dark)">medscalebr@gmail.com</a>
+        </p>
+
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────── CTA FINAL ── -->
+    <section class="section-sm section-dark" aria-labelledby="cta-final-heading">
+      <div class="max-w-2xl mx-auto text-center reveal">
+        <h2 id="cta-final-heading" class="font-black leading-tight mb-5"
+            style="font-size:clamp(1.6rem,3.8vw,2.25rem); color:#fff; letter-spacing:-0.02em">
+          Leu até aqui?<br>
+          <span class="text-gradient">Então o próximo passo é conversar.</span>
+        </h2>
+        <p class="text-base leading-relaxed mb-8 mx-auto" style="color:rgba(255,255,255,.60); max-width:480px">
+          O diagnóstico é gratuito e são 4 perguntas. Se a MedScale não fizer sentido para
+          o seu momento, a gente diz na hora.
+        </p>
+        <a href="#diagnostico" class="btn shiny"><span>Fazer meu diagnóstico gratuito</span></a>
+        <p class="text-sm mt-6 m-0" style="color:rgba(255,255,255,.35)">
+          Sem fidelidade · Retorno em até 1 hora em dias úteis
+        </p>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ─────────────────────────────────────────────────────── FOOTER ── -->
+  <footer style="background:var(--navy-dark); padding:40px 24px; border-top:1px solid rgba(255,255,255,.08)"
+          role="contentinfo">
+    <div class="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
+      <div class="flex items-center gap-2.5">
+        <span class="font-black text-lg" style="color:#fff">
+          Med<span style="color:var(--cyan)">Scale</span>
+        </span>
+        <span class="text-xs font-semibold tracking-widest" style="color:rgba(255,255,255,.25)">ASSESSORIA MÉDICA</span>
+      </div>
+      <p class="text-xs text-center" style="color:rgba(255,255,255,.30)">
+        © 2026 MedScale. Todos os direitos reservados.<br>
+        Conteúdos em conformidade com o Conselho Federal de Medicina (CFM).
+      </p>
+      <div class="flex items-center gap-5">
+        <a href="mailto:medscalebr@gmail.com"
+           class="text-xs no-underline transition-colors"
+           style="color:rgba(255,255,255,.30)">
+          medscalebr@gmail.com
+        </a>
+        <a href="/politica-privacidade.html"
+           class="text-xs no-underline transition-colors"
+           style="color:rgba(255,255,255,.30)"
+           aria-label="Política de Privacidade">
+          Política de Privacidade
+        </a>
+        <a href="https://instagram.com/medscalebrasil"
+           class="text-sm font-medium no-underline transition-colors"
+           style="color:rgba(255,255,255,.35)"
+           target="_blank" rel="noopener noreferrer"
+           aria-label="MedScale no Instagram (abre em nova aba)">
+          @medscalebrasil
+        </a>
+      </div>
+    </div>
+  </footer>
+
+  <!-- ─────────────────────────────────────────── SCRIPTS ── -->
+  <script>
+    /* ── Alpine.js Component ────────────────────────────────────────── */
+    function leadForm() {
+      return {
+        step: 1,
+        fading: false,
+        isSubmitting: false,
+        hasError: false,
+
+        form: {
+          especialidade: '',
+          consultasMes: '',
+          tipoConsultorio: '',
+          cidade: '',
+          situacaoMarketing: '',
+          desafios: [],
+          nome: '',
+          whatsapp: '',
+          email: '',
+        },
+
+        /* ── Option lists ───────────────────────────────────────────── */
+        especialidades: [
+          'Dermatologia', 'Cirurgia Plástica', 'Cardiologia',
+          'Ortopedia', 'Ginecologia', 'Urologia',
+          'Oftalmologia', 'Psiquiatria', 'Outra',
+        ],
+
+        consultasMes: ['Menos de 20', '20 a 50', '50 a 100', 'Mais de 100'],
+
+        tiposConsultorio: [
+          'Sim, tenho consultório próprio',
+          'Sim, atendo em clínica / espaço alugado',
+          'Só trabalho em hospital ou plano de saúde',
+        ],
+
+        situacaoMarketing: [
+          'Nunca investi em marketing',
+          'Já tentei, mas parei',
+          'Invisto mas sem resultado claro',
+          'Invisto e quero escalar',
+        ],
+
+        desafios: [
+          'Agenda imprevisível (meses cheios e fracos)',
+          'Pacientes que somem no WhatsApp',
+          'Não tenho tempo para marketing',
+          'Dependo só de indicação',
+          'Quero criar autoridade online',
+        ],
+
+        /* ── Helpers ────────────────────────────────────────────────── */
+        firstNameFromForm() {
+          // Skip prefixes like Dr., Dra., Dr
+          const parts = this.form.nome.trim().split(/\s+/);
+          const skip = /^dr[a]?\.?$/i;
+          return parts.find(p => !skip.test(p)) || parts[0] || '';
+        },
+
+        scrollToForm() {
+          const el = document.getElementById('diagnostico');
+          if (el) window.scrollTo({ top: el.offsetTop - 80, behavior: 'smooth' });
+        },
+
+        /* ── Navigation ─────────────────────────────────────────────── */
+        async nextStep() {
+          this.fading = true;
+          await sleep(150);
+          this.step++;
+          this.fading = false;
+          this.scrollToForm();
+        },
+
+        async prevStep() {
+          this.fading = true;
+          await sleep(150);
+          this.step--;
+          this.fading = false;
+          this.scrollToForm();
+        },
+
+        /* ── WhatsApp mask ──────────────────────────────────────────── */
+        maskPhone(e) {
+          let raw = e.target.value.replace(/\D/g, '').slice(0, 11);
+          let m = raw;
+          if (raw.length > 2)  m = '(' + raw.slice(0,2) + ') ' + raw.slice(2);
+          if (raw.length > 7)  m = '(' + raw.slice(0,2) + ') ' + raw.slice(2,7) + '-' + raw.slice(7);
+          this.form.whatsapp = m;
+        },
+
+        /* ── Submit ─────────────────────────────────────────────────── */
+        async submitForm() {
+          this.isSubmitting = true;
+          this.hasError = false;
+
+          /*
+           * ─── CONFIGURAÇÃO DO FORMSPREE ────────────────────────────
+           * 1. Acesse https://formspree.io e crie conta gratuita
+           * 2. Crie um formulário → copie o ID (ex: "xpzgkrbl")
+           * 3. Substitua 'SEU_FORM_ID' abaixo pelo ID obtido
+           * 4. Você receberá um e-mail a cada lead enviado
+           * ──────────────────────────────────────────────────────────
+           */
+          const FORMSPREE_ID = 'xrenekje';
+
+          const payload = {
+            '📋 Especialidade':      this.form.especialidade,
+            '📅 Consultas/mês':      this.form.consultasMes,
+            '🏥 Tipo de consultório': this.form.tipoConsultorio,
+            '📍 Cidade':             this.form.cidade,
+            '📣 Situação marketing': this.form.situacaoMarketing,
+            '⚡ Desafios':           this.form.desafios.join(' | '),
+            '👤 Nome':               this.form.nome,
+            '📱 WhatsApp':           this.form.whatsapp,
+            '✉️ E-mail':             this.form.email || '—',
+          };
+
+          try {
+            const res = await fetch(`https://formspree.io/f/${FORMSPREE_ID}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+              body: JSON.stringify(payload),
+            });
+
+            if (res.ok) {
+              await this.nextStep(); // goes to step 5
+            } else {
+              this.hasError = true;
+              // Focus error message for screen readers
+              this.$nextTick(() => {
+                document.querySelector('[role="alert"]')?.focus();
+              });
+            }
+          } catch (_) {
+            // Dev mode: skip to success so the team can test the UI
+            console.info('[MedScale] Formspree não configurado — modo dev, avançando para sucesso.', payload);
+            await this.nextStep();
+          } finally {
+            this.isSubmitting = false;
+          }
+        },
+      };
+    }
+
+    /* ── Utility ──────────────────────────────────────────────────────── */
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    /* ── Mapa de cobertura (7 dias × 24 h) ────────────────────────────── */
+    document.addEventListener('DOMContentLoaded', () => {
+      const paint = (id, alwaysOn) => {
+        const grid = document.getElementById(id);
+        if (!grid) return;
+        const frag = document.createDocumentFragment();
+        for (let day = 0; day < 7; day++) {
+          for (let hour = 0; hour < 24; hour++) {
+            // Referência: seg–sex, 8h às 18h
+            const comercial = day < 5 && hour >= 8 && hour < 18;
+            const cell = document.createElement('i');
+            cell.className = 'cov-cell' + (alwaysOn || comercial ? ' on' : '');
+            frag.appendChild(cell);
+          }
+        }
+        grid.appendChild(frag);
+      };
+      paint('cov-old', false);
+      paint('cov-new', true);
+    });
+
+    /* ── Scroll-reveal via IntersectionObserver ───────────────────────── */
+    document.addEventListener('DOMContentLoaded', () => {
+      const mo = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+      if (mo.matches) {
+        // Reduced motion: reveal everything immediately
+        document.querySelectorAll('.reveal').forEach(el => el.classList.add('in'));
+        return;
+      }
+
+      const io = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('in');
+            io.unobserve(entry.target);
+          }
+        });
+      }, { threshold: 0.12, rootMargin: '0px 0px -40px 0px' });
+
+      document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+    });
+  </script>
+
+</body>
+</html>

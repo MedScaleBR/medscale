@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Política de Privacidade — MedScale</title>
+<meta name="description" content="Política de Privacidade da MedScale, em conformidade com a Lei Geral de Proteção de Dados (LGPD — Lei nº 13.709/2018).">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --navy:#16355F;
+    --navy-deep:#0E2440;
+    --blue:#1BA3C6;
+    --blue-soft:#E6F5F9;
+    --ink:#2A3644;
+    --ink-soft:#5A6B7D;
+    --bg:#F7FAFC;
+    --card:#FFFFFF;
+    --line:#E3EAF1;
+    --hl:#FFF3C4;
+    --hl-border:#E8C547;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{font-family:'Montserrat',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:var(--bg);color:var(--ink);line-height:1.75;font-size:16px}
+
+  /* HEADER */
+  header{background:linear-gradient(135deg,var(--navy-deep) 0%,var(--navy) 60%,#1E4A7A 100%);color:#fff;padding:56px 24px 64px;position:relative;overflow:hidden}
+  header::after{content:"";position:absolute;right:-120px;top:-120px;width:380px;height:380px;border-radius:50%;background:radial-gradient(circle,rgba(27,163,198,.25),transparent 70%)}
+  .header-inner{max-width:860px;margin:0 auto;position:relative;z-index:1}
+  .brand{display:flex;align-items:center;gap:12px;margin-bottom:36px}
+  .brand svg{flex:none}
+  .brand-name{font-weight:800;font-size:1.35rem;letter-spacing:-.01em}
+  .brand-name .med{color:#fff}
+  .brand-name .scale{color:var(--blue)}
+  .brand-sub{display:block;font-size:.62rem;font-weight:600;letter-spacing:.32em;color:#AFC6DD;text-transform:uppercase;margin-top:2px}
+  .eyebrow{display:inline-block;background:rgba(27,163,198,.18);border:1px solid rgba(27,163,198,.45);color:#8FD9EC;font-size:.72rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;padding:6px 14px;border-radius:100px;margin-bottom:18px}
+  h1{font-size:clamp(1.7rem,4vw,2.5rem);font-weight:800;letter-spacing:-.02em;line-height:1.2}
+  .header-desc{margin-top:14px;color:#C3D3E4;max-width:600px;font-size:.98rem}
+  .updated{margin-top:22px;font-size:.82rem;color:#8FA9C4}
+  .updated strong{color:#fff}
+
+  /* LAYOUT */
+  main{max-width:860px;margin:-32px auto 0;padding:0 24px 80px;position:relative;z-index:2}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:40px 44px;box-shadow:0 10px 40px rgba(14,36,64,.08)}
+  @media(max-width:640px){.card{padding:28px 22px}}
+
+  /* SUMÁRIO */
+  nav.toc{background:var(--blue-soft);border:1px solid #CBE8F2;border-radius:12px;padding:22px 26px;margin-bottom:36px}
+  nav.toc p{font-weight:700;color:var(--navy);font-size:.8rem;text-transform:uppercase;letter-spacing:.12em;margin-bottom:10px}
+  nav.toc ol{list-style:none;columns:2;column-gap:32px}
+  @media(max-width:640px){nav.toc ol{columns:1}}
+  nav.toc li{margin:4px 0;font-size:.9rem;break-inside:avoid}
+  nav.toc a{color:var(--navy);text-decoration:none;font-weight:500}
+  nav.toc a:hover{color:var(--blue);text-decoration:underline}
+
+  /* SEÇÕES */
+  section{margin-bottom:38px;scroll-margin-top:24px}
+  h2{display:flex;align-items:baseline;gap:12px;color:var(--navy);font-size:1.2rem;font-weight:700;letter-spacing:-.01em;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid var(--line)}
+  h2 .num{color:var(--blue);font-weight:800;font-size:1rem}
+  h3{color:var(--navy);font-size:.98rem;font-weight:700;margin:18px 0 8px}
+  p{margin-bottom:12px;color:var(--ink)}
+  ul{margin:0 0 14px 20px}
+  li{margin-bottom:8px}
+  strong{color:var(--navy)}
+  a{color:var(--blue)}
+
+  table{width:100%;border-collapse:collapse;margin:14px 0 18px;font-size:.92rem}
+  th{background:var(--navy);color:#fff;text-align:left;padding:10px 14px;font-weight:600;font-size:.82rem;letter-spacing:.04em}
+  td{padding:10px 14px;border:1px solid var(--line);vertical-align:top}
+  tr:nth-child(even) td{background:#FAFCFE}
+  @media(max-width:640px){
+    table,thead,tbody,tr,th,td{display:block}
+    thead{display:none}
+    td{border:none;border-bottom:1px solid var(--line)}
+    tr{border:1px solid var(--line);border-radius:8px;margin-bottom:12px;overflow:hidden}
+  }
+
+  .callout{background:var(--blue-soft);border-left:4px solid var(--blue);border-radius:0 10px 10px 0;padding:16px 20px;margin:16px 0;font-size:.94rem}
+  .callout strong{color:var(--navy)}
+
+  /* FOOTER */
+  footer{background:var(--navy-deep);color:#8FA9C4;text-align:center;padding:34px 24px;font-size:.85rem}
+  footer .foot-brand{color:#fff;font-weight:700}
+  footer .foot-brand span{color:var(--blue)}
+  footer p{margin-bottom:6px;color:#8FA9C4}
+  footer a{color:var(--blue);text-decoration:none}
+  footer a:hover{text-decoration:underline}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <svg width="40" height="40" viewBox="0 0 100 100" fill="none" aria-hidden="true">
+        <path d="M14 84 V26 L40 58 L14 26" stroke="#FFFFFF" stroke-width="11" stroke-linecap="square" fill="none"/>
+        <path d="M40 58 L74 22 M74 22 h-12 M74 22 v12" stroke="#1BA3C6" stroke-width="11" stroke-linecap="square" fill="none"/>
+        <path d="M70 84 V44" stroke="#1BA3C6" stroke-width="11" stroke-linecap="square"/>
+        <path d="M47 74 h16 M55 66 v16" stroke="#1BA3C6" stroke-width="9" stroke-linecap="round"/>
+      </svg>
+      <div>
+        <div class="brand-name"><span class="med">Med</span><span class="scale">Scale</span></div>
+        <span class="brand-sub">Assessoria Médica</span>
+      </div>
+    </div>
+    <span class="eyebrow">LGPD · Lei nº 13.709/2018</span>
+    <h1>Política de Privacidade</h1>
+    <p class="header-desc">Como a MedScale coleta, utiliza, armazena e protege os seus dados pessoais — com a mesma seriedade com que tratamos a conformidade na comunicação médica.</p>
+    <p class="updated">Última atualização: <strong>21 de julho de 2026</strong></p>
+  </div>
+</header>
+
+<main>
+  <div class="card">
+
+    <nav class="toc" aria-label="Sumário">
+      <p>Sumário</p>
+      <ol>
+        <li><a href="#quem-somos">1. Quem somos</a></li>
+        <li><a href="#dados">2. Quais dados coletamos</a></li>
+        <li><a href="#finalidades">3. Para que usamos os dados</a></li>
+        <li><a href="#compartilhamento">4. Com quem compartilhamos</a></li>
+        <li><a href="#cookies">5. Cookies e rastreamento</a></li>
+        <li><a href="#retencao">6. Por quanto tempo guardamos</a></li>
+        <li><a href="#direitos">7. Seus direitos</a></li>
+        <li><a href="#seguranca">8. Segurança da informação</a></li>
+        <li><a href="#transferencia">9. Transferência internacional</a></li>
+        <li><a href="#menores">10. Crianças e adolescentes</a></li>
+        <li><a href="#alteracoes">11. Alterações desta política</a></li>
+        <li><a href="#contato">12. Contato e Encarregado</a></li>
+      </ol>
+    </nav>
+
+    <section id="quem-somos">
+      <h2><span class="num">1.</span> Quem somos</h2>
+      <p>Esta Política de Privacidade descreve como a <strong>MedScale</strong> (razão social completa, inscrita no CNPJ sob nº 00.000.000/0001-00, com sede em cidade/UF), doravante "MedScale", "nós", trata os dados pessoais coletados por meio do site <strong>medscalebr.com</strong> e de seus canais de atendimento.</p>
+      <p>A MedScale atua como <strong>controladora</strong> dos dados pessoais tratados neste site, nos termos da Lei Geral de Proteção de Dados Pessoais — LGPD (Lei nº 13.709/2018).</p>
+    </section>
+
+    <section id="dados">
+      <h2><span class="num">2.</span> Quais dados coletamos</h2>
+      <h3>2.1. Dados que você nos fornece</h3>
+      <p>Ao preencher o formulário de diagnóstico do site, você pode nos fornecer:</p>
+      <ul>
+        <li><strong>Dados de identificação e contato:</strong> nome, número de WhatsApp e e-mail (opcional);</li>
+        <li><strong>Dados profissionais:</strong> especialidade médica, cidade de atuação, informações sobre o consultório (como volume aproximado de consultas) e desafios de marketing informados por você.</li>
+      </ul>
+      <h3>2.2. Dados coletados automaticamente</h3>
+      <p>Durante a navegação, podemos coletar dados por meio de cookies e tecnologias similares, como endereço IP, tipo de dispositivo e navegador, páginas visitadas, origem do acesso e interações com o site (ver seção 5).</p>
+      <div class="callout"><strong>Importante:</strong> este site não coleta dados de pacientes nem dados pessoais sensíveis de saúde. As informações solicitadas referem-se exclusivamente à atividade profissional do médico interessado em nossos serviços.</div>
+    </section>
+
+    <section id="finalidades">
+      <h2><span class="num">3.</span> Para que usamos os dados</h2>
+      <table>
+        <thead><tr><th>Finalidade</th><th>Base legal (LGPD)</th></tr></thead>
+        <tbody>
+          <tr><td>Entrar em contato via WhatsApp ou e-mail para apresentar o diagnóstico gratuito solicitado e nossa proposta de serviços</td><td>Procedimentos preliminares ao contrato, a pedido do titular (art. 7º, V) e consentimento (art. 7º, I)</td></tr>
+          <tr><td>Elaborar o diagnóstico personalizado com base nas informações do consultório</td><td>Procedimentos preliminares ao contrato (art. 7º, V)</td></tr>
+          <tr><td>Melhorar o site, medir resultados de campanhas e desenvolver nossos serviços</td><td>Legítimo interesse (art. 7º, IX)</td></tr>
+          <tr><td>Enviar comunicações sobre serviços e conteúdos da MedScale, quando autorizado</td><td>Consentimento (art. 7º, I)</td></tr>
+          <tr><td>Cumprir obrigações legais e regulatórias</td><td>Obrigação legal (art. 7º, II)</td></tr>
+        </tbody>
+      </table>
+      <p>Não utilizamos seus dados para finalidades incompatíveis com as descritas acima e <strong>não vendemos dados pessoais</strong> em nenhuma hipótese.</p>
+    </section>
+
+    <section id="compartilhamento">
+      <h2><span class="num">4.</span> Com quem compartilhamos</h2>
+      <p>Compartilhamos dados pessoais apenas quando necessário para operar o site e prestar nossos serviços, com:</p>
+      <ul>
+        <li><strong>Provedores de infraestrutura e hospedagem</strong> (ex.: Vercel Inc.);</li>
+        <li><strong>Plataformas de comunicação</strong>, como o WhatsApp (Meta Platforms), utilizado para o contato solicitado por você;</li>
+        <li><strong>Plataformas de publicidade e análise</strong>, como Meta e Google, na forma da seção 5;</li>
+        <li><strong>Ferramentas de gestão de contatos e atendimento</strong> utilizadas pela nossa equipe;</li>
+        <li><strong>Autoridades públicas</strong>, quando exigido por lei ou ordem judicial.</li>
+      </ul>
+      <p>Exigimos de nossos fornecedores compromissos de segurança e confidencialidade compatíveis com esta política e com a LGPD.</p>
+    </section>
+
+    <section id="cookies">
+      <h2><span class="num">5.</span> Cookies e tecnologias de rastreamento</h2>
+      <p>Utilizamos cookies e tecnologias similares para garantir o funcionamento do site, medir audiência e mensurar o desempenho de campanhas de marketing. Isso pode incluir pixels e ferramentas de análise de terceiros, como <strong>Meta Pixel</strong> e <strong>Google Analytics / Google Ads</strong>.</p>
+      <p>Você pode gerenciar ou bloquear cookies diretamente nas configurações do seu navegador. O bloqueio de alguns cookies pode afetar funcionalidades do site.</p>
+    </section>
+
+    <section id="retencao">
+      <h2><span class="num">6.</span> Por quanto tempo guardamos os dados</h2>
+      <p>Mantemos seus dados pessoais somente pelo tempo necessário para cumprir as finalidades descritas nesta política: dados de leads que não evoluírem para contratação são mantidos por até 24 meses a contar do último contato; dados de clientes, pelo prazo do contrato e pelos prazos legais de guarda aplicáveis. Após esses períodos, os dados são eliminados ou anonimizados de forma segura.</p>
+    </section>
+
+    <section id="direitos">
+      <h2><span class="num">7.</span> Seus direitos como titular</h2>
+      <p>Nos termos do art. 18 da LGPD, você pode solicitar a qualquer momento:</p>
+      <ul>
+        <li>Confirmação da existência de tratamento e <strong>acesso</strong> aos seus dados;</li>
+        <li><strong>Correção</strong> de dados incompletos, inexatos ou desatualizados;</li>
+        <li><strong>Anonimização, bloqueio ou eliminação</strong> de dados desnecessários ou excessivos;</li>
+        <li><strong>Portabilidade</strong> dos dados a outro fornecedor;</li>
+        <li><strong>Eliminação</strong> dos dados tratados com base no seu consentimento;</li>
+        <li>Informação sobre <strong>compartilhamentos</strong> realizados;</li>
+        <li><strong>Revogação do consentimento</strong> e oposição a tratamentos irregulares.</li>
+      </ul>
+      <p>Para exercer seus direitos, basta entrar em contato pelos canais indicados na seção 12. Responderemos no menor prazo possível, dentro dos limites legais.</p>
+    </section>
+
+    <section id="seguranca">
+      <h2><span class="num">8.</span> Segurança da informação</h2>
+      <p>Adotamos medidas técnicas e administrativas aptas a proteger os dados pessoais contra acessos não autorizados, perda, alteração ou destruição, incluindo criptografia em trânsito (HTTPS), controle de acesso às ferramentas internas e limitação do tratamento ao estritamente necessário. Nenhum sistema é infalível; em caso de incidente de segurança relevante, comunicaremos os titulares afetados e a Autoridade Nacional de Proteção de Dados (ANPD) na forma da lei.</p>
+    </section>
+
+    <section id="transferencia">
+      <h2><span class="num">9.</span> Transferência internacional</h2>
+      <p>Alguns de nossos fornecedores (como serviços de hospedagem, análise e publicidade) podem armazenar dados em servidores localizados fora do Brasil. Nesses casos, a transferência ocorre com fundamento no art. 33 da LGPD, para países ou organizações que proporcionem grau de proteção adequado ou mediante garantias contratuais de conformidade.</p>
+    </section>
+
+    <section id="menores">
+      <h2><span class="num">10.</span> Crianças e adolescentes</h2>
+      <p>Nossos serviços são destinados exclusivamente a profissionais de saúde e este site não se dirige a menores de 18 anos. Não coletamos intencionalmente dados de crianças ou adolescentes; caso identifiquemos coleta indevida, os dados serão prontamente eliminados.</p>
+    </section>
+
+    <section id="alteracoes">
+      <h2><span class="num">11.</span> Alterações desta política</h2>
+      <p>Esta política pode ser atualizada a qualquer momento para refletir mudanças legais ou em nossos serviços. A versão vigente estará sempre disponível nesta página, com a data da última atualização indicada no topo. Alterações relevantes poderão ser comunicadas pelos nossos canais de contato.</p>
+    </section>
+
+    <section id="contato">
+      <h2><span class="num">12.</span> Contato e Encarregado de Dados (DPO)</h2>
+      <p>Dúvidas, solicitações ou reclamações sobre esta política e sobre o tratamento dos seus dados podem ser dirigidas ao nosso Encarregado pelo Tratamento de Dados Pessoais:</p>
+      <ul>
+        <li><strong>Encarregado (DPO):</strong> a definir</li>
+        <li><strong>E-mail:</strong> privacidade@medscalebr.com</li>
+      </ul>
+      <p>Caso entenda que seus direitos não foram atendidos, você também pode apresentar reclamação à <strong>Autoridade Nacional de Proteção de Dados (ANPD)</strong> — <a href="https://www.gov.br/anpd" target="_blank" rel="noopener">gov.br/anpd</a>.</p>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <p class="foot-brand">Med<span>Scale</span> · Assessoria Médica</p>
+  <p>© 2026 MedScale. Todos os direitos reservados.</p>
+  <p>Conteúdos em conformidade com o Conselho Federal de Medicina (CFM) e com a LGPD (Lei nº 13.709/2018).</p>
+  <p style="margin-top:12px"><a href="/">← Voltar ao site</a></p>
+</footer>
+
+</body>
+</html>
