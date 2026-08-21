@@ -99,7 +99,7 @@ export function SettingsClient({ initialProfile, workspace, google }: SettingsCl
       >
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-medium text-gray-900">Bot WhatsApp</h2>
+            <h2 className="text-sm font-medium text-gray-900">Configurações da Maria (Chatbot)</h2>
             {workspace.hasMetaToken ? (
               <Badge className="border-none bg-green-50 text-green-700">
                 Conectado{workspace.whatsappNumber ? ` — ${workspace.whatsappNumber}` : ''}
@@ -109,7 +109,7 @@ export function SettingsClient({ initialProfile, workspace, google }: SettingsCl
             )}
           </div>
           <p className="mt-0.5 text-xs text-gray-400">
-            Conectar número na Meta, personalidade do bot, procedimentos, convênios e transferência para humano.
+            Conexão com a Meta, endereço, contatos, convênios, preços, políticas, tom de voz e transferência para humano.
           </p>
         </div>
         <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />

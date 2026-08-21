@@ -460,6 +460,17 @@ export interface Database {
           accepts_private: boolean
           consultation_price_from: number | null
           business_hours: string | null
+          address: string | null
+          directions_parking: string | null
+          contact_info: string | null
+          payment_methods: string[]
+          pricing_info: string | null
+          exam_preparation: string | null
+          policies: string | null
+          tone_of_voice: string | null
+          handoff_instructions: string | null
+          forbidden_actions: string | null
+          faq: { question: string; answer: string }[]
           handoff_number: string | null
           handoff_message: string
           welcome_message: string

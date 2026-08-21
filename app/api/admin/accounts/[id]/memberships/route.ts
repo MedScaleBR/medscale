@@ -19,6 +19,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const body = await req.json()
   const email = (body.email as string | undefined)?.trim().toLowerCase()
   const role = body.role as MembershipRole | undefined
+  const assignDirectly = body.assignDirectly === true
 
   if (!email || !email.includes('@')) {
     return NextResponse.json({ error: 'E-mail válido é obrigatório' }, { status: 400 })
@@ -35,17 +36,94 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { data: account } = await admin.from('accounts').select('name').eq('id', id).single()
   if (!account) return NextResponse.json({ error: 'Account não encontrada' }, { status: 404 })
 
-  const { data: existingProfile } = await admin.from('profiles').select('id').eq('email', email).maybeSingle()
-  if (existingProfile) {
-    const { data: existingMembership } = await admin
-      .from('memberships')
-      .select('id')
-      .eq('account_id', id)
-      .eq('user_id', existingProfile.id)
-      .maybeSingle()
-    if (existingMembership) {
-      return NextResponse.json({ error: 'Este e-mail já é membro desta account.' }, { status: 400 })
+  const { data: existingProfile } = await admin
+    .from('profiles')
+    .select('id, full_name, email')
+    .eq('email', email)
+    .maybeSingle()
+
+  const existingMembership = existingProfile
+    ? (
+        await admin
+          .from('memberships')
+          .select('id, role')
+          .eq('account_id', id)
+          .eq('user_id', existingProfile.id)
+          .maybeSingle()
+      ).data
+    : null
+
+  // Atribuição direta — usuário já tem conta na MedScale, então entra direto
+  // como membro ativo, sem convite por e-mail nem etapa de aceite. Se já for
+  // membro, esta mesma ação atualiza a permissão dele em vez de falhar —
+  // é o jeito de trocar o papel de alguém sem precisar achar a linha na lista.
+  if (assignDirectly) {
+    if (!existingProfile) {
+      return NextResponse.json(
+        { error: 'Nenhum usuário cadastrado com este e-mail. Use o convite por e-mail para esse caso.' },
+        { status: 404 }
+      )
     }
+
+    if (existingMembership) {
+      const { data: updated, error: updateError } = await admin
+        .from('memberships')
+        .update({ role })
+        .eq('id', existingMembership.id)
+        .select()
+        .single()
+
+      if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
+
+      return NextResponse.json(
+        {
+          membership: {
+            id: updated.id,
+            role: updated.role,
+            status: updated.status,
+            userName: existingProfile.full_name ?? 'Sem nome',
+            userEmail: existingProfile.email ?? email,
+          },
+          updated: true,
+        },
+        { status: 200 }
+      )
+    }
+
+    const { data: membership, error: membershipError } = await admin
+      .from('memberships')
+      .insert({
+        account_id: id,
+        user_id: existingProfile.id,
+        role,
+        status: 'active',
+        invited_by: user.id,
+        accepted_at: new Date().toISOString(),
+      })
+      .select()
+      .single()
+
+    if (membershipError) return NextResponse.json({ error: membershipError.message }, { status: 500 })
+
+    return NextResponse.json(
+      {
+        membership: {
+          id: membership.id,
+          role: membership.role,
+          status: membership.status,
+          userName: existingProfile.full_name ?? 'Sem nome',
+          userEmail: existingProfile.email ?? email,
+        },
+        updated: false,
+      },
+      { status: 201 }
+    )
+  }
+
+  // Fora do modo de atribuição direta, duplicidade é bloqueada — o convite
+  // por e-mail não deve ser usado pra alterar a permissão de quem já é membro.
+  if (existingMembership) {
+    return NextResponse.json({ error: 'Este e-mail já é membro desta account.' }, { status: 400 })
   }
 
   const { data: existingInvite } = await admin

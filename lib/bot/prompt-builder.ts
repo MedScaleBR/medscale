@@ -49,17 +49,42 @@ export function buildDynamicSystemPrompt({ workspaceName, config, freeSlotsByDay
 Não invente números nem informe o número de handoff você mesmo, nem diga se alguém está disponível agora — isso é decidido e feito automaticamente pelo sistema depois da sua mensagem (o sistema sabe o horário real da equipe humana, você não).`
     : `Quando precisar transferir, diga: "Nossa equipe entrará em contato em breve pelo WhatsApp."`
 
+  // ── Local, contato e pagamento ──────────────────────────────────────────────
+  const locationText = [
+    config.address ? `Endereço: ${config.address}` : null,
+    config.directionsParking ? `Como chegar / estacionamento: ${config.directionsParking}` : null,
+    config.contactInfo ? `Outros contatos: ${config.contactInfo}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n')
+
+  const paymentText = config.paymentMethods.length > 0 ? config.paymentMethods.join(', ') : null
+
+  const extraInfoSections = [
+    config.pricingInfo ? `### Preços\n${config.pricingInfo}` : null,
+    config.examPreparation ? `### Preparo para exames/procedimentos\n${config.examPreparation}` : null,
+    config.policies ? `### Políticas do consultório\n${config.policies}` : null,
+  ]
+    .filter(Boolean)
+    .join('\n\n')
+
+  const faqText =
+    config.faq.length > 0
+      ? config.faq.map((item) => `P: ${item.question}\nR: ${item.answer}`).join('\n\n')
+      : null
+
   return `Você é ${config.botName}, assistente virtual de ${workspaceName}${config.specialty ? `, especialista em ${config.specialty}` : ''}.
 Você atende pelo WhatsApp 24 horas por dia, todos os dias, e seu único objetivo é ajudar pacientes a agendar, remarcar ou cancelar consultas — a qualquer hora, inclusive de madrugada ou fim de semana. Nunca diga que está fora do horário de atendimento ou que vai parar de responder; você nunca "fecha".
-
+${config.toneOfVoice ? `\n## Tom de voz\n${config.toneOfVoice}\n` : ''}
 ## Sobre o consultório
 Especialidade: ${config.specialty ?? 'Medicina Geral'}
 Procedimentos realizados: ${proceduresText}
 ${insuranceText}
 ${priceText}
-Horário das consultas presenciais: ${config.businessHours ?? 'Segunda a sexta, 08h às 17h'}
+${paymentText ? `Formas de pagamento aceitas: ${paymentText}\n` : ''}Horário das consultas presenciais: ${config.businessHours ?? 'Segunda a sexta, 08h às 17h'}
 (isso é só o horário em que o médico atende presencialmente — você, o bot, continua respondendo e agendando fora desse horário normalmente)
-
+${locationText ? `${locationText}\n` : ''}
+${extraInfoSections ? `${extraInfoSections}\n` : ''}
 ## Horários disponíveis para agendamento (agenda real do médico)
 ${slotsText}
 
@@ -89,7 +114,7 @@ Essa linha é lida por um sistema automático e não deve ser inventada antes do
 - Respostas curtas, no máximo 3 parágrafos, sem formatação markdown
 - Português brasileiro informal e cordial — sem "prezado" ou "atenciosamente"
 - Não use asteriscos, negrito ou emojis excessivos (máximo 1 emoji por mensagem)
-
+${config.forbiddenActions ? `\nLimites adicionais definidos pelo consultório — NUNCA faça isso:\n${config.forbiddenActions}\n` : ''}
 ## Quando transferir para atendimento humano — handoff
 Transfira imediatamente se:
 - O paciente pedir explicitamente para falar com uma pessoa
@@ -97,12 +122,13 @@ Transfira imediatamente se:
 - Você não souber responder após 2 tentativas
 - O assunto for urgência médica (neste caso, oriente também ligar 192 - SAMU)
 - Após 8 trocas de mensagem sem conseguir agendar
-
+${config.handoffInstructions ? `\nCasos adicionais definidos pelo consultório que também exigem transferência imediata:\n${config.handoffInstructions}\n` : ''}
 O atendimento humano tem horário próprio (diferente do seu, que é 24/7) — o sistema decide
 se alguém está disponível agora e ajusta a resposta automaticamente. Você só precisa sinalizar
 a intenção de transferir; nunca prometa que uma pessoa vai responder imediatamente.
 
 ${handoffInstruction}
+${faqText ? `\n## Perguntas frequentes\nUse as respostas abaixo quando o paciente perguntar algo equivalente:\n\n${faqText}\n` : ''}
 
 Hoje é ${new Date().toLocaleDateString('pt-BR', {
     weekday: 'long',

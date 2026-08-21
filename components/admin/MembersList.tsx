@@ -9,7 +9,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Mail, X } from 'lucide-react'
+import { Mail, UserPlus, X } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import type { MembershipRole, MembershipStatus } from '@/types/database'
 
 export interface MemberRow {
@@ -46,10 +47,12 @@ export function MembersList({
 }) {
   const [members, setMembers] = useState(initialMembers)
   const [invites, setInvites] = useState(initialInvites)
+  const [mode, setMode] = useState<'invite' | 'assign'>('invite')
   const [email, setEmail] = useState('')
   const [role, setRole] = useState<MembershipRole>('member')
   const [inviting, setInviting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
   const updateRole = async (membershipId: string, role: MembershipRole) => {
     setMembers((prev) => prev.map((m) => (m.id === membershipId ? { ...m, role } : m)))
@@ -68,24 +71,40 @@ export function MembersList({
   const sendInvite = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setSuccessMessage(null)
     setInviting(true)
     try {
       const res = await fetch(`/api/admin/accounts/${accountId}/memberships`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, role }),
+        body: JSON.stringify({ email, role, assignDirectly: mode === 'assign' }),
       })
       const data = await res.json()
       if (!res.ok) {
-        setError(data.error ?? 'Não foi possível enviar o convite.')
+        setError(data.error ?? (mode === 'assign' ? 'Não foi possível atribuir o usuário.' : 'Não foi possível enviar o convite.'))
         return
       }
-      setInvites((prev) => [{ id: data.invite.id, email: data.invite.email, role: data.invite.role, expired: false }, ...prev])
+      if (mode === 'assign') {
+        setMembers((prev) => {
+          const updatedMember = { id: data.membership.id, role: data.membership.role, status: data.membership.status, userName: data.membership.userName, userEmail: data.membership.userEmail }
+          const existingIndex = prev.findIndex((m) => m.id === updatedMember.id)
+          if (existingIndex >= 0) {
+            const next = [...prev]
+            next[existingIndex] = updatedMember
+            return next
+          }
+          return [...prev, updatedMember]
+        })
+        setSuccessMessage(data.updated ? 'Permissão atualizada.' : 'Usuário atribuído à account.')
+        setTimeout(() => setSuccessMessage(null), 4000)
+      } else {
+        setInvites((prev) => [{ id: data.invite.id, email: data.invite.email, role: data.invite.role, expired: false }, ...prev])
+        if (!data.emailSent) {
+          setError('Convite criado, mas o e-mail não foi enviado (SMTP não configurado) — copie o link manualmente se precisar.')
+        }
+      }
       setEmail('')
       setRole('member')
-      if (!data.emailSent) {
-        setError('Convite criado, mas o e-mail não foi enviado (SMTP não configurado) — copie o link manualmente se precisar.')
-      }
     } finally {
       setInviting(false)
     }
@@ -100,10 +119,41 @@ export function MembersList({
     <div className="rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
       <h2 className="text-sm font-medium text-gray-900">Membros</h2>
 
-      <form onSubmit={sendInvite} className="mt-4 flex items-end gap-2">
+      <div className="mt-4 inline-flex rounded-lg border border-gray-200 p-0.5 text-xs">
+        <button
+          type="button"
+          onClick={() => {
+            setMode('invite')
+            setError(null)
+          }}
+          className={cn(
+            'flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors',
+            mode === 'invite' ? 'bg-[var(--navy-dark)] text-white' : 'text-gray-500 hover:text-gray-900'
+          )}
+        >
+          <Mail className="h-3.5 w-3.5" />
+          Convidar por e-mail
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMode('assign')
+            setError(null)
+          }}
+          className={cn(
+            'flex items-center gap-1.5 rounded-md px-3 py-1.5 font-medium transition-colors',
+            mode === 'assign' ? 'bg-[var(--navy-dark)] text-white' : 'text-gray-500 hover:text-gray-900'
+          )}
+        >
+          <UserPlus className="h-3.5 w-3.5" />
+          Atribuir usuário existente
+        </button>
+      </div>
+
+      <form onSubmit={sendInvite} className="mt-3 flex items-end gap-2">
         <div className="flex-1">
           <label htmlFor="invite-email" className="text-xs text-gray-400">
-            Convidar por e-mail
+            {mode === 'assign' ? 'E-mail do usuário já cadastrado' : 'E-mail para convidar'}
           </label>
           <div className="relative mt-1">
             <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
@@ -133,10 +183,17 @@ export function MembersList({
           disabled={inviting}
           className="h-9 rounded-lg bg-[var(--navy-dark)] px-4 text-xs font-medium text-white transition-colors hover:bg-[var(--navy)] disabled:opacity-60"
         >
-          {inviting ? 'Enviando...' : 'Convidar'}
+          {inviting ? (mode === 'assign' ? 'Atribuindo...' : 'Enviando...') : mode === 'assign' ? 'Atribuir' : 'Convidar'}
         </button>
       </form>
+      {mode === 'assign' && (
+        <p className="mt-1.5 text-xs text-gray-400">
+          Entra direto como membro ativo, sem e-mail nem etapa de aceite — só funciona se a pessoa já tiver conta na
+          MedScale. Se ela já for membro desta account, isso atualiza a permissão em vez de duplicar.
+        </p>
+      )}
       {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+      {successMessage && <p className="mt-2 text-xs text-green-600">{successMessage}</p>}
 
       {invites.length > 0 && (
         <ul className="mt-4 divide-y divide-[var(--navy-06)] border-t border-[var(--navy-06)]">

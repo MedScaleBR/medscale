@@ -19,6 +19,9 @@ type AvailabilityRule = Database['public']['Tables']['availability_rules']['Row'
 type AvailabilityException = Database['public']['Tables']['availability_exceptions']['Row']
 
 const DAY_LABEL = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+// O Select (Base UI) só resolve o label da opção selecionada automaticamente
+// se receber esse mapa — sem ele, mostra o value bruto (ex: "1" em vez de "Segunda").
+const DAY_ITEMS = Object.fromEntries(DAY_LABEL.map((label, i) => [String(i), label]))
 
 interface AvailabilitySettingsProps {
   initialRules: AvailabilityRule[]
@@ -116,7 +119,11 @@ export function AvailabilitySettings({ initialRules, initialExceptions }: Availa
         <div className="mt-4 flex flex-wrap items-end gap-2">
           <div>
             <Label className="text-xs">Dia</Label>
-            <Select value={ruleForm.day_of_week} onValueChange={(v) => v && setRuleForm((f) => ({ ...f, day_of_week: v }))}>
+            <Select
+              items={DAY_ITEMS}
+              value={ruleForm.day_of_week}
+              onValueChange={(v) => v && setRuleForm((f) => ({ ...f, day_of_week: v }))}
+            >
               <SelectTrigger className="w-32">
                 <SelectValue />
               </SelectTrigger>

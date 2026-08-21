@@ -8,6 +8,17 @@ export interface BotConfig {
   acceptsPrivate: boolean
   consultationPriceFrom: number | null
   businessHours: string | null
+  address: string | null
+  directionsParking: string | null
+  contactInfo: string | null
+  paymentMethods: string[]
+  pricingInfo: string | null
+  examPreparation: string | null
+  policies: string | null
+  toneOfVoice: string | null
+  handoffInstructions: string | null
+  forbiddenActions: string | null
+  faq: { question: string; answer: string }[]
   handoffNumber: string | null
   handoffMessage: string
   welcomeMessage: string
@@ -39,6 +50,17 @@ export async function getBotConfig(workspaceId: string): Promise<BotConfig | nul
     acceptsPrivate: data.accepts_private,
     consultationPriceFrom: data.consultation_price_from ? Number(data.consultation_price_from) : null,
     businessHours: data.business_hours,
+    address: data.address,
+    directionsParking: data.directions_parking,
+    contactInfo: data.contact_info,
+    paymentMethods: data.payment_methods ?? [],
+    pricingInfo: data.pricing_info,
+    examPreparation: data.exam_preparation,
+    policies: data.policies,
+    toneOfVoice: data.tone_of_voice,
+    handoffInstructions: data.handoff_instructions,
+    forbiddenActions: data.forbidden_actions,
+    faq: data.faq ?? [],
     handoffNumber: data.handoff_number,
     handoffMessage: data.handoff_message,
     welcomeMessage: data.welcome_message,

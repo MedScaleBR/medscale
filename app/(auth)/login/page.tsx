@@ -26,7 +26,7 @@ export default async function LoginPage({
   return (
     <AuthLayout
       title="Entrar no MedScale"
-      subtitle="Acesse o painel de gestão da sua clínica"
+      subtitle="Acesse o seu painel de gestão"
       footer={
         <>
           Ainda não tem uma conta?{' '}

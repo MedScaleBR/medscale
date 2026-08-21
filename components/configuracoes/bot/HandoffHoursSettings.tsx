@@ -18,6 +18,9 @@ import type { Database } from '@/types/database'
 type HandoffHour = Database['public']['Tables']['handoff_hours']['Row']
 
 const DAY_LABEL = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 'Sábado']
+// O Select (Base UI) só resolve o label da opção selecionada automaticamente
+// se receber esse mapa — sem ele, mostra o value bruto (ex: "1" em vez de "Segunda").
+const DAY_ITEMS = Object.fromEntries(DAY_LABEL.map((label, i) => [String(i), label]))
 
 export function HandoffHoursSettings({ initialHours }: { initialHours: HandoffHour[] }) {
   const [hours, setHours] = useState(initialHours)
@@ -87,7 +90,11 @@ export function HandoffHoursSettings({ initialHours }: { initialHours: HandoffHo
       <div className="mt-4 flex flex-wrap items-end gap-2">
         <div>
           <Label className="text-xs">Dia</Label>
-          <Select value={form.day_of_week} onValueChange={(v) => v && setForm((f) => ({ ...f, day_of_week: v }))}>
+          <Select
+            items={DAY_ITEMS}
+            value={form.day_of_week}
+            onValueChange={(v) => v && setForm((f) => ({ ...f, day_of_week: v }))}
+          >
             <SelectTrigger className="w-32">
               <SelectValue />
             </SelectTrigger>
