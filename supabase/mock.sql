@@ -8,6 +8,14 @@
 --
 -- Para limpar os dados mock (cascata cuida do resto):
 -- delete from public.accounts where slug in ('mock-clinica-aurora', 'mock-clinica-bem-estar');
+--
+-- NOTA: as duas accounts também têm, hoje, uma workspace, bot_config,
+-- expediente (availability_rules/handoff_hours), consultas, receita,
+-- campanhas de tráfego, lista de espera e conversas do bot — pra parecerem
+-- clínicas em uso real. Isso foi montado direto no banco (não reproduzido
+-- aqui) porque appointments/availability_rules/waitlist exigem um
+-- doctor_id que referencia auth.users, o que quebraria a premissa deste
+-- arquivo de não depender de nenhum usuário específico.
 
 do $$
 declare
@@ -40,6 +48,15 @@ begin
     ('Mock Clínica Bem-Estar', 'mock-clinica-bem-estar', 'essencial',
      '{dashboard,agenda,patients,settings}', 1, 3, 'financeiro@mockbemestar.example.com')
   returning id into v_account2_id;
+
+  -- Workspace padrão de cada account — sem isso, resolveActiveSession()
+  -- (lib/session/server.ts) não libera dashboard para quem for atribuído
+  -- a essas accounts: exige ao menos uma workspace ativa.
+  insert into public.workspaces (account_id, name, slug, city, state, is_active, is_default)
+  values (v_account1_id, 'Unidade Principal', 'unidade-principal', 'São Paulo', 'SP', true, true);
+
+  insert into public.workspaces (account_id, name, slug, city, state, is_active, is_default)
+  values (v_account2_id, 'Unidade Principal', 'unidade-principal', 'Rio de Janeiro', 'RJ', true, true);
 
   -- 25 pacientes para o account 1 -------------------------------------------
   for i in 1..25 loop

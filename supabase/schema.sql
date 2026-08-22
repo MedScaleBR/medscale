@@ -308,7 +308,9 @@ create table public.bot_config (
   id                      uuid default uuid_generate_v4() primary key,
   workspace_id            uuid references public.workspaces(id) on delete cascade not null unique,
   account_id              uuid references public.accounts(id)   on delete cascade not null,
-  bot_name                text not null default 'Assistente',
+  -- Nome fixo em todo o produto ("Maria", ver lib/bot/constants.ts) — esta
+  -- coluna não é mais lida pelo app, mantida só por compatibilidade de schema.
+  bot_name                text not null default 'Maria',
   specialty               text,
   procedures              text[] default '{}',
   insurance_plans         text[] default '{}',

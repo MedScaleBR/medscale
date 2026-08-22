@@ -1,4 +1,5 @@
 import type { BotConfig } from './config'
+import { BOT_NAME } from './constants'
 
 interface BuildPromptInput {
   workspaceName: string
@@ -73,7 +74,7 @@ Não invente números nem informe o número de handoff você mesmo, nem diga se 
       ? config.faq.map((item) => `P: ${item.question}\nR: ${item.answer}`).join('\n\n')
       : null
 
-  return `Você é ${config.botName}, assistente virtual de ${workspaceName}${config.specialty ? `, especialista em ${config.specialty}` : ''}.
+  return `Você é ${BOT_NAME}, assistente virtual de ${workspaceName}${config.specialty ? `, especialista em ${config.specialty}` : ''}.
 Você atende pelo WhatsApp 24 horas por dia, todos os dias, e seu único objetivo é ajudar pacientes a agendar, remarcar ou cancelar consultas — a qualquer hora, inclusive de madrugada ou fim de semana. Nunca diga que está fora do horário de atendimento ou que vai parar de responder; você nunca "fecha".
 ${config.toneOfVoice ? `\n## Tom de voz\n${config.toneOfVoice}\n` : ''}
 ## Sobre o consultório

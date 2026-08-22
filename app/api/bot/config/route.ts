@@ -8,8 +8,9 @@ type BotConfigUpdate = Database['public']['Tables']['bot_config']['Update']
 
 // Campos editáveis pelo médico via este endpoint — is_active, onboarding_step,
 // number_source e webhook_verify_token são controlados pelo fluxo de onboarding.
+// bot_name NÃO está aqui de propósito: o nome do assistente é fixo ("Maria",
+// ver lib/bot/constants.ts), definido pela MedScale, não por clínica.
 const EDITABLE_FIELDS = [
-  'bot_name',
   'specialty',
   'procedures',
   'insurance_plans',
