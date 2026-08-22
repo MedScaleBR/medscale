@@ -1,7 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server'
 
 export interface BotConfig {
-  botName: string
   specialty: string | null
   procedures: string[]
   insurancePlans: string[]
@@ -43,7 +42,6 @@ export async function getBotConfig(workspaceId: string): Promise<BotConfig | nul
   if (error || !data) return null
 
   const config: BotConfig = {
-    botName: data.bot_name,
     specialty: data.specialty,
     procedures: data.procedures ?? [],
     insurancePlans: data.insurance_plans ?? [],
