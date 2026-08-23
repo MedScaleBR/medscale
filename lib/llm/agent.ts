@@ -96,6 +96,9 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     .limit(20)
 
   const turnCount = Math.floor((history?.length ?? 0) / 2)
+  // A mensagem do paciente já foi inserida no passo 4, então na primeira
+  // troca da conversa o histórico contém só ela (length === 1).
+  const isFirstMessage = (history?.length ?? 0) <= 1
 
   // 6. Buscar horários livres reais (availability_rules + Google Calendar) —
   // sempre, a qualquer hora: o bot agenda 24/7, mesmo fora do expediente
@@ -111,7 +114,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   }
 
   // 7. Montar system prompt dinâmico e chamar Claude
-  const systemPrompt = buildDynamicSystemPrompt({ workspaceName, config: botConfig, freeSlotsByDay })
+  const systemPrompt = buildDynamicSystemPrompt({ workspaceName, config: botConfig, freeSlotsByDay, isFirstMessage })
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-5',
