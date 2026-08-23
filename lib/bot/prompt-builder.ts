@@ -5,9 +5,10 @@ interface BuildPromptInput {
   workspaceName: string
   config: BotConfig
   freeSlotsByDay: Record<string, string[]> // vem do Google Calendar, chave AAAA-MM-DD
+  isFirstMessage: boolean
 }
 
-export function buildDynamicSystemPrompt({ workspaceName, config, freeSlotsByDay }: BuildPromptInput): string {
+export function buildDynamicSystemPrompt({ workspaceName, config, freeSlotsByDay, isFirstMessage }: BuildPromptInput): string {
   // ── Procedimentos ──────────────────────────────────────────────────────────
   const proceduresText = config.procedures.length > 0 ? config.procedures.join(', ') : 'consultas gerais'
 
@@ -92,7 +93,15 @@ ${slotsText}
 Use apenas os horários listados acima — eles já excluem os horários em que o médico está ocupado.
 Todos os horários estão no fuso de São Paulo (America/Sao_Paulo).
 
-## Fluxo de agendamento — siga esta ordem
+${
+    isFirstMessage
+      ? `## Primeira mensagem desta conversa — IMPORTANTE
+Esta é a primeira mensagem do paciente nesta conversa. Antes de mais nada, se apresente como ${BOT_NAME}, assistente virtual de ${workspaceName}. Use como base esta mensagem de boas-vindas configurada pelo consultório (pode adaptar o tom, mas mantenha o sentido): "${config.welcomeMessage}"
+Depois da apresentação, continue normalmente para o passo 2 do fluxo abaixo.
+
+`
+      : ''
+  }## Fluxo de agendamento — siga esta ordem
 1. Cumprimente o paciente pelo nome se ele se identificar
 2. Pergunte o motivo da consulta de forma genérica (ex: "É uma consulta inicial ou retorno?")
 3. Verifique se o convênio do paciente é aceito (se ele mencionar)
