@@ -2,12 +2,16 @@ import { NextRequest, NextResponse, after } from 'next/server'
 import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/server'
 import { processIncomingMessage } from '@/lib/llm/agent'
+import { decryptToken } from '@/lib/crypto'
 
 // Valida a assinatura HMAC enviada pela Meta para garantir que o payload
-// realmente veio da Meta e não foi forjado.
-function validateMetaSignature(payload: string, signature: string): boolean {
-  if (!signature) return false
-  const expected = crypto.createHmac('sha256', process.env.META_APP_SECRET!).update(payload).digest('hex')
+// realmente veio da Meta e não foi forjado. `secret` é o App Secret do App
+// Meta que assinou a mensagem — o App único da MedScale (META_APP_SECRET)
+// para o fluxo compartilhado, ou o App Secret próprio da workspace no fluxo
+// "número próprio" (cada App só assina com o seu próprio secret).
+function validateMetaSignature(payload: string, signature: string, secret: string | null | undefined): boolean {
+  if (!signature || !secret) return false
+  const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex')
   const expectedSig = `sha256=${expected}`
   if (expectedSig.length !== signature.length) return false
   return crypto.timingSafeEqual(Buffer.from(expectedSig), Buffer.from(signature))
@@ -17,32 +21,51 @@ export async function POST(req: NextRequest) {
   const rawBody = await req.text()
   const signature = req.headers.get('x-hub-signature-256') ?? ''
 
-  if (!validateMetaSignature(rawBody, signature)) {
-    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+  let body
+  try {
+    body = JSON.parse(rawBody)
+  } catch {
+    return NextResponse.json({ error: 'Invalid payload' }, { status: 400 })
   }
 
-  const body = JSON.parse(rawBody)
   const supabase = createAdminClient()
 
   const entry = body?.entry?.[0]
   const changes = entry?.changes?.[0]
   const value = changes?.value
+  const phoneNumberId: string | undefined = value?.metadata?.phone_number_id
+
+  // Encontrar a workspace pelo phone_number_id — precisamos disso já aqui
+  // (antes de aceitar/rejeitar a assinatura) porque, no fluxo "número
+  // próprio", a assinatura só é validável com o App Secret daquela workspace.
+  const { data: workspace } = phoneNumberId
+    ? await supabase
+        .from('workspaces')
+        .select('id, name, account_id, meta_app_secret')
+        .eq('phone_number_id', phoneNumberId)
+        .single()
+    : { data: null }
+
+  const workspaceSecret = workspace?.meta_app_secret ? decryptToken(workspace.meta_app_secret) : null
+  const validSignature =
+    validateMetaSignature(rawBody, signature, process.env.META_APP_SECRET) ||
+    validateMetaSignature(rawBody, signature, workspaceSecret)
+
+  if (!validSignature) {
+    console.warn('[whatsapp webhook] signature validation failed', {
+      workspaceId: workspace?.id ?? null,
+      hasWorkspaceSecret: Boolean(workspaceSecret),
+    })
+    return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+  }
 
   if (!value?.messages) {
     return NextResponse.json({ status: 'ignored' })
   }
 
   const message = value.messages[0]
-  const phoneNumberId = value.metadata.phone_number_id
   const from = message.from // telefone do paciente
   const text = message.type === 'text' ? message.text.body : null
-
-  // Encontrar a workspace pelo phone_number_id
-  const { data: workspace } = await supabase
-    .from('workspaces')
-    .select('id, name, account_id')
-    .eq('phone_number_id', phoneNumberId)
-    .single()
 
   // Log do webhook para debugging — associado à workspace quando identificável
   await supabase.from('webhook_logs').insert({ workspace_id: workspace?.id ?? null, payload: body })

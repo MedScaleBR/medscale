@@ -91,6 +91,13 @@ create table public.workspaces (
   whatsapp_number text,
   phone_number_id text,
   meta_token      text,                               -- criptografado (lib/crypto.ts)
+  -- App Secret do App Meta próprio da workspace (fluxo "número próprio" — só
+  -- preenchido quando number_source = 'own' em bot_config). Necessário porque
+  -- a assinatura HMAC (x-hub-signature-256) de cada mensagem recebida é
+  -- calculada pela Meta com o App Secret do App que possui o número — o App
+  -- único da MedScale (META_APP_SECRET) só assina para números do modelo
+  -- compartilhado. Ver validateMetaSignature em app/api/whatsapp/webhook/route.ts.
+  meta_app_secret text,                               -- criptografado (lib/crypto.ts)
   is_active       boolean not null default true,
   is_default      boolean not null default false,     -- workspace padrão do account
   display_order   int not null default 0,

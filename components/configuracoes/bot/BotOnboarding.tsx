@@ -58,6 +58,7 @@ function OwnNumberWizard({
 }) {
   const [phoneNumberId, setPhoneNumberId] = useState('')
   const [metaToken, setMetaToken] = useState('')
+  const [metaAppSecret, setMetaAppSecret] = useState('')
   const [verifying, setVerifying] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
@@ -72,7 +73,7 @@ function OwnNumberWizard({
       const res = await fetch('/api/bot/onboarding/verify-meta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone_number_id: phoneNumberId, meta_token: metaToken }),
+        body: JSON.stringify({ phone_number_id: phoneNumberId, meta_token: metaToken, meta_app_secret: metaAppSecret }),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -137,6 +138,20 @@ function OwnNumberWizard({
               <Label htmlFor="onb_meta_token">Token permanente</Label>
               <Input id="onb_meta_token" type="password" value={metaToken} onChange={(e) => setMetaToken(e.target.value)} />
             </div>
+            <div>
+              <Label htmlFor="onb_meta_app_secret">App Secret</Label>
+              <p className="mb-1 text-xs text-gray-400">
+                Em <strong>Configurações do App → Básico</strong> (App Settings → Basic) no painel do seu App. É
+                diferente do token acima — sem ele o WhatsApp não consegue confirmar que as mensagens recebidas
+                realmente vêm da Meta, e o bot não responde.
+              </p>
+              <Input
+                id="onb_meta_app_secret"
+                type="password"
+                value={metaAppSecret}
+                onChange={(e) => setMetaAppSecret(e.target.value)}
+              />
+            </div>
           </div>
         </li>
       </ol>
@@ -146,7 +161,7 @@ function OwnNumberWizard({
 
       <Button
         onClick={handleVerify}
-        disabled={verifying || !phoneNumberId || !metaToken}
+        disabled={verifying || !phoneNumberId || !metaToken || !metaAppSecret}
         className="bg-[var(--cyan)] text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
       >
         {verifying ? 'Verificando...' : 'Verificar conexão'}
