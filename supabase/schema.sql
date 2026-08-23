@@ -219,6 +219,12 @@ create table public.conversations (
   patient_id      uuid references public.patients(id)   on delete set null,
   patient_phone   text not null,
   status          text not null default 'open' check (status in ('open','resolved','handoff')),
+  -- Pausa o bot pra esta conversa (intervenção manual de um humano, ou um
+  -- handoff real já em andamento) — enquanto true, o webhook só registra as
+  -- mensagens recebidas e não chama o LLM nem responde. Independente de
+  -- `status`: resolver a conversa não mexe nisso, só a equipe reativa
+  -- explicitamente (ou o próprio handoff, quando aplicável).
+  bot_paused      boolean not null default false,
   appointment_id  uuid references public.appointments(id) on delete set null,
   started_at      timestamptz not null default now(),
   resolved_at     timestamptz,

@@ -8,6 +8,7 @@ export interface ConversationListItem {
   patient_phone: string
   patient_name: string | null
   status: 'open' | 'resolved' | 'handoff'
+  bot_paused: boolean
   started_at: string
   last_message: string | null
 }
@@ -50,9 +51,12 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
               <span className="truncate text-sm font-medium text-gray-900">
                 {c.patient_name ?? c.patient_phone}
               </span>
-              <Badge className={cn('shrink-0 border-none text-[10px]', STATUS_STYLE[c.status])}>
-                {STATUS_LABEL[c.status]}
-              </Badge>
+              <div className="flex shrink-0 items-center gap-1">
+                {c.bot_paused && (
+                  <Badge className="border-none bg-amber-100 text-[10px] text-amber-700">Bot pausado</Badge>
+                )}
+                <Badge className={cn('border-none text-[10px]', STATUS_STYLE[c.status])}>{STATUS_LABEL[c.status]}</Badge>
+              </div>
             </div>
             <p className="mt-0.5 truncate text-xs text-gray-400">{c.last_message ?? 'Sem mensagens'}</p>
           </button>

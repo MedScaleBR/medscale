@@ -18,9 +18,11 @@ interface ConversationDetailProps {
   patientPhone: string
   patientName: string | null
   status: ConversationStatus
+  botPaused: boolean
   messages: DetailMessage[]
   onSend: (message: string) => Promise<void>
   onResolve: () => Promise<void>
+  onReactivateBot: () => Promise<void>
 }
 
 export function ConversationDetail({
@@ -28,12 +30,15 @@ export function ConversationDetail({
   patientPhone,
   patientName,
   status,
+  botPaused,
   messages,
   onSend,
   onResolve,
+  onReactivateBot,
 }: ConversationDetailProps) {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
+  const [reactivating, setReactivating] = useState(false)
 
   const handleSend = async () => {
     if (!draft.trim()) return
@@ -46,6 +51,15 @@ export function ConversationDetail({
     }
   }
 
+  const handleReactivate = async () => {
+    setReactivating(true)
+    try {
+      await onReactivateBot()
+    } finally {
+      setReactivating(false)
+    }
+  }
+
   return (
     <div key={conversationId} className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-[var(--navy-06)] px-5 py-4">
@@ -53,12 +67,31 @@ export function ConversationDetail({
           <p className="text-sm font-medium text-gray-900">{patientName ?? patientPhone}</p>
           <p className="text-xs text-gray-400">{patientPhone}</p>
         </div>
-        {status !== 'resolved' && (
-          <Button variant="outline" size="sm" onClick={onResolve}>
-            Marcar como resolvida
-          </Button>
-        )}
+        <div className="flex items-center gap-2">
+          {status !== 'resolved' && (
+            <Button variant="outline" size="sm" onClick={onResolve}>
+              Marcar como resolvida
+            </Button>
+          )}
+        </div>
       </div>
+
+      {botPaused && (
+        <div className="flex items-center justify-between gap-3 border-b border-amber-100 bg-amber-50 px-5 py-2.5">
+          <p className="text-xs text-amber-700">
+            Bot pausado nessa conversa — não responde automaticamente até você reativar.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleReactivate}
+            disabled={reactivating}
+            className="shrink-0 border-amber-300 bg-white text-amber-700 hover:bg-amber-100"
+          >
+            {reactivating ? 'Reativando...' : 'Reativar bot'}
+          </Button>
+        </div>
+      )}
 
       <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
         {messages.map((m) => (

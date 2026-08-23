@@ -51,7 +51,10 @@ export async function POST(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  await supabase.from('conversations').update({ status: 'handoff' }).eq('id', conversation_id)
+  // Resposta manual = intervenção humana — pausa o bot pra essa conversa até
+  // a equipe reativar explicitamente pelo painel (senão ele volta a responder
+  // sozinho na próxima mensagem do paciente e "atropela" quem está atendendo).
+  await supabase.from('conversations').update({ status: 'handoff', bot_paused: true }).eq('id', conversation_id)
 
   return NextResponse.json(saved, { status: 201 })
 }
