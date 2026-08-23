@@ -75,6 +75,7 @@ export interface Database {
           whatsapp_number: string | null
           phone_number_id: string | null
           meta_token: string | null
+          meta_app_secret: string | null
           is_active: boolean
           is_default: boolean
           display_order: number

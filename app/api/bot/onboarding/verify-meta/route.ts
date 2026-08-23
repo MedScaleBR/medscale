@@ -20,9 +20,12 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = await createClient()
-  const { phone_number_id, meta_token } = await req.json()
-  if (!phone_number_id || !meta_token) {
-    return NextResponse.json({ error: 'phone_number_id e meta_token são obrigatórios' }, { status: 400 })
+  const { phone_number_id, meta_token, meta_app_secret } = await req.json()
+  if (!phone_number_id || !meta_token || !meta_app_secret) {
+    return NextResponse.json(
+      { error: 'phone_number_id, meta_token e meta_app_secret são obrigatórios' },
+      { status: 400 }
+    )
   }
 
   const metaRes = await fetch(
@@ -56,6 +59,7 @@ export async function POST(req: NextRequest) {
     .update({
       phone_number_id,
       meta_token: encryptToken(meta_token),
+      meta_app_secret: encryptToken(meta_app_secret),
       whatsapp_number: metaData.display_phone_number ?? null,
     })
     .eq('id', session.workspaceId)
