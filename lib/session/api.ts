@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { resolveActiveSession } from './server'
 import { ALWAYS_ON_MODULES, type ModuleSlug } from './context'
 import type { MembershipRole } from '@/types/database'
 
@@ -33,10 +34,22 @@ export async function requireWorkspaceSession(
     return { error: NextResponse.json({ error: 'Unauthorized' }, { status: 401 }) }
   }
 
-  const workspaceId =
+  let workspaceId =
     req.headers.get('x-workspace-id') ??
     req.nextUrl.searchParams.get('workspace_id') ??
-    req.cookies.get('ms_workspace_id')?.value
+    req.cookies.get('ms_workspace_id')?.value ??
+    null
+
+  if (!workspaceId) {
+    // Sem override explícito (header/query) nem cookie de workspace — cai no
+    // mesmo fallback usado pra renderizar a página (resolveActiveSession):
+    // last_workspace_id, depois workspace padrão da account, depois a
+    // primeira disponível. Sem isso, qualquer usuário que nunca trocou de
+    // workspace manualmente pela UI (a maioria, já que a maior parte das
+    // accounts tem só uma) cai aqui com erro mesmo tendo acesso normal.
+    const fallback = await resolveActiveSession()
+    workspaceId = fallback?.workspaceId ?? null
+  }
 
   if (!workspaceId) {
     return { error: NextResponse.json({ error: 'Nenhuma workspace ativa. Selecione uma workspace.' }, { status: 400 }) }
