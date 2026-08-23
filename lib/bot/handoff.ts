@@ -28,10 +28,11 @@ export async function executeHandoff(params: HandoffParams) {
   // 2. Enviar o número de contato humano
   await sendWhatsAppMessage({ to: patientPhone, message: `Contato: ${handoffNumber}`, phoneNumberId, token: metaToken })
 
-  // 3. Marcar conversa como handoff no banco
+  // 3. Marcar conversa como handoff no banco e pausar o bot — ele só volta a
+  // responder quando a equipe reativar pelo painel.
   await supabase
     .from('conversations')
-    .update({ status: 'handoff', resolved_at: new Date().toISOString() })
+    .update({ status: 'handoff', bot_paused: true, resolved_at: new Date().toISOString() })
     .eq('id', conversationId)
 
   // 4. Registrar log de handoff

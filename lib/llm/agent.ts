@@ -58,13 +58,14 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     patient = newPatient
   }
 
-  // 3. Buscar conversa aberta ou criar nova
+  // 3. Buscar a conversa deste paciente (um único registro por paciente por
+  // workspace — nunca cria uma nova só porque a anterior foi resolvida) ou
+  // criar a primeira, se for o primeiro contato dele.
   let { data: conversation } = await supabase
     .from('conversations')
-    .select('id')
+    .select('id, status, bot_paused')
     .eq('workspace_id', workspaceId)
     .eq('patient_phone', patientPhone)
-    .eq('status', 'open')
     .order('started_at', { ascending: false })
     .limit(1)
     .maybeSingle()
@@ -73,9 +74,13 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     const { data: newConv } = await supabase
       .from('conversations')
       .insert({ workspace_id: workspaceId, account_id: accountId, patient_id: patient?.id, patient_phone: patientPhone })
-      .select()
+      .select('id, status, bot_paused')
       .single()
     conversation = newConv
+  } else if (conversation.status === 'resolved' && !conversation.bot_paused) {
+    // Nova mensagem reabre uma conversa já resolvida — mas só quando o bot
+    // não está pausado por intervenção manual (aí fica parado até reativação).
+    await supabase.from('conversations').update({ status: 'open', resolved_at: null }).eq('id', conversation.id)
   }
 
   if (!conversation) throw new Error('Failed to create conversation')
@@ -87,6 +92,13 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     content: message,
     whatsapp_id: whatsappMessageId,
   })
+
+  // Bot pausado (intervenção manual de um humano, ou handoff real em
+  // andamento) — só registra a mensagem recebida, sem responder
+  // automaticamente, até a equipe reativar pelo painel.
+  if (conversation.bot_paused) {
+    return
+  }
 
   // 5. Buscar histórico e contar turnos
   const { data: history } = await supabase

@@ -250,6 +250,7 @@ export interface Database {
           patient_id: string | null
           patient_phone: string
           status: ConversationStatus
+          bot_paused: boolean
           appointment_id: string | null
           started_at: string
           resolved_at: string | null
