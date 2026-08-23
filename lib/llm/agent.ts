@@ -1,6 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { addDays, format } from 'date-fns'
 import { createAdminClient } from '@/lib/supabase/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendWhatsAppMessage } from '@/lib/whatsapp/send'
 import { decryptToken } from '@/lib/crypto'
 import { getFreeSlotsForBot, isSlotAvailable } from '@/lib/google/availability'
@@ -9,6 +10,7 @@ import { createEvent } from '@/lib/google/calendar'
 import { getBotConfig } from '@/lib/bot/config'
 import { buildDynamicSystemPrompt } from '@/lib/bot/prompt-builder'
 import { detectHandoffIntent, executeHandoff, isHandoffAvailableNow, logHandoffUnavailable } from '@/lib/bot/handoff'
+import type { Database } from '@/types/database'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -26,6 +28,126 @@ interface ProcessMessageParams {
 const CONFIRMATION_MARKER = /AGENDAMENTO_CONFIRMADO:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?-03:00)/
 const PATIENT_NAME_MARKER = /NOME_PACIENTE:\s*(.+)/
 
+type SupabaseAdmin = SupabaseClient<Database>
+
+// Paciente por account (pacientes são compartilhados entre as workspaces do
+// mesmo account) — usado tanto pra mensagens de texto quanto pra mídia não suportada.
+async function getOrCreatePatient(supabase: SupabaseAdmin, accountId: string, patientPhone: string) {
+  const { data: patient } = await supabase
+    .from('patients')
+    .select('id, full_name')
+    .eq('account_id', accountId)
+    .eq('phone', patientPhone)
+    .single()
+
+  if (patient) return patient
+
+  const { data: newPatient } = await supabase
+    .from('patients')
+    .insert({ account_id: accountId, phone: patientPhone, full_name: 'Paciente' })
+    .select('id, full_name')
+    .single()
+  return newPatient
+}
+
+// Um único registro de conversa por paciente por workspace — nunca cria uma
+// nova só porque a anterior foi resolvida; reabre a mesma linha em vez disso
+// (a não ser que o bot esteja pausado por intervenção manual).
+async function getOrCreateConversation(
+  supabase: SupabaseAdmin,
+  workspaceId: string,
+  accountId: string,
+  patientId: string | undefined,
+  patientPhone: string
+) {
+  const { data: existing } = await supabase
+    .from('conversations')
+    .select('id, status, bot_paused')
+    .eq('workspace_id', workspaceId)
+    .eq('patient_phone', patientPhone)
+    .order('started_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!existing) {
+    const { data: newConv } = await supabase
+      .from('conversations')
+      .insert({ workspace_id: workspaceId, account_id: accountId, patient_id: patientId, patient_phone: patientPhone })
+      .select('id, status, bot_paused')
+      .single()
+    if (!newConv) throw new Error('Failed to create conversation')
+    return newConv
+  }
+
+  if (existing.status === 'resolved' && !existing.bot_paused) {
+    await supabase.from('conversations').update({ status: 'open', resolved_at: null }).eq('id', existing.id)
+  }
+
+  return existing
+}
+
+const UNSUPPORTED_TYPE_LABELS: Record<string, string> = {
+  audio: 'áudio',
+  image: 'imagem',
+  video: 'vídeo',
+  document: 'documento',
+  sticker: 'figurinha',
+  location: 'localização',
+  contacts: 'contato',
+}
+
+interface UnsupportedMessageParams {
+  workspaceId: string
+  accountId: string
+  patientPhone: string
+  messageType: string
+  whatsappMessageId: string
+}
+
+// A Maria só entende texto — WhatsApp manda áudio, imagem, documento etc. com
+// message.type diferente de "text", sem nada em message.text.body. Antes essas
+// mensagens eram descartadas em silêncio (o paciente nunca via nenhuma
+// resposta); isso pelo menos avisa e pede pra escrever.
+export async function handleUnsupportedMessage(params: UnsupportedMessageParams) {
+  const { workspaceId, accountId, patientPhone, messageType, whatsappMessageId } = params
+  const supabase = createAdminClient()
+
+  const botConfig = await getBotConfig(workspaceId)
+  if (!botConfig || !botConfig.isActive) return
+
+  const patient = await getOrCreatePatient(supabase, accountId, patientPhone)
+  const conversation = await getOrCreateConversation(supabase, workspaceId, accountId, patient?.id, patientPhone)
+
+  const label = UNSUPPORTED_TYPE_LABELS[messageType] ?? 'esse tipo de mensagem'
+  await supabase.from('messages').insert({
+    conversation_id: conversation.id,
+    role: 'user',
+    content: `[${label} recebido]`,
+    whatsapp_id: whatsappMessageId,
+  })
+
+  // Pausado por intervenção manual/handoff — mesma regra do texto: só registra.
+  if (conversation.bot_paused) return
+
+  const { data: workspace } = await supabase
+    .from('workspaces')
+    .select('phone_number_id, meta_token')
+    .eq('id', workspaceId)
+    .single()
+
+  if (!workspace?.phone_number_id || !workspace?.meta_token) return
+
+  const reply = `Recebi seu ${label}, mas por enquanto só consigo entender mensagens em texto — pode escrever o que você precisa? 🙂`
+
+  await supabase.from('messages').insert({ conversation_id: conversation.id, role: 'assistant', content: reply })
+  await sendWhatsAppMessage({
+    to: patientPhone,
+    message: reply,
+    phoneNumberId: workspace.phone_number_id,
+    token: decryptToken(workspace.meta_token),
+  })
+}
+
 // O bot conversa e agenda 24/7 — nunca fica "fechado". Só o handoff para um
 // humano tem horário próprio (handoff_hours), checado no passo 10.
 export async function processIncomingMessage(params: ProcessMessageParams) {
@@ -42,48 +164,12 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
 
   // 2. Buscar ou criar paciente (pacientes são por account, compartilhados
   // entre as workspaces do mesmo account)
-  let { data: patient } = await supabase
-    .from('patients')
-    .select('id, full_name')
-    .eq('account_id', accountId)
-    .eq('phone', patientPhone)
-    .single()
-
-  if (!patient) {
-    const { data: newPatient } = await supabase
-      .from('patients')
-      .insert({ account_id: accountId, phone: patientPhone, full_name: 'Paciente' })
-      .select()
-      .single()
-    patient = newPatient
-  }
+  const patient = await getOrCreatePatient(supabase, accountId, patientPhone)
 
   // 3. Buscar a conversa deste paciente (um único registro por paciente por
   // workspace — nunca cria uma nova só porque a anterior foi resolvida) ou
   // criar a primeira, se for o primeiro contato dele.
-  let { data: conversation } = await supabase
-    .from('conversations')
-    .select('id, status, bot_paused')
-    .eq('workspace_id', workspaceId)
-    .eq('patient_phone', patientPhone)
-    .order('started_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-
-  if (!conversation) {
-    const { data: newConv } = await supabase
-      .from('conversations')
-      .insert({ workspace_id: workspaceId, account_id: accountId, patient_id: patient?.id, patient_phone: patientPhone })
-      .select('id, status, bot_paused')
-      .single()
-    conversation = newConv
-  } else if (conversation.status === 'resolved' && !conversation.bot_paused) {
-    // Nova mensagem reabre uma conversa já resolvida — mas só quando o bot
-    // não está pausado por intervenção manual (aí fica parado até reativação).
-    await supabase.from('conversations').update({ status: 'open', resolved_at: null }).eq('id', conversation.id)
-  }
-
-  if (!conversation) throw new Error('Failed to create conversation')
+  const conversation = await getOrCreateConversation(supabase, workspaceId, accountId, patient?.id, patientPhone)
 
   // 4. Salvar mensagem do paciente
   await supabase.from('messages').insert({
