@@ -36,7 +36,7 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
   }
 
   return (
-    <ul className="divide-y divide-[var(--navy-06)] overflow-y-auto">
+    <ul className="h-full divide-y divide-[var(--navy-06)] overflow-y-auto">
       {conversations.map((c) => (
         <li key={c.id}>
           <button
