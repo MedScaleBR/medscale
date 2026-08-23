@@ -13,13 +13,13 @@ import { BotPreview } from './BotPreview'
 import { BotStatusBadge } from './BotStatusBadge'
 import { BotOnboarding } from './BotOnboarding'
 import { HandoffHoursSettings } from './HandoffHoursSettings'
+import { BOT_NAME } from '@/lib/bot/constants'
 import type { Database } from '@/types/database'
 
 type BotConfigRow = Database['public']['Tables']['bot_config']['Row']
 type HandoffHour = Database['public']['Tables']['handoff_hours']['Row']
 
 interface FormState {
-  bot_name: string
   specialty: string
   procedures: string[]
   insurance_plans: string[]
@@ -51,7 +51,6 @@ interface BotConfigFormProps {
 
 function toFormState(config: BotConfigRow | null): FormState {
   return {
-    bot_name: config?.bot_name ?? 'Assistente',
     specialty: config?.specialty ?? '',
     procedures: config?.procedures ?? [],
     insurance_plans: config?.insurance_plans ?? [],
@@ -167,14 +166,11 @@ export function BotConfigForm({ initialConfig, initialHandoffHours, doctorPhone 
             <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Identidade do bot</h3>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="bot_name">Como o bot se apresenta</Label>
-                <Input
-                  id="bot_name"
-                  value={form.bot_name}
-                  onChange={(e) => setForm((f) => ({ ...f, bot_name: e.target.value }))}
-                  placeholder="Ex: Assistente da Dra. Ana"
-                  className="mt-1"
-                />
+                <Label>Nome do assistente</Label>
+                <p className="mt-1 text-sm text-gray-700">{BOT_NAME}</p>
+                <p className="mt-0.5 text-xs text-gray-400">
+                  Nome padrão da MedScale em todas as clínicas — não é configurável por aqui.
+                </p>
               </div>
               <div>
                 <Label htmlFor="specialty">Especialidade</Label>
@@ -451,7 +447,6 @@ export function BotConfigForm({ initialConfig, initialHandoffHours, doctorPhone 
         <div className="hidden xl:block">
           <BotPreview
             config={{
-              bot_name: form.bot_name,
               specialty: form.specialty,
               procedures: form.procedures,
               insurance_plans: form.insurance_plans,

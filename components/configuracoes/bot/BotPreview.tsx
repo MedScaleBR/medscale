@@ -1,7 +1,8 @@
 'use client'
 
+import { BOT_NAME } from '@/lib/bot/constants'
+
 export interface BotPreviewConfig {
-  bot_name: string
   specialty: string
   procedures: string[]
   insurance_plans: string[]
@@ -31,10 +32,10 @@ export function BotPreview({ config }: { config: BotPreviewConfig }) {
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-[#ECE5DD] shadow-sm">
         <div className="flex items-center gap-3 bg-[#075E54] px-4 py-3">
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-white/20 text-sm font-medium text-white">
-            {(config.bot_name || 'A').charAt(0)}
+            {BOT_NAME.charAt(0)}
           </div>
           <div>
-            <p className="text-sm font-medium text-white">{config.bot_name || 'Assistente'}</p>
+            <p className="text-sm font-medium text-white">{BOT_NAME}</p>
             <p className="text-xs text-white/70">online</p>
           </div>
         </div>
