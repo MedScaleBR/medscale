@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse, after } from 'next/server'
 import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/server'
-import { processIncomingMessage } from '@/lib/llm/agent'
+import { processIncomingMessage, handleUnsupportedMessage } from '@/lib/llm/agent'
 import { decryptToken } from '@/lib/crypto'
 
 // Valida a assinatura HMAC enviada pela Meta para garantir que o payload
@@ -70,30 +70,44 @@ export async function POST(req: NextRequest) {
   // Log do webhook para debugging — associado à workspace quando identificável
   await supabase.from('webhook_logs').insert({ workspace_id: workspace?.id ?? null, payload: body })
 
-  if (!workspace || !text) {
-    return NextResponse.json({ status: workspace ? 'ignored' : 'workspace_not_found' })
+  if (!workspace) {
+    return NextResponse.json({ status: 'workspace_not_found' })
   }
 
-  // A Meta exige resposta em <20s — o processamento do LLM roda após a
-  // resposta HTTP ser enviada, via `after()` (equivalente a waitUntil no Vercel).
-  after(() =>
-    processIncomingMessage({
-      workspaceId: workspace.id,
-      accountId: workspace.account_id,
-      workspaceName: workspace.name,
-      patientPhone: from,
-      message: text,
-      whatsappMessageId: message.id,
-    }).catch(async (err) => {
-      console.error('processIncomingMessage failed', err)
-      await supabase
-        .from('webhook_logs')
-        .update({ error: String(err) })
-        .eq('workspace_id', workspace.id)
-        .order('received_at', { ascending: false })
-        .limit(1)
-    })
-  )
+  // A Meta exige resposta em <20s — o processamento roda após a resposta HTTP
+  // ser enviada, via `after()` (equivalente a waitUntil no Vercel).
+  if (text) {
+    after(() =>
+      processIncomingMessage({
+        workspaceId: workspace.id,
+        accountId: workspace.account_id,
+        workspaceName: workspace.name,
+        patientPhone: from,
+        message: text,
+        whatsappMessageId: message.id,
+      }).catch(async (err) => {
+        console.error('processIncomingMessage failed', err)
+        await supabase
+          .from('webhook_logs')
+          .update({ error: String(err) })
+          .eq('workspace_id', workspace.id)
+          .order('received_at', { ascending: false })
+          .limit(1)
+      })
+    )
+  } else {
+    // Áudio, imagem, documento, figurinha etc. — a Maria não entende o
+    // conteúdo, mas avisa o paciente em vez de ficar em silêncio.
+    after(() =>
+      handleUnsupportedMessage({
+        workspaceId: workspace.id,
+        accountId: workspace.account_id,
+        patientPhone: from,
+        messageType: message.type,
+        whatsappMessageId: message.id,
+      }).catch((err) => console.error('handleUnsupportedMessage failed', err))
+    )
+  }
 
   return NextResponse.json({ status: 'ok' })
 }
