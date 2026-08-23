@@ -86,6 +86,7 @@ export async function GET(req: NextRequest) {
   const challenge = searchParams.get('hub.challenge')
 
   if (mode !== 'subscribe' || !token) {
+    console.warn('[whatsapp webhook] verify failed: missing hub.mode/hub.verify_token', { mode })
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -103,6 +104,13 @@ export async function GET(req: NextRequest) {
   if (match) {
     return new NextResponse(challenge, { status: 200 })
   }
+
+  // Não logamos o token em si (evita vazar segredo nos logs) — só o
+  // suficiente para diferenciar "env var não configurada" de "valor errado".
+  console.warn('[whatsapp webhook] verify failed: token did not match META_VERIFY_TOKEN nor any bot_config', {
+    metaVerifyTokenConfigured: Boolean(process.env.META_VERIFY_TOKEN),
+    tokenLength: token.length,
+  })
 
   return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 }
