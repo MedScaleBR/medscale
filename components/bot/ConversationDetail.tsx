@@ -60,7 +60,7 @@ export function ConversationDetail({
         )}
       </div>
 
-      <div className="flex-1 space-y-3 overflow-y-auto px-5 py-4">
+      <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
         {messages.map((m) => (
           <div key={m.id} className={cn('flex', m.role === 'user' ? 'justify-start' : 'justify-end')}>
             <div
