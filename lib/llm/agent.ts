@@ -24,6 +24,7 @@ interface ProcessMessageParams {
 // Data com offset explícito de São Paulo — evita que o `new Date(...)` do
 // Node interprete o horário como local do servidor (Vercel roda em UTC).
 const CONFIRMATION_MARKER = /AGENDAMENTO_CONFIRMADO:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?-03:00)/
+const PATIENT_NAME_MARKER = /NOME_PACIENTE:\s*(.+)/
 
 // O bot conversa e agenda 24/7 — nunca fica "fechado". Só o handoff para um
 // humano tem horário próprio (handoff_hours), checado no passo 10.
@@ -126,8 +127,18 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   const rawMessage =
     response.content[0]?.type === 'text' ? response.content[0].text : 'Não consegui processar sua mensagem. Pode repetir?'
 
-  // A linha de marcação de agendamento é lida pelo sistema, não deve ir ao paciente
-  const cleanedMessage = rawMessage.replace(CONFIRMATION_MARKER, '').trim()
+  // As linhas de marcação (agendamento, nome do paciente) são lidas pelo
+  // sistema e não devem ir ao paciente.
+  const cleanedMessage = rawMessage.replace(CONFIRMATION_MARKER, '').replace(PATIENT_NAME_MARKER, '').trim()
+
+  // Nome do paciente ainda é o placeholder "Paciente" (posto na criação, passo
+  // 2) até ele se identificar na conversa — atualiza assim que o bot capturar.
+  const nameMatch = rawMessage.match(PATIENT_NAME_MARKER)
+  const patientName = nameMatch?.[1]?.trim()
+  if (patient && patientName && patientName !== patient.full_name) {
+    await supabase.from('patients').update({ full_name: patientName }).eq('id', patient.id)
+    patient.full_name = patientName
+  }
 
   const { data: workspace } = await supabase
     .from('workspaces')
