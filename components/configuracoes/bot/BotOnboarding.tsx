@@ -127,6 +127,10 @@ function OwnNumberWizard({
           <div className="mt-2 space-y-2">
             <div>
               <Label htmlFor="onb_phone_number_id">Phone Number ID</Label>
+              <p className="mb-1 text-xs text-gray-400">
+                Cuidado: não é o mesmo que o &quot;WhatsApp Business Account ID&quot; (WABA), mostrado ao lado
+                dele na mesma tela API Setup da Meta.
+              </p>
               <Input id="onb_phone_number_id" value={phoneNumberId} onChange={(e) => setPhoneNumberId(e.target.value)} />
             </div>
             <div>

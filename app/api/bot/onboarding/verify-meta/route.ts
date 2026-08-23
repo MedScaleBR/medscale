@@ -32,10 +32,21 @@ export async function POST(req: NextRequest) {
 
   if (!metaRes.ok) {
     const body = await metaRes.json().catch(() => null)
-    return NextResponse.json(
-      { error: `Não foi possível validar com a Meta: ${body?.error?.message ?? metaRes.statusText}` },
-      { status: 400 }
-    )
+    const metaMessage: string = body?.error?.message ?? metaRes.statusText
+    const metaCode = body?.error?.code
+
+    // Erro clássico de colar o WhatsApp Business Account ID (WABA) no lugar
+    // do Phone Number ID — a tela "API Setup" da Meta mostra os dois lado a
+    // lado e são fáceis de confundir; só o objeto "número de telefone" tem
+    // o campo display_phone_number, o WABA não.
+    const looksLikeWrongIdType =
+      metaCode === 100 && /nonexisting field/i.test(metaMessage) && /display_phone_number/i.test(metaMessage)
+
+    const error = looksLikeWrongIdType
+      ? 'Esse ID não é de um número de telefone. Confira se você colou o "Phone Number ID" — não o "WhatsApp Business Account ID" (WABA) — da tela API Setup da Meta; eles ficam lado a lado e são fáceis de trocar.'
+      : `Não foi possível validar com a Meta: ${metaMessage}`
+
+    return NextResponse.json({ error }, { status: 400 })
   }
 
   const metaData = await metaRes.json()
