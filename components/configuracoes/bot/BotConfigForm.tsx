@@ -47,6 +47,7 @@ interface BotConfigFormProps {
   initialConfig: BotConfigRow | null
   initialHandoffHours: HandoffHour[]
   doctorPhone: string
+  hasMetaAppSecret: boolean
 }
 
 function toFormState(config: BotConfigRow | null): FormState {
@@ -77,7 +78,7 @@ function toFormState(config: BotConfigRow | null): FormState {
   }
 }
 
-export function BotConfigForm({ initialConfig, initialHandoffHours, doctorPhone }: BotConfigFormProps) {
+export function BotConfigForm({ initialConfig, initialHandoffHours, doctorPhone, hasMetaAppSecret }: BotConfigFormProps) {
   const [config, setConfig] = useState(initialConfig)
   const [form, setForm] = useState<FormState>(toFormState(initialConfig))
   const [testNumber, setTestNumber] = useState(doctorPhone)
@@ -85,6 +86,11 @@ export function BotConfigForm({ initialConfig, initialHandoffHours, doctorPhone 
   const [testing, setTesting] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Workspaces que conectaram antes do App Secret existir ficam com is_active
+  // = true mas sem esse campo — reabrimos o wizard pra elas até serem
+  // reverificadas, senão não haveria como preencher o campo que falta.
+  const [metaAppSecretMissing, setMetaAppSecretMissing] = useState(!hasMetaAppSecret)
+  const [showConnectionEditor, setShowConnectionEditor] = useState(false)
 
   const refreshConfig = async () => {
     const res = await fetch('/api/bot/config')
@@ -93,6 +99,8 @@ export function BotConfigForm({ initialConfig, initialHandoffHours, doctorPhone 
       setConfig(data)
       setForm(toFormState(data))
     }
+    setMetaAppSecretMissing(false)
+    setShowConnectionEditor(false)
   }
 
   const handleSave = async () => {
@@ -131,7 +139,7 @@ export function BotConfigForm({ initialConfig, initialHandoffHours, doctorPhone 
     }
   }
 
-  const needsOnboarding = !config?.is_active
+  const needsOnboarding = !config?.is_active || (config?.number_source === 'own' && metaAppSecretMissing) || showConnectionEditor
 
   return (
     <div className="space-y-6">
@@ -146,16 +154,39 @@ export function BotConfigForm({ initialConfig, initialHandoffHours, doctorPhone 
               ATENDIMENTO 24/7
             </span>
             <BotStatusBadge isActive={config?.is_active ?? false} onboardingStep={config?.onboarding_step ?? 'pending'} />
+            {!needsOnboarding && config?.number_source === 'own' && (
+              <button
+                onClick={() => setShowConnectionEditor(true)}
+                className="text-xs text-gray-400 hover:text-gray-600 hover:underline"
+              >
+                Editar conexão
+              </button>
+            )}
           </div>
         </div>
         {needsOnboarding && (
           <>
             <Separator className="my-4" />
+            {config?.is_active && metaAppSecretMissing && (
+              <p className="mb-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-700">
+                Sua conexão foi feita antes de exigirmos o App Secret, necessário para validar as mensagens
+                recebidas — sem ele o bot não responde. Preencha os campos abaixo (o Phone Number ID e token
+                podem ser os mesmos de antes) para reconectar.
+              </p>
+            )}
             <BotOnboarding
               initialNumberSource={config?.number_source ?? null}
               webhookVerifyToken={config?.webhook_verify_token ?? null}
               onVerified={refreshConfig}
             />
+            {showConnectionEditor && !metaAppSecretMissing && (
+              <button
+                onClick={() => setShowConnectionEditor(false)}
+                className="mt-3 text-xs text-gray-400 hover:text-gray-600"
+              >
+                Cancelar edição
+              </button>
+            )}
           </>
         )}
       </div>

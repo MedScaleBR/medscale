@@ -9,10 +9,11 @@ export default async function BotConfigPage() {
   if (!session) return null
 
   const supabase = await createClient()
-  const [{ data: botConfig }, { data: profile }, { data: handoffHours }] = await Promise.all([
+  const [{ data: botConfig }, { data: profile }, { data: handoffHours }, { data: workspace }] = await Promise.all([
     supabase.from('bot_config').select('*').eq('workspace_id', session.workspaceId).maybeSingle(),
     supabase.from('profiles').select('phone').eq('id', session.userId).single(),
     supabase.from('handoff_hours').select('*').eq('workspace_id', session.workspaceId).order('day_of_week').order('start_time'),
+    supabase.from('workspaces').select('meta_app_secret').eq('id', session.workspaceId).single(),
   ])
 
   return (
@@ -29,7 +30,12 @@ export default async function BotConfigPage() {
         </p>
       </div>
 
-      <BotConfigForm initialConfig={botConfig} initialHandoffHours={handoffHours ?? []} doctorPhone={profile?.phone ?? ''} />
+      <BotConfigForm
+        initialConfig={botConfig}
+        initialHandoffHours={handoffHours ?? []}
+        doctorPhone={profile?.phone ?? ''}
+        hasMetaAppSecret={Boolean(workspace?.meta_app_secret)}
+      />
     </div>
   )
 }
