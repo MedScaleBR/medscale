@@ -216,6 +216,14 @@ create table public.appointments (
   updated_at      timestamptz not null default now()
 );
 
+-- Google Calendar é a fonte de verdade da /agenda (ver lib/google/reconcile.ts)
+-- — este índice garante que o upsert de reconciliação não duplique a mesma
+-- consulta quando duas leituras concorrentes (duas abas, ou o cron em cima de
+-- um load manual) importam o mesmo evento do Google ao mesmo tempo.
+create unique index appointments_gcal_event_id_key
+  on public.appointments (gcal_event_id)
+  where gcal_event_id is not null;
+
 -- Transcrição de consultas — áudio gravado, transcrito pelo Whisper, e
 -- prontuário SOAP gerado pelo Claude (ver lib/transcriptions/*). Módulo
 -- "transcriptions" em accounts.modules, inativo por padrão.

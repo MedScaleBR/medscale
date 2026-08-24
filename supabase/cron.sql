@@ -111,6 +111,26 @@ select cron.schedule(
   $$
 );
 
+-- RECONCILE-CALENDAR: sincroniza appointments com o Google Calendar (fonte
+-- da verdade da /agenda, ver lib/google/reconcile.ts) — rede de segurança
+-- para quando ninguém abre a /agenda por um tempo. Roda às :50, antes do
+-- reminders (:00) e do noshow (:30) do próximo ciclo, pra ambos lerem dado
+-- já reconciliado
+select cron.schedule(
+  'reconcile-calendar',
+  '50 * * * *',
+  $$
+    select net.http_post(
+      url     := 'https://app.medscalebr.com/api/cron/reconcile-calendar',
+      headers := jsonb_build_object(
+        'Content-Type',  'application/json',
+        'Authorization', 'Bearer ' || public.cron_secret()
+      ),
+      body    := '{}'::jsonb
+    );
+  $$
+);
+
 -- CLEANUP-RECORDINGS: apaga áudios de transcrições assinadas há mais de
 -- RECORDING_RETENTION_DAYS dias (ver supabase/transcriptions.sql) — 3h da manhã
 select cron.schedule(
