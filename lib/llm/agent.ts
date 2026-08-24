@@ -212,7 +212,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     return
   }
 
-  // 5. Buscar histórico e contar turnos
+  // 5. Buscar histórico da conversa
   const { data: history } = await supabase
     .from('messages')
     .select('role, content')
@@ -220,7 +220,6 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     .order('sent_at', { ascending: true })
     .limit(20)
 
-  const turnCount = Math.floor((history?.length ?? 0) / 2)
   // A mensagem do paciente já foi inserida no passo 4, então na primeira
   // troca da conversa o histórico contém só ela (length === 1).
   const isFirstMessage = (history?.length ?? 0) <= 1
@@ -271,7 +270,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     .single()
 
   // 8. Detectar necessidade de handoff para atendimento humano
-  const handoffCheck = detectHandoffIntent(cleanedMessage, message, turnCount)
+  const handoffCheck = detectHandoffIntent(cleanedMessage, message)
   const canAttemptHandoff =
     handoffCheck.needed && botConfig.handoffNumber && workspace?.phone_number_id && workspace?.meta_token
 
