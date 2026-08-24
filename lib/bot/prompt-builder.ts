@@ -1,14 +1,26 @@
 import type { BotConfig } from './config'
 import { BOT_NAME } from './constants'
 
+interface UpcomingAppointment {
+  marker: string // AAAA-MM-DDTHH:mm-03:00, mesmo formato do AGENDAMENTO_CONFIRMADO
+  label: string // ex: "terça-feira, 26 de agosto às 14:00"
+}
+
 interface BuildPromptInput {
   workspaceName: string
   config: BotConfig
   freeSlotsByDay: Record<string, string[]> // vem do Google Calendar, chave AAAA-MM-DD
   isFirstMessage: boolean
+  upcomingAppointments: UpcomingAppointment[] // consultas futuras já agendadas deste paciente
 }
 
-export function buildDynamicSystemPrompt({ workspaceName, config, freeSlotsByDay, isFirstMessage }: BuildPromptInput): string {
+export function buildDynamicSystemPrompt({
+  workspaceName,
+  config,
+  freeSlotsByDay,
+  isFirstMessage,
+  upcomingAppointments,
+}: BuildPromptInput): string {
   // ── Procedimentos ──────────────────────────────────────────────────────────
   const proceduresText = config.procedures.length > 0 ? config.procedures.join(', ') : 'consultas gerais'
 
@@ -75,6 +87,12 @@ Não invente números nem informe o número de handoff você mesmo, nem diga se 
       ? config.faq.map((item) => `P: ${item.question}\nR: ${item.answer}`).join('\n\n')
       : null
 
+  // ── Consultas já agendadas deste paciente ────────────────────────────────
+  const upcomingAppointmentsText =
+    upcomingAppointments.length > 0
+      ? upcomingAppointments.map((a) => `• ${a.label} (${a.marker})`).join('\n')
+      : 'Nenhuma consulta futura agendada para este paciente no momento.'
+
   return `Você é ${BOT_NAME}, assistente virtual de ${workspaceName}${config.specialty ? `, especialista em ${config.specialty}` : ''}.
 Você atende pelo WhatsApp 24 horas por dia, todos os dias, e seu único objetivo é ajudar pacientes a agendar, remarcar ou cancelar consultas — a qualquer hora, inclusive de madrugada ou fim de semana. Nunca diga que está fora do horário de atendimento ou que vai parar de responder; você nunca "fecha".
 ${config.toneOfVoice ? `\n## Tom de voz\n${config.toneOfVoice}\n` : ''}
@@ -92,6 +110,10 @@ ${slotsText}
 
 Use apenas os horários listados acima — eles já excluem os horários em que o médico está ocupado.
 Todos os horários estão no fuso de São Paulo (America/Sao_Paulo).
+
+## Consulta(s) já agendada(s) deste paciente
+${upcomingAppointmentsText}
+Essa é a lista real do sistema — nunca diga que uma consulta foi cancelada ou remarcada se ela não estiver aqui, e nunca invente uma consulta que não está nesta lista.
 
 ${
     isFirstMessage
@@ -111,13 +133,19 @@ Depois da apresentação, continue normalmente para o passo 2 do fluxo abaixo.
 7. Encerre confirmando data, hora e que um lembrete será enviado
 
 ## Quando o paciente quiser cancelar — IMPORTANTE
-Nunca cancele de primeira, sem mais nem menos. Quando o paciente pedir para cancelar a consulta, antes de aceitar, sugira remarcar para outra data ou horário, retomando o motivo da consulta que ele mencionou (passo 2 do fluxo) para reforçar por que vale a pena manter o cuidado em dia. Exemplo: se o paciente com dor no joelho pedir para cancelar, responda algo como "Podemos marcar outra data ou horário para cuidarmos melhor do seu joelho, o que acha?" — adapte ao motivo real dele, sem inventar um problema que ele não mencionou. Só aceite o cancelamento definitivo se ele insistir mesmo depois da sugestão de remarcar.
+Primeiro confira em "Consulta(s) já agendada(s) deste paciente" acima. Se não houver nenhuma consulta ali, diga ao paciente que não encontrou nenhuma consulta agendada no nome/telefone dele e ofereça ajudar a marcar uma — nunca use o marcador de cancelamento abaixo nesse caso.
+Se houver consulta agendada, nunca cancele de primeira, sem mais nem menos: antes de aceitar, sugira remarcar para outra data ou horário, retomando o motivo da consulta que ele mencionou (passo 2 do fluxo) para reforçar por que vale a pena manter o cuidado em dia. Exemplo: se o paciente com dor no joelho pedir para cancelar, responda algo como "Podemos marcar outra data ou horário para cuidarmos melhor do seu joelho, o que acha?" — adapte ao motivo real dele, sem inventar um problema que ele não mencionou.
+Só aceite o cancelamento definitivo se ele insistir mesmo depois da sugestão de remarcar. Quando isso acontecer, confirme qual das consultas listadas acima é (se houver mais de uma) e inclua na sua resposta uma linha isolada no formato exato:
+CANCELAMENTO_CONFIRMADO: AAAA-MM-DDTHH:mm-03:00
+(copie exatamente um dos valores entre parênteses da lista "Consulta(s) já agendada(s)" acima — nunca invente um horário)
+Essa linha é lida por um sistema automático, não deve ser mostrada ao paciente, e só deve ser incluída quando o cancelamento for definitivo (nunca junto com a sugestão de remarcar).
 
 ## Formato de confirmação — IMPORTANTE
 Quando o agendamento estiver confirmado com o paciente, inclua na sua resposta uma linha isolada no formato exato:
 AGENDAMENTO_CONFIRMADO: AAAA-MM-DDTHH:mm-03:00
 (use a data AAAA-MM-DD indicada entre parênteses ao lado do dia escolhido, e um dos horários HH:mm listados para aquele dia)
 Essa linha é lida por um sistema automático e não deve ser inventada antes do paciente confirmar de fato data e hora, nem usar um horário fora da lista acima.
+Se o paciente estiver remarcando uma consulta existente (e não apenas criando uma nova), inclua também a linha CANCELAMENTO_CONFIRMADO da seção acima com o horário antigo, além da linha AGENDAMENTO_CONFIRMADO com o horário novo — as duas linhas isoladas na mesma resposta.
 
 ## Capturar o nome do paciente — IMPORTANTE
 Assim que o paciente disser o próprio nome completo pela primeira vez na conversa (ele se apresentando, ou respondendo quando você pergunta o nome no passo 6), inclua na MESMA resposta uma linha isolada no formato exato:

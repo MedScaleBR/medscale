@@ -1,12 +1,13 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { addDays, format } from 'date-fns'
+import { TZDate } from '@date-fns/tz'
 import { createAdminClient } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendWhatsAppMessage } from '@/lib/whatsapp/send'
 import { decryptToken } from '@/lib/crypto'
 import { getFreeSlotsForBot, isSlotAvailable } from '@/lib/google/availability'
 import { isGoogleConnected } from '@/lib/google/auth'
-import { createEvent } from '@/lib/google/calendar'
+import { cancelEvent, createEvent } from '@/lib/google/calendar'
 import { getBotConfig } from '@/lib/bot/config'
 import { buildDynamicSystemPrompt } from '@/lib/bot/prompt-builder'
 import { detectHandoffIntent, executeHandoff, isHandoffAvailableNow, logHandoffUnavailable } from '@/lib/bot/handoff'
@@ -26,6 +27,7 @@ interface ProcessMessageParams {
 // Data com offset explícito de São Paulo — evita que o `new Date(...)` do
 // Node interprete o horário como local do servidor (Vercel roda em UTC).
 const CONFIRMATION_MARKER = /AGENDAMENTO_CONFIRMADO:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?-03:00)/
+const CANCELLATION_MARKER = /CANCELAMENTO_CONFIRMADO:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?-03:00)/
 const PATIENT_NAME_MARKER = /NOME_PACIENTE:\s*(.+)/
 
 type SupabaseAdmin = SupabaseClient<Database>
@@ -237,8 +239,41 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     }
   }
 
+  // 6.5. Buscar consultas futuras já agendadas deste paciente — a Maria
+  // precisa saber o que já existe de verdade pra poder cancelar/remarcar
+  // (sem isso, ela confirmava cancelamentos só na conversa, sem nada mudar
+  // no banco nem no Google Calendar, e a consulta continuava aparecendo na
+  // agenda).
+  const { data: upcomingRows } = patient
+    ? await supabase
+        .from('appointments')
+        .select('scheduled_at')
+        .eq('workspace_id', workspaceId)
+        .eq('patient_id', patient.id)
+        .in('status', ['agendado', 'confirmado'])
+        .gte('scheduled_at', new Date().toISOString())
+        .order('scheduled_at', { ascending: true })
+        .limit(5)
+    : { data: null }
+
+  const upcomingAppointments = (upcomingRows ?? []).map((row) => {
+    const zoned = new TZDate(new Date(row.scheduled_at), 'America/Sao_Paulo')
+    const dateLabel = zoned.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
+    const timeLabel = format(zoned, 'HH:mm')
+    return {
+      marker: `${format(zoned, 'yyyy-MM-dd')}T${timeLabel}-03:00`,
+      label: `${dateLabel} às ${timeLabel}`,
+    }
+  })
+
   // 7. Montar system prompt dinâmico e chamar Claude
-  const systemPrompt = buildDynamicSystemPrompt({ workspaceName, config: botConfig, freeSlotsByDay, isFirstMessage })
+  const systemPrompt = buildDynamicSystemPrompt({
+    workspaceName,
+    config: botConfig,
+    freeSlotsByDay,
+    isFirstMessage,
+    upcomingAppointments,
+  })
 
   const response = await anthropic.messages.create({
     model: 'claude-sonnet-4-5',
@@ -250,9 +285,13 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   const rawMessage =
     response.content[0]?.type === 'text' ? response.content[0].text : 'Não consegui processar sua mensagem. Pode repetir?'
 
-  // As linhas de marcação (agendamento, nome do paciente) são lidas pelo
-  // sistema e não devem ir ao paciente.
-  const cleanedMessage = rawMessage.replace(CONFIRMATION_MARKER, '').replace(PATIENT_NAME_MARKER, '').trim()
+  // As linhas de marcação (agendamento, cancelamento, nome do paciente) são
+  // lidas pelo sistema e não devem ir ao paciente.
+  const cleanedMessage = rawMessage
+    .replace(CONFIRMATION_MARKER, '')
+    .replace(CANCELLATION_MARKER, '')
+    .replace(PATIENT_NAME_MARKER, '')
+    .trim()
 
   // Nome do paciente ainda é o placeholder "Paciente" (posto na criação, passo
   // 2) até ele se identificar na conversa — atualiza assim que o bot capturar.
@@ -390,6 +429,41 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
             }
           }
         }
+      }
+    }
+  }
+
+  // 12. Detectar cancelamento confirmado e atualizar o registro (status +
+  // Google Calendar) — sem isso a consulta continuava "agendado" no banco
+  // mesmo depois da Maria dizer ao paciente que tinha cancelado.
+  const cancelMatch = rawMessage.match(CANCELLATION_MARKER)
+  if (cancelMatch && patient) {
+    const cancelledAt = new Date(cancelMatch[1])
+
+    if (!Number.isNaN(cancelledAt.getTime())) {
+      const { data: apptToCancel } = await supabase
+        .from('appointments')
+        .select('id, gcal_event_id')
+        .eq('workspace_id', workspaceId)
+        .eq('patient_id', patient.id)
+        .eq('scheduled_at', cancelledAt.toISOString())
+        .in('status', ['agendado', 'confirmado'])
+        .maybeSingle()
+
+      if (apptToCancel) {
+        await supabase.from('appointments').update({ status: 'cancelado' }).eq('id', apptToCancel.id)
+
+        if (apptToCancel.gcal_event_id) {
+          try {
+            await cancelEvent(workspaceId, apptToCancel.gcal_event_id)
+          } catch (gcalErr) {
+            console.error('Google Calendar cancel failed (bot cancellation):', gcalErr)
+          }
+        }
+      } else {
+        console.warn(
+          `Cancelamento ${cancelMatch[1]} não encontrou consulta correspondente para paciente ${patient.id} no workspace ${workspaceId}.`
+        )
       }
     }
   }
