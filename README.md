@@ -26,7 +26,7 @@ CRM para clínicas médicas com agente de agendamento via WhatsApp (Next.js 16 A
    - `TOKEN_ENCRYPTION_KEY`: gere com `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`. Usado para criptografar o token da Meta antes de salvar em `profiles.meta_token`.
    - `META_APP_SECRET` / `META_VERIFY_TOKEN`: painel do app na Meta for Developers (produto WhatsApp).
    - `ANTHROPIC_API_KEY`: console da Anthropic.
-   - `CRON_SECRET`: qualquer string aleatória — protege `/api/cron/{reminders,noshow,waitlist}`. É o Supabase pg_cron (ver `supabase/cron.sql`) que envia esse valor no header `Authorization`; configure o mesmo valor em `app.cron_secret` no banco.
+   - `CRON_SECRET`: qualquer string aleatória — protege `/api/cron/{reminders,noshow,waitlist}` e `/api/transcriptions/{process,generate-record}`. É o Supabase pg_cron (ver `supabase/cron.sql`) que envia esse valor no header `Authorization`; o mesmo valor precisa estar salvo no Supabase Vault como o secret `cron_secret` (ver seção 1.1 de `supabase/cron.sql` — `ALTER DATABASE ... SET` não funciona mais em projetos Supabase, o Vault substituiu isso).
    - Sentry/PostHog são opcionais — deixe em branco para desativar (a inicialização é condicional).
 
 4. **Habilitar login com Google** em Supabase → Authentication → Providers → Google, e configurar a URL de callback (`<seu-domínio>/auth/callback`) tanto no Google Cloud Console quanto no Supabase.

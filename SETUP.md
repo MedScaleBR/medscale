@@ -369,10 +369,13 @@ Se algo não funcionar, veja a seção [14. Solução de problemas](#14-soluçã
 6. **Crons (lembretes, no-show, lista de espera)**: rodam via Supabase pg_cron, não Vercel Cron
    (o plano Hobby só permite frequência diária, e os crons do MedScale precisam rodar de hora em
    hora). No SQL Editor do projeto Supabase, rode o script [`supabase/cron.sql`](supabase/cron.sql):
-   ele habilita as extensões `pg_cron`/`pg_net`, salva `CRON_SECRET` como `app.cron_secret` no
-   banco (troque pelo mesmo valor da env var) e registra os três jobs (`appointment-reminders`,
-   `mark-noshow`, `waitlist-notify`) apontando para `https://<seu-domínio>/api/cron/*`. Ajuste a
-   URL base no script antes de rodar se o domínio de produção for diferente do exemplo.
+   ele habilita as extensões `pg_cron`/`pg_net`/`supabase_vault`, salva `CRON_SECRET` como o
+   secret `cron_secret` no **Supabase Vault** (troque `'seu_secret_aqui'` no script pelo mesmo
+   valor da env var antes de rodar — `ALTER DATABASE ... SET` não é mais permitido em projetos
+   Supabase, por isso o Vault) e registra os jobs (`appointment-reminders`, `mark-noshow`,
+   `waitlist-notify`, e `cleanup-old-recordings` se o módulo de transcrições estiver em uso)
+   apontando para `https://<seu-domínio>/api/cron/*`. Ajuste a URL base no script antes de rodar
+   se o domínio de produção for diferente do exemplo.
 7. Depois do primeiro deploy, repita o passo 10 (onboarding) para cada médico em produção — os
    dados de dev (Supabase local/projeto de teste) não migram automaticamente para produção a
    menos que você aponte para o mesmo projeto Supabase.
@@ -435,8 +438,8 @@ ESLint; o build roda os dois e para no primeiro erro.
 
 **Lembretes automáticos não estão sendo enviados**
 - Confirme que `supabase/cron.sql` foi executado (`select * from cron.job;` no SQL Editor deve
-  listar os três jobs) e que `CRON_SECRET` é o mesmo valor em `app.cron_secret` no banco e nas
-  env vars de produção da Vercel.
+  listar os jobs) e que `CRON_SECRET` é o mesmo valor salvo no Supabase Vault
+  (`select public.cron_secret();` no SQL Editor) e nas env vars de produção da Vercel.
 - O lembrete só é enviado para consultas entre 23h e 25h no futuro (janela de ~1h em torno de
   24h antes) — não espere um envio imediato ao criar a consulta.
 - O template `appointment_reminder` precisa estar **aprovado** pela Meta antes de poder ser

@@ -11,7 +11,13 @@ function toIso(datetimeLocal: string) {
   return new Date(datetimeLocal).toISOString()
 }
 
-export function AgendaClient({ initialAppointments }: { initialAppointments: Appointment[] }) {
+export function AgendaClient({
+  initialAppointments,
+  showTranscriptions,
+}: {
+  initialAppointments: Appointment[]
+  showTranscriptions?: boolean
+}) {
   const [appointments, setAppointments] = useState(initialAppointments)
 
   const handleCreate = async (values: AppointmentFormValues) => {
@@ -69,6 +75,7 @@ export function AgendaClient({ initialAppointments }: { initialAppointments: App
       onCreate={handleCreate}
       onUpdate={handleUpdate}
       onDelete={handleDelete}
+      showTranscriptions={showTranscriptions}
     />
   )
 }

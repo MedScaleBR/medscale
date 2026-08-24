@@ -19,10 +19,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { AppointmentRecordingEntry } from '@/components/transcriptions/AppointmentRecordingEntry'
 import type { AppointmentType, AppointmentStatus } from '@/types/database'
 
 export interface AppointmentFormValues {
   id?: string
+  patient_id?: string | null
   patient_name: string
   patient_phone: string
   scheduled_at: string // datetime-local value
@@ -39,6 +41,7 @@ interface AppointmentModalProps {
   initialValues?: Partial<AppointmentFormValues>
   onSave: (values: AppointmentFormValues) => Promise<void>
   onDelete?: () => Promise<void>
+  showTranscriptions?: boolean
 }
 
 const EMPTY: AppointmentFormValues = {
@@ -52,12 +55,25 @@ const EMPTY: AppointmentFormValues = {
   price: '',
 }
 
-export function AppointmentModal({ open, onOpenChange, initialValues, onSave, onDelete }: AppointmentModalProps) {
+export function AppointmentModal({
+  open,
+  onOpenChange,
+  initialValues,
+  onSave,
+  onDelete,
+  showTranscriptions,
+}: AppointmentModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         {open && (
-          <AppointmentForm initialValues={initialValues} onSave={onSave} onDelete={onDelete} onOpenChange={onOpenChange} />
+          <AppointmentForm
+            initialValues={initialValues}
+            onSave={onSave}
+            onDelete={onDelete}
+            onOpenChange={onOpenChange}
+            showTranscriptions={showTranscriptions}
+          />
         )}
       </DialogContent>
     </Dialog>
@@ -69,9 +85,10 @@ interface AppointmentFormProps {
   onSave: (values: AppointmentFormValues) => Promise<void>
   onDelete?: () => Promise<void>
   onOpenChange: (open: boolean) => void
+  showTranscriptions?: boolean
 }
 
-function AppointmentForm({ initialValues, onSave, onDelete, onOpenChange }: AppointmentFormProps) {
+function AppointmentForm({ initialValues, onSave, onDelete, onOpenChange, showTranscriptions }: AppointmentFormProps) {
   const [values, setValues] = useState<AppointmentFormValues>({ ...EMPTY, ...initialValues })
   const [saving, setSaving] = useState(false)
 
@@ -91,6 +108,18 @@ function AppointmentForm({ initialValues, onSave, onDelete, onOpenChange }: Appo
       <DialogHeader>
         <DialogTitle>{values.id ? 'Editar consulta' : 'Nova consulta'}</DialogTitle>
       </DialogHeader>
+
+      {showTranscriptions && values.id && values.patient_name && values.patient_phone && (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-[var(--navy-06)] bg-[var(--navy-06)]/20 p-3">
+          <span className="text-xs text-gray-500">Transcrição da consulta</span>
+          <AppointmentRecordingEntry
+            appointmentId={values.id}
+            patientId={values.patient_id ?? null}
+            patientName={values.patient_name}
+            patientPhone={values.patient_phone}
+          />
+        </div>
+      )}
 
       <div className="space-y-3">
           <div>

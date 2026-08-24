@@ -27,6 +27,7 @@ const TOGGLEABLE_MODULES: { slug: ModuleSlug; label: string }[] = [
   { slug: 'waitlist', label: 'Lista de espera' },
   { slug: 'financial', label: 'Meu financeiro' },
   { slug: 'campaigns', label: 'Atribuição' },
+  { slug: 'transcriptions', label: 'Transcrições' },
 ]
 
 interface AccountDetailFormProps {
