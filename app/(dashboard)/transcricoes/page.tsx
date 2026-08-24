@@ -1,12 +1,19 @@
 import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { TranscriptionsListClient } from '@/components/transcriptions/TranscriptionsListClient'
+import { NewTranscriptionButton } from '@/components/transcriptions/NewTranscriptionButton'
 
 export default async function TranscricoesPage() {
   const session = await resolveActiveSession()
   if (!session) return null
 
   const supabase = await createClient()
+  const { data: patients } = await supabase
+    .from('patients')
+    .select('id, full_name, phone')
+    .eq('account_id', session.accountId)
+    .order('full_name')
+
   const { data: transcriptionsRaw } = await supabase
     .from('transcriptions')
     .select('id, status, created_at, duration_seconds, recorded_by, patient:patients(full_name)')
@@ -35,9 +42,12 @@ export default async function TranscricoesPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-medium text-gray-900">Transcrições</h1>
-        <p className="text-sm text-gray-400">{rows.length} transcrições registradas</p>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-medium text-gray-900">Transcrições</h1>
+          <p className="text-sm text-gray-400">{rows.length} transcrições registradas</p>
+        </div>
+        <NewTranscriptionButton patients={patients ?? []} />
       </div>
       <TranscriptionsListClient rows={rows} />
     </div>

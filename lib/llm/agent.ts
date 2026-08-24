@@ -31,22 +31,48 @@ const PATIENT_NAME_MARKER = /NOME_PACIENTE:\s*(.+)/
 type SupabaseAdmin = SupabaseClient<Database>
 
 // Paciente por account (pacientes são compartilhados entre as workspaces do
-// mesmo account) — usado tanto pra mensagens de texto quanto pra mídia não suportada.
+// mesmo account) — usado tanto pra mensagens de texto quanto pra mídia não
+// suportada. Sempre retorna um paciente ou lança — antes, um erro de insert
+// (ex: duas mensagens quase simultâneas colidindo no unique(account_id,
+// phone)) fazia a função devolver undefined em silêncio, e o resto do fluxo
+// seguia sem paciente nenhum e sem nenhum erro registrado em lugar algum.
 async function getOrCreatePatient(supabase: SupabaseAdmin, accountId: string, patientPhone: string) {
-  const { data: patient } = await supabase
+  const { data: patient, error: selectError } = await supabase
     .from('patients')
     .select('id, full_name')
     .eq('account_id', accountId)
     .eq('phone', patientPhone)
-    .single()
+    .maybeSingle()
 
+  if (selectError) throw new Error(`getOrCreatePatient select failed: ${selectError.message}`)
   if (patient) return patient
 
-  const { data: newPatient } = await supabase
+  const { data: newPatient, error: insertError } = await supabase
     .from('patients')
     .insert({ account_id: accountId, phone: patientPhone, full_name: 'Paciente' })
     .select('id, full_name')
     .single()
+
+  if (insertError) {
+    // 23505 = unique_violation — outra mensagem concorrente já criou o mesmo
+    // paciente entre o select acima e este insert; busca quem ganhou a
+    // corrida em vez de falhar.
+    if (insertError.code === '23505') {
+      const { data: existing, error: refetchError } = await supabase
+        .from('patients')
+        .select('id, full_name')
+        .eq('account_id', accountId)
+        .eq('phone', patientPhone)
+        .single()
+      if (refetchError || !existing) {
+        throw new Error(`getOrCreatePatient refetch after conflict failed: ${refetchError?.message}`)
+      }
+      return existing
+    }
+    throw new Error(`getOrCreatePatient insert failed: ${insertError.message}`)
+  }
+  if (!newPatient) throw new Error('getOrCreatePatient insert returned no data')
+
   return newPatient
 }
 

@@ -25,7 +25,7 @@ export default async function AgendaPage() {
         <h1 className="text-xl font-medium text-gray-900">Agenda</h1>
         <p className="text-sm text-gray-400">Clique em um horário vazio para criar uma consulta, ou em uma consulta existente para editar.</p>
       </div>
-      <AgendaClient initialAppointments={appointments ?? []} />
+      <AgendaClient initialAppointments={appointments ?? []} showTranscriptions={session.userModules.includes('transcriptions')} />
     </div>
   )
 }

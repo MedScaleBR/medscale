@@ -44,9 +44,10 @@ interface CalendarViewProps {
   onCreate: (values: AppointmentFormValues) => Promise<void>
   onUpdate: (id: string, values: AppointmentFormValues) => Promise<void>
   onDelete: (id: string) => Promise<void>
+  showTranscriptions?: boolean
 }
 
-export function CalendarView({ appointments, onCreate, onUpdate, onDelete }: CalendarViewProps) {
+export function CalendarView({ appointments, onCreate, onUpdate, onDelete, showTranscriptions }: CalendarViewProps) {
   const [view, setView] = useState<View>('week')
   const [date, setDate] = useState(new Date())
   const [modalOpen, setModalOpen] = useState(false)
@@ -82,6 +83,7 @@ export function CalendarView({ appointments, onCreate, onUpdate, onDelete }: Cal
     const a = (event as { resource: Appointment }).resource
     setEditing({
       id: a.id,
+      patient_id: a.patient_id,
       patient_name: a.patient_name,
       patient_phone: a.patient_phone,
       scheduled_at: toDatetimeLocal(new Date(a.scheduled_at)),
@@ -138,6 +140,7 @@ export function CalendarView({ appointments, onCreate, onUpdate, onDelete }: Cal
         initialValues={editing}
         onSave={handleSave}
         onDelete={editing?.id ? async () => { await onDelete(editing.id!); setModalOpen(false) } : undefined}
+        showTranscriptions={showTranscriptions}
       />
     </div>
   )
