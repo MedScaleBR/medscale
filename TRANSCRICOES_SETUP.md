@@ -11,9 +11,14 @@ Tempo estimado: 15–20 minutos.
 ## 1. Pré-requisitos
 
 - Projeto MedScale já configurado e rodando (Supabase, `.env.local`, etc. — ver `SETUP.md`).
-- `CRON_SECRET` já configurado tanto no `.env.local`/Vercel quanto como `app.cron_secret` no
-  banco (isso é feito rodando `supabase/cron.sql` — se você ainda não rodou aquele arquivo, rode
-  antes de continuar, o módulo de transcrição reaproveita esse mesmo secret).
+- `CRON_SECRET` já configurado tanto no `.env.local`/Vercel quanto salvo como o secret
+  `cron_secret` no **Supabase Vault** (isso é feito rodando `supabase/cron.sql` — se você ainda
+  não rodou aquele arquivo, rode antes de continuar; o módulo de transcrição reaproveita esse
+  mesmo secret via `public.cron_secret()`). Confirme com `select public.cron_secret();` no SQL
+  Editor — deve retornar o mesmo valor do `.env.local`, não vazio.
+  > Se `supabase/cron.sql` der erro `permission denied to set parameter "app.cron_secret"`: uma
+  > versão antiga deste arquivo usava `alter database ... set`, que a Supabase não permite mais.
+  > Pegue a versão atual do repositório (usa Supabase Vault em vez disso) e rode de novo.
 - Conta na [OpenAI Platform](https://platform.openai.com) com um método de pagamento cadastrado
   (a API do Whisper é paga por uso).
 
@@ -135,8 +140,10 @@ where id = 'COLE_AQUI_O_ID_DA_ACCOUNT';
 - Confirme que a função RPC disparou: no SQL Editor,
   `select * from net._http_response order by created desc limit 5;` mostra as últimas chamadas
   HTTP feitas por `pg_net` — confira o `status_code` da chamada para `/api/transcriptions/process`.
-- Se o `status_code` for `401`, o `CRON_SECRET` salvo em `app.cron_secret` no banco não bate com
-  a env var `CRON_SECRET` do seu deploy — reconfirme os dois valores.
+- Se o `status_code` for `401`, o `CRON_SECRET` salvo no Supabase Vault (`select
+  public.cron_secret();`) não bate com a env var `CRON_SECRET` do seu deploy — reconfirme os
+  dois valores. Pra trocar o valor no Vault: `select vault.update_secret(id, 'novo_valor') from
+  vault.secrets where name = 'cron_secret';`.
 
 **A página não atualiza sozinha, preciso dar F5 pra ver o status novo**
 Realtime não está entregando eventos. Confirme que a tabela está na publicação:

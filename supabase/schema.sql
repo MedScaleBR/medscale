@@ -586,8 +586,11 @@ $$;
 
 -- ============================================================
 -- 12.1 FUNÇÕES — disparo assíncrono do pipeline de transcrição via pg_net.
--- Mesmo padrão de supabase/cron.sql (net.http_post + app.cron_secret,
--- header Authorization: Bearer). p_app_url vem do Node (NEXT_PUBLIC_APP_URL).
+-- Mesmo padrão de supabase/cron.sql: net.http_post + CRON_SECRET lido do
+-- Supabase Vault via public.cron_secret() (definida em cron.sql — rode
+-- aquele arquivo antes de ativar o módulo de transcrições, senão estas duas
+-- funções existem mas falham em runtime com "function public.cron_secret()
+-- does not exist"). p_app_url vem do Node (NEXT_PUBLIC_APP_URL).
 -- ============================================================
 create or replace function public.trigger_transcription_process(
   p_transcription_id uuid,
@@ -598,7 +601,7 @@ begin
     url     := p_app_url || '/api/transcriptions/process',
     headers := jsonb_build_object(
       'Content-Type',  'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.cron_secret')
+      'Authorization', 'Bearer ' || public.cron_secret()
     ),
     body    := jsonb_build_object('transcription_id', p_transcription_id)
   );
@@ -614,7 +617,7 @@ begin
     url     := p_app_url || '/api/transcriptions/generate-record',
     headers := jsonb_build_object(
       'Content-Type',  'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.cron_secret')
+      'Authorization', 'Bearer ' || public.cron_secret()
     ),
     body    := jsonb_build_object('transcription_id', p_transcription_id)
   );

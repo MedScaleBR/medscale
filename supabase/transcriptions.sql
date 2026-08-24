@@ -5,8 +5,9 @@
 -- script avulso, não reexecuta schema.sql (ver nota no topo daquele arquivo).
 --
 -- Pré-requisito: supabase/cron.sql já deve ter sido executado ao menos uma
--- vez (usa a mesma app.cron_secret configurada lá para autenticar as
--- chamadas HTTP disparadas pelas funções trigger_transcription_*).
+-- vez (cria public.cron_secret(), que lê o CRON_SECRET do Supabase Vault —
+-- usado para autenticar as chamadas HTTP disparadas pelas funções
+-- trigger_transcription_* abaixo).
 
 -- ============================================================
 -- 1. ENUM + TABELA
@@ -115,12 +116,13 @@ create policy "recordings: workspace members delete"
 -- ============================================================
 -- 4. FUNÇÕES — disparo assíncrono do pipeline via pg_net
 -- ============================================================
--- Mesmo padrão de supabase/cron.sql: net.http_post com o CRON_SECRET salvo
--- em app.cron_secret, header Authorization: Bearer (não x-cron-secret) —
--- consistente com o "Bearer <CRON_SECRET>" que toda rota em app/api/cron/*
--- (e agora as de app/api/transcriptions/process e generate-record) já checa.
--- p_app_url vem do Node (NEXT_PUBLIC_APP_URL) para não precisar configurar
--- mais uma setting de banco (app.settings.app_url).
+-- Mesmo padrão de supabase/cron.sql: net.http_post com o CRON_SECRET lido
+-- via public.cron_secret() (Supabase Vault — definida em cron.sql), header
+-- Authorization: Bearer (não x-cron-secret) — consistente com o
+-- "Bearer <CRON_SECRET>" que toda rota em app/api/cron/* (e agora as de
+-- app/api/transcriptions/process e generate-record) já checa. p_app_url vem
+-- do Node (NEXT_PUBLIC_APP_URL) para não precisar configurar mais uma
+-- setting de banco (app.settings.app_url).
 
 create or replace function public.trigger_transcription_process(
   p_transcription_id uuid,
@@ -131,7 +133,7 @@ begin
     url     := p_app_url || '/api/transcriptions/process',
     headers := jsonb_build_object(
       'Content-Type',  'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.cron_secret')
+      'Authorization', 'Bearer ' || public.cron_secret()
     ),
     body    := jsonb_build_object('transcription_id', p_transcription_id)
   );
@@ -147,7 +149,7 @@ begin
     url     := p_app_url || '/api/transcriptions/generate-record',
     headers := jsonb_build_object(
       'Content-Type',  'application/json',
-      'Authorization', 'Bearer ' || current_setting('app.cron_secret')
+      'Authorization', 'Bearer ' || public.cron_secret()
     ),
     body    := jsonb_build_object('transcription_id', p_transcription_id)
   );

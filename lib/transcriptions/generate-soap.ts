@@ -45,6 +45,15 @@ Regras absolutas:
 - Datas e dosagens: transcreva exatamente, sem arredondar.
 - O campo "alertas" deve listar todo campo relevante que ficou vazio por ausência na fala.`
 
+// Remove um possível fence de markdown (```json ... ```) em volta do JSON —
+// o system prompt já instrui o Claude a nunca fazer isso, mas na prática o
+// modelo ocasionalmente embrulha a resposta mesmo assim.
+function stripMarkdownFence(text: string): string {
+  const trimmed = text.trim()
+  const fenced = trimmed.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/)
+  return fenced ? fenced[1] : trimmed
+}
+
 export async function generateSOAP(transcriptText: string): Promise<SOAPRecord> {
   const message = await anthropic.messages.create({
     model: 'claude-sonnet-4-5',
@@ -55,10 +64,14 @@ export async function generateSOAP(transcriptText: string): Promise<SOAPRecord> 
         role: 'user',
         content: `Transcrição da consulta:\n\n${transcriptText}`,
       },
+      // Prefill do turno do assistente com "{" — força o Claude a continuar
+      // direto o JSON em vez de abrir com um fence de markdown antes dele.
+      { role: 'assistant', content: '{' },
     ],
   })
 
-  const raw = message.content[0].type === 'text' ? message.content[0].text : ''
+  const completion = message.content[0].type === 'text' ? message.content[0].text : ''
+  const raw = stripMarkdownFence(`{${completion}`)
 
   try {
     return JSON.parse(raw) as SOAPRecord

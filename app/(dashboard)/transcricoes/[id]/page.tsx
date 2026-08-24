@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { TranscriptionDetailClient } from '@/components/transcriptions/TranscriptionDetailClient'
 import { TranscriptionStatusBadge } from '@/components/transcriptions/TranscriptionStatusBadge'
+import { AudioPlayer } from '@/components/transcriptions/AudioPlayer'
 import type { Transcription } from '@/lib/transcriptions/types'
 
 export default async function TranscriptionDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -23,6 +24,11 @@ export default async function TranscriptionDetailPage({ params }: { params: Prom
 
   const { patient, ...row } = transcription as typeof transcription & { patient: { full_name: string } | null }
 
+  const hasAudio = row.audio_path && row.audio_path !== '[deleted]'
+  const { data: signedAudio } = hasAudio
+    ? await supabase.storage.from('recordings').createSignedUrl(row.audio_path, 3600)
+    : { data: null }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -37,6 +43,8 @@ export default async function TranscriptionDetailPage({ params }: { params: Prom
         </div>
         <TranscriptionStatusBadge status={row.status} />
       </div>
+
+      <AudioPlayer audioUrl={signedAudio?.signedUrl ?? null} />
 
       <TranscriptionDetailClient initial={row as unknown as Transcription} />
     </div>
