@@ -18,6 +18,7 @@ drop trigger if exists on_auth_user_created on auth.users;
 -- `cascade` aqui também remove automaticamente todas as policies, índices e
 -- triggers de cada tabela — não é preciso dropar isso separadamente.
 drop table if exists
+  public.transcriptions,
   public.handoff_hours,
   public.handoff_logs,
   public.webhook_logs,
@@ -40,12 +41,16 @@ drop table if exists
   public.accounts
 cascade;
 
+drop type if exists public.transcription_status cascade;
+
 drop function if exists public.is_medscale_admin() cascade;
 drop function if exists public.is_account_admin(uuid) cascade;
 drop function if exists public.my_workspace_ids() cascade;
 drop function if exists public.my_account_ids() cascade;
 drop function if exists public.handle_new_user() cascade;
 drop function if exists public.handle_updated_at() cascade;
+drop function if exists public.trigger_transcription_process(uuid, text) cascade;
+drop function if exists public.trigger_transcription_generate(uuid, text) cascade;
 
 -- ============================================================
 -- 1. EXTENSÕES
@@ -209,6 +214,42 @@ create table public.appointments (
   reminder_sent   boolean default false,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
+);
+
+-- Transcrição de consultas — áudio gravado, transcrito pelo Whisper, e
+-- prontuário SOAP gerado pelo Claude (ver lib/transcriptions/*). Módulo
+-- "transcriptions" em accounts.modules, inativo por padrão.
+create type public.transcription_status as enum (
+  'pending',
+  'transcribing',
+  'transcribed',
+  'generating',
+  'draft_ready',
+  'signed',
+  'error'
+);
+
+create table public.transcriptions (
+  id                    uuid default uuid_generate_v4() primary key,
+  workspace_id          uuid references public.workspaces(id) on delete cascade not null,
+  account_id            uuid references public.accounts(id)   on delete cascade not null,
+  appointment_id        uuid references public.appointments(id) on delete set null,
+  patient_id            uuid references public.patients(id)   on delete restrict not null,
+  recorded_by           uuid references auth.users(id)        on delete restrict not null,
+  audio_path            text not null,
+  duration_seconds      int,
+  transcript_text       text,
+  medical_record_draft  jsonb,
+  medical_record_final  jsonb,
+  status                public.transcription_status not null default 'pending',
+  consent_confirmed     boolean not null default false,
+  source                text not null default 'system' check (source in ('system', 'whatsapp')),
+  error_message         text,
+  retry_count           int not null default 0,
+  signed_at             timestamptz,
+  signed_by             uuid references auth.users(id) on delete set null,
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now()
 );
 
 -- Conversas do bot WhatsApp
@@ -434,6 +475,10 @@ create index idx_ad_campaigns_workspace      on public.ad_campaigns(workspace_id
 create index idx_webhook_logs_workspace      on public.webhook_logs(workspace_id, received_at desc);
 create index idx_handoff_logs_workspace      on public.handoff_logs(workspace_id, sent_at desc);
 create index idx_handoff_hours_workspace     on public.handoff_hours(workspace_id, day_of_week);
+create index idx_transcriptions_workspace    on public.transcriptions(workspace_id, created_at desc);
+create index idx_transcriptions_appointment  on public.transcriptions(appointment_id);
+create index idx_transcriptions_patient      on public.transcriptions(patient_id);
+create index idx_transcriptions_status       on public.transcriptions(status);
 
 -- ============================================================
 -- 10. TRIGGERS updated_at
@@ -464,6 +509,10 @@ create trigger trg_bot_config_updated_at
 
 create trigger trg_google_tokens_updated_at
   before update on public.google_tokens
+  for each row execute procedure public.handle_updated_at();
+
+create trigger trg_transcriptions_updated_at
+  before update on public.transcriptions
   for each row execute procedure public.handle_updated_at();
 
 -- ============================================================
@@ -536,6 +585,43 @@ returns boolean language sql security definer stable as $$
 $$;
 
 -- ============================================================
+-- 12.1 FUNÇÕES — disparo assíncrono do pipeline de transcrição via pg_net.
+-- Mesmo padrão de supabase/cron.sql (net.http_post + app.cron_secret,
+-- header Authorization: Bearer). p_app_url vem do Node (NEXT_PUBLIC_APP_URL).
+-- ============================================================
+create or replace function public.trigger_transcription_process(
+  p_transcription_id uuid,
+  p_app_url text
+) returns void language plpgsql security definer as $$
+begin
+  perform net.http_post(
+    url     := p_app_url || '/api/transcriptions/process',
+    headers := jsonb_build_object(
+      'Content-Type',  'application/json',
+      'Authorization', 'Bearer ' || current_setting('app.cron_secret')
+    ),
+    body    := jsonb_build_object('transcription_id', p_transcription_id)
+  );
+end;
+$$;
+
+create or replace function public.trigger_transcription_generate(
+  p_transcription_id uuid,
+  p_app_url text
+) returns void language plpgsql security definer as $$
+begin
+  perform net.http_post(
+    url     := p_app_url || '/api/transcriptions/generate-record',
+    headers := jsonb_build_object(
+      'Content-Type',  'application/json',
+      'Authorization', 'Bearer ' || current_setting('app.cron_secret')
+    ),
+    body    := jsonb_build_object('transcription_id', p_transcription_id)
+  );
+end;
+$$;
+
+-- ============================================================
 -- 13. ROW LEVEL SECURITY
 -- ============================================================
 alter table public.accounts               enable row level security;
@@ -558,6 +644,7 @@ alter table public.google_tokens          enable row level security;
 alter table public.webhook_logs           enable row level security;
 alter table public.handoff_logs           enable row level security;
 alter table public.handoff_hours          enable row level security;
+alter table public.transcriptions         enable row level security;
 
 -- Accounts: membro lê o(s) próprio(s); admin do account edita
 create policy "accounts: members read" on public.accounts
@@ -654,6 +741,14 @@ create policy "handoff_logs: workspace members" on public.handoff_logs
 create policy "handoff_hours: workspace members" on public.handoff_hours
   for all using (workspace_id = any(public.my_workspace_ids()));
 
+create policy "transcriptions: workspace members" on public.transcriptions
+  for all using (workspace_id = any(public.my_workspace_ids()));
+
+-- Necessário para a subscription Realtime da página de detalhe de
+-- transcrição (RLS habilitado não é suficiente, a tabela precisa estar na
+-- publicação replicada explicitamente).
+alter publication supabase_realtime add table public.transcriptions;
+
 -- ============================================================
 -- 14. PERMISSÕES (GRANTS) — necessárias ALÉM das policies de RLS
 -- ============================================================
@@ -680,6 +775,9 @@ grant all on all sequences in schema public to service_role;
 
 alter default privileges in schema public grant all on tables to service_role;
 alter default privileges in schema public grant all on sequences to service_role;
+
+grant execute on function public.trigger_transcription_process(uuid, text) to authenticated, service_role;
+grant execute on function public.trigger_transcription_generate(uuid, text) to authenticated, service_role;
 
 -- 'anon' propositalmente não recebe grants — nenhuma tabela deste app deve
 -- ser lida por usuários não autenticados.

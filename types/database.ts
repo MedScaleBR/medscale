@@ -24,6 +24,15 @@ export type OnboardingStep =
   | 'provisioning'
   | 'active'
 export type HandoffTriggerReason = 'user_request' | 'bot_uncertain' | 'max_turns' | 'out_of_hours'
+export type TranscriptionStatus =
+  | 'pending'
+  | 'transcribing'
+  | 'transcribed'
+  | 'generating'
+  | 'draft_ready'
+  | 'signed'
+  | 'error'
+export type TranscriptionSource = 'system' | 'whatsapp'
 
 // Módulos controláveis por account/membership. dashboard, patients e
 // settings são sempre tratados como ativos pelo app (ver lib/session/server.ts).
@@ -38,6 +47,7 @@ export type ModuleSlug =
   | 'campaigns'
   | 'patients'
   | 'settings'
+  | 'transcriptions'
 
 export interface Database {
   public: {
@@ -238,6 +248,58 @@ export interface Database {
             foreignKeyName: 'appointments_patient_id_fkey'
             columns: ['patient_id']
             referencedRelation: 'patients'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      transcriptions: {
+        Row: {
+          id: string
+          workspace_id: string
+          account_id: string
+          appointment_id: string | null
+          patient_id: string
+          recorded_by: string
+          audio_path: string
+          duration_seconds: number | null
+          transcript_text: string | null
+          medical_record_draft: unknown | null
+          medical_record_final: unknown | null
+          status: TranscriptionStatus
+          consent_confirmed: boolean
+          source: TranscriptionSource
+          error_message: string | null
+          retry_count: number
+          signed_at: string | null
+          signed_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['transcriptions']['Row']> & {
+          workspace_id: string
+          account_id: string
+          patient_id: string
+          recorded_by: string
+          audio_path: string
+        }
+        Update: Partial<Database['public']['Tables']['transcriptions']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'transcriptions_workspace_id_fkey'
+            columns: ['workspace_id']
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'transcriptions_patient_id_fkey'
+            columns: ['patient_id']
+            referencedRelation: 'patients'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'transcriptions_appointment_id_fkey'
+            columns: ['appointment_id']
+            referencedRelation: 'appointments'
             referencedColumns: ['id']
           },
         ]
@@ -606,6 +668,14 @@ export interface Database {
       my_workspace_ids: { Args: Record<string, never>; Returns: string[] }
       is_account_admin: { Args: { p_account_id: string }; Returns: boolean }
       is_medscale_admin: { Args: Record<string, never>; Returns: boolean }
+      trigger_transcription_process: {
+        Args: { p_transcription_id: string; p_app_url: string }
+        Returns: void
+      }
+      trigger_transcription_generate: {
+        Args: { p_transcription_id: string; p_app_url: string }
+        Returns: void
+      }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

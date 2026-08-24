@@ -19,6 +19,7 @@ import {
   TrendingUp,
   Users,
   Settings,
+  FileAudio,
 } from 'lucide-react'
 
 // Slug do módulo → rota real do app. Rotas que já existiam antes do modelo
@@ -36,6 +37,7 @@ const MODULE_NAV: Record<ModuleSlug, { label: string; href: string; icon: typeof
   campaigns: { label: 'Atribuição', href: '/trafego', icon: TrendingUp },
   patients: { label: 'Meus pacientes', href: '/pacientes', icon: Users },
   settings: { label: 'Configuração', href: '/configuracoes', icon: Settings },
+  transcriptions: { label: 'Transcrições', href: '/transcricoes', icon: FileAudio },
 }
 
 // Ordem fixa de exibição, independente da ordem em accountModules/userModules
@@ -49,6 +51,7 @@ const NAV_ORDER: ModuleSlug[] = [
   'financial',
   'campaigns',
   'patients',
+  'transcriptions',
   'settings',
 ]
 

@@ -80,6 +80,23 @@ select cron.schedule(
   $$
 );
 
+-- CLEANUP-RECORDINGS: apaga áudios de transcrições assinadas há mais de
+-- RECORDING_RETENTION_DAYS dias (ver supabase/transcriptions.sql) — 3h da manhã
+select cron.schedule(
+  'cleanup-old-recordings',
+  '0 3 * * *',
+  $$
+    select net.http_post(
+      url     := 'https://app.medscalebr.com/api/cron/cleanup-recordings',
+      headers := jsonb_build_object(
+        'Content-Type',  'application/json',
+        'Authorization', 'Bearer ' || current_setting('app.cron_secret')
+      ),
+      body    := '{}'::jsonb
+    );
+  $$
+);
+
 -- ============================================================
 -- 3. VERIFICAÇÃO
 -- ============================================================

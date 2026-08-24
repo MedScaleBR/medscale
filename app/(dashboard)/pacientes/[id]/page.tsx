@@ -2,6 +2,7 @@ import { notFound } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { Badge } from '@/components/ui/badge'
+import { RecordingButton } from '@/components/transcriptions/RecordingButton'
 
 const STATUS_LABEL: Record<string, string> = {
   agendado: 'Agendado',
@@ -36,9 +37,12 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-medium text-gray-900">{patient.full_name}</h1>
-        <p className="text-sm text-gray-400">{patient.phone}{patient.email ? ` · ${patient.email}` : ''}</p>
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-medium text-gray-900">{patient.full_name}</h1>
+          <p className="text-sm text-gray-400">{patient.phone}{patient.email ? ` · ${patient.email}` : ''}</p>
+        </div>
+        {session.userModules.includes('transcriptions') && <RecordingButton patientId={patient.id} />}
       </div>
 
       {patient.tags.length > 0 && (
