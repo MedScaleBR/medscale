@@ -68,8 +68,7 @@ export async function logHandoffUnavailable(params: {
 // Detecta se a resposta do LLM indica necessidade de handoff
 export function detectHandoffIntent(
   assistantMessage: string,
-  userMessage: string,
-  turnCount: number
+  userMessage: string
 ): { needed: boolean; reason: HandoffTriggerReason | null } {
   // Sinalização explícita do LLM (via instrução no prompt)
   if (assistantMessage.includes('[HANDOFF]')) {
@@ -95,11 +94,6 @@ export function detectHandoffIntent(
   ]
   if (humanKeywords.some((k) => userLower.includes(k))) {
     return { needed: true, reason: 'user_request' }
-  }
-
-  // Muitas trocas sem resolver
-  if (turnCount >= 8) {
-    return { needed: true, reason: 'max_turns' }
   }
 
   return { needed: false, reason: null }
