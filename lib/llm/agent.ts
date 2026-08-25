@@ -302,6 +302,14 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     messages: (history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
   })
 
+  if (response.content[0]?.type !== 'text') {
+    console.error('Claude não retornou um bloco de texto', {
+      workspaceId,
+      conversationId: conversation.id,
+      stopReason: response.stop_reason,
+      contentTypes: response.content.map((b) => b.type),
+    })
+  }
   const rawMessage =
     response.content[0]?.type === 'text' ? response.content[0].text : 'Não consegui processar sua mensagem. Pode repetir?'
 
@@ -431,17 +439,48 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     .eq('id', workspaceId)
     .single()
 
-  // 9. Disjuntor: se o MESMO agendamento/cancelamento já falhou na resposta
-  // anterior e falhou de novo agora, repetir o pedido de confirmação apenas
-  // trava o paciente num loop (a IA tende a insistir com o mesmo texto
-  // indefinidamente quando o histórico já está cheio dessa mesma falha).
-  // Em vez de tentar de novo, escala pra um humano e pausa o bot.
   const lastAssistantContent = [...(history ?? [])].reverse().find((m) => m.role === 'assistant')?.content
-  const repeatedAutomationFailure =
-    (bookingFailed && lastAssistantContent === BOOKING_FAILED_MESSAGE) ||
-    (cancellationFailed && lastAssistantContent === CANCELLATION_FAILED_MESSAGE)
 
-  if (repeatedAutomationFailure) {
+  // 9. Detectar necessidade de handoff para atendimento humano
+  const handoffCheck = detectHandoffIntent(cleanedMessage, message)
+  const canAttemptHandoff =
+    handoffCheck.needed && botConfig.handoffNumber && workspace?.phone_number_id && workspace?.meta_token
+
+  // 10. Decidir a mensagem final para o paciente e se o handoff acontece de
+  // verdade. Se o agendamento/cancelamento que o Claude anunciou não bateu de
+  // fato no banco (bookingFailed/cancellationFailed), a resposta do Claude é
+  // descartada e substituída por uma mensagem honesta — nunca confirmamos ao
+  // paciente algo que não aconteceu de verdade.
+  let finalMessage: string
+  if (bookingFailed) {
+    finalMessage = BOOKING_FAILED_MESSAGE
+  } else if (cancellationFailed) {
+    finalMessage = CANCELLATION_FAILED_MESSAGE
+  } else {
+    finalMessage = cleanedMessage.replace('[HANDOFF]', '').trim()
+  }
+  let realHandoff = false
+
+  if (canAttemptHandoff) {
+    const handoffAvailable = await isHandoffAvailableNow(workspaceId).catch(() => true)
+    if (handoffAvailable) {
+      realHandoff = true
+      // A mensagem de transição + número são enviadas separadamente por executeHandoff
+    } else {
+      // Handoff pedido fora do horário de atendimento humano — o bot segue
+      // sozinho e avisa que a equipe humana vai responder assim que possível.
+      finalMessage = finalMessage ? `${finalMessage}\n\n${botConfig.outOfHoursMessage}` : botConfig.outOfHoursMessage
+    }
+  }
+
+  // 12. Disjuntor: se a resposta que estamos prestes a mandar é IDÊNTICA à
+  // última coisa que o próprio bot já disse nessa conversa, é sinal de loop —
+  // a IA tende a travar repetindo o mesmo texto quando o histórico já está
+  // cheio dessa mesma resposta, seja por uma falha de agendamento/
+  // cancelamento, seja por qualquer outro motivo (ex: a API não devolver um
+  // bloco de texto, ver o console.error acima). Em vez de mandar a mesma
+  // coisa de novo, escala pra um humano e pausa o bot.
+  if (finalMessage && !realHandoff && finalMessage === lastAssistantContent) {
     const escalationMessage = botConfig.handoffNumber
       ? `Desculpa, não estou conseguindo resolver isso sozinha. Vou te passar para a equipe de ${workspaceName}: ${botConfig.handoffNumber}`
       : 'Desculpa, não estou conseguindo resolver isso sozinha. Já avisei a equipe sobre sua solicitação — alguém vai te chamar em breve.'
@@ -471,39 +510,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     return
   }
 
-  // 10. Detectar necessidade de handoff para atendimento humano
-  const handoffCheck = detectHandoffIntent(cleanedMessage, message)
-  const canAttemptHandoff =
-    handoffCheck.needed && botConfig.handoffNumber && workspace?.phone_number_id && workspace?.meta_token
-
-  // 11. Decidir a mensagem final para o paciente e se o handoff acontece de
-  // verdade. Se o agendamento/cancelamento que o Claude anunciou não bateu de
-  // fato no banco (bookingFailed/cancellationFailed), a resposta do Claude é
-  // descartada e substituída por uma mensagem honesta — nunca confirmamos ao
-  // paciente algo que não aconteceu de verdade.
-  let finalMessage: string
-  if (bookingFailed) {
-    finalMessage = BOOKING_FAILED_MESSAGE
-  } else if (cancellationFailed) {
-    finalMessage = CANCELLATION_FAILED_MESSAGE
-  } else {
-    finalMessage = cleanedMessage.replace('[HANDOFF]', '').trim()
-  }
-  let realHandoff = false
-
-  if (canAttemptHandoff) {
-    const handoffAvailable = await isHandoffAvailableNow(workspaceId).catch(() => true)
-    if (handoffAvailable) {
-      realHandoff = true
-      // A mensagem de transição + número são enviadas separadamente por executeHandoff
-    } else {
-      // Handoff pedido fora do horário de atendimento humano — o bot segue
-      // sozinho e avisa que a equipe humana vai responder assim que possível.
-      finalMessage = finalMessage ? `${finalMessage}\n\n${botConfig.outOfHoursMessage}` : botConfig.outOfHoursMessage
-    }
-  }
-
-  // 12. Salvar e enviar a mensagem final (vazia só quando a resposta do
+  // 13. Salvar e enviar a mensagem final (vazia só quando a resposta do
   // Claude era só o marcador [HANDOFF], o que é normal num handoff real)
   if (finalMessage) {
     await supabase.from('messages').insert({
