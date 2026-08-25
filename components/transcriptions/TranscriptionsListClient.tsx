@@ -88,7 +88,8 @@ export function TranscriptionsListClient({ rows }: { rows: Row[] }) {
         {filtered.length === 0 ? (
           <p className="py-12 text-center text-sm text-gray-400">Nenhuma transcrição encontrada.</p>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-[var(--navy-06)] bg-[var(--navy-06)]/40 text-left text-xs text-gray-400">
                 <th className="px-5 py-3 font-normal">Paciente</th>
@@ -121,6 +122,7 @@ export function TranscriptionsListClient({ rows }: { rows: Row[] }) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>

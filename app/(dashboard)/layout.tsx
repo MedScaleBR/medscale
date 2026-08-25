@@ -31,7 +31,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           session={session}
           accounts={accounts}
         />
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-6">{children}</main>
       </div>
     </div>
   )

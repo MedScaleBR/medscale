@@ -34,7 +34,8 @@ export default async function AdminAccountsPage() {
         {!accounts || accounts.length === 0 ? (
           <p className="py-12 text-center text-sm text-gray-400">Nenhuma account cadastrada ainda.</p>
         ) : (
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[520px] text-sm">
             <thead>
               <tr className="border-b border-[var(--navy-06)] bg-[var(--navy-06)]/40 text-left text-xs text-gray-400">
                 <th className="px-5 py-3 font-normal">Nome</th>
@@ -63,6 +64,7 @@ export default async function AdminAccountsPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
     </div>
