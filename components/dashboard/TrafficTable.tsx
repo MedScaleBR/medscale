@@ -21,7 +21,8 @@ export function TrafficTable({ traffic }: { traffic: Record<string, TrafficChann
       {channels.length === 0 ? (
         <p className="py-8 text-center text-sm text-gray-400">Nenhuma campanha registrada este mês.</p>
       ) : (
-        <table className="w-full text-sm">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[560px] text-sm">
           <thead>
             <tr className="border-b border-[var(--navy-06)] text-left text-xs text-gray-400">
               <th className="pb-2 font-normal">Canal</th>
@@ -45,6 +46,7 @@ export function TrafficTable({ traffic }: { traffic: Record<string, TrafficChann
             ))}
           </tbody>
         </table>
+        </div>
       )}
     </div>
   )

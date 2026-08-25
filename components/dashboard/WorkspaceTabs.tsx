@@ -22,7 +22,7 @@ export function WorkspaceTabs({ workspaces, activeView }: WorkspaceTabsProps) {
   const tabs = [{ id: 'consolidated', label: 'Todas as unidades' }, ...workspaces.map((w) => ({ id: w.id, label: w.name }))]
 
   return (
-    <div className="flex w-fit gap-1 rounded-lg bg-[var(--navy-06)] p-1">
+    <div className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-lg bg-[var(--navy-06)] p-1">
       {tabs.map((tab) => (
         <button
           key={tab.id}
