@@ -295,23 +295,33 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     upcomingAppointments,
   })
 
-  const response = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5',
-    max_tokens: 1024,
-    system: systemPrompt,
-    messages: (history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content })),
-  })
+  const claudeMessages = (history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
 
-  if (response.content[0]?.type !== 'text') {
-    console.error('Claude não retornou um bloco de texto', {
-      workspaceId,
-      conversationId: conversation.id,
-      stopReason: response.stop_reason,
-      contentTypes: response.content.map((b) => b.type),
+  // Em raras ocasiões a Anthropic devolve stop_reason "end_turn" com content
+  // vazio — uma resposta "normal" que não gerou nenhum bloco de texto. Tenta
+  // de novo uma vez antes de cair no fallback genérico, já que é um
+  // comportamento anômalo e não algo específico da mensagem em si.
+  let responseText: string | null = null
+  for (let attempt = 1; attempt <= 2 && responseText === null; attempt++) {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 1024,
+      system: systemPrompt,
+      messages: claudeMessages,
     })
+
+    if (response.content[0]?.type === 'text' && response.content[0].text.trim()) {
+      responseText = response.content[0].text
+    } else {
+      console.error(`Claude não retornou um bloco de texto (tentativa ${attempt}/2)`, {
+        workspaceId,
+        conversationId: conversation.id,
+        stopReason: response.stop_reason,
+        contentTypes: response.content.map((b) => b.type),
+      })
+    }
   }
-  const rawMessage =
-    response.content[0]?.type === 'text' ? response.content[0].text : 'Não consegui processar sua mensagem. Pode repetir?'
+  const rawMessage = responseText ?? 'Não consegui processar sua mensagem. Pode repetir?'
 
   // As linhas de marcação (agendamento, cancelamento, nome do paciente) são
   // lidas pelo sistema e não devem ir ao paciente.
