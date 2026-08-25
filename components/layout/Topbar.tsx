@@ -41,10 +41,10 @@ export function Topbar({ userName, userEmail, avatarUrl, session, accounts }: To
     .toUpperCase()
 
   return (
-    <header className="flex h-16 items-center justify-between border-b border-[var(--navy-06)] bg-white px-6">
+    <header className="flex h-16 items-center border-b border-[var(--navy-06)] bg-white px-6">
       <MobileNav session={session} accounts={accounts} />
       <DropdownMenu>
-        <DropdownMenuTrigger className="flex items-center gap-3 rounded-lg px-2 py-1.5 outline-none hover:bg-[var(--navy-06)]">
+        <DropdownMenuTrigger className="ml-auto flex items-center gap-3 rounded-lg px-2 py-1.5 outline-none hover:bg-[var(--navy-06)]">
           <div className="text-right">
             <p className="text-sm font-medium text-gray-900">{userName}</p>
             <p className="text-xs text-gray-400">{userEmail}</p>

@@ -34,6 +34,8 @@ drop table if exists
   public.appointments,
   public.patients,
   public.profiles,
+  public.account_tasks,
+  public.account_notes,
   public.medscale_admins,
   public.invites,
   public.memberships,
@@ -170,6 +172,44 @@ create table public.profiles (
   last_workspace_id uuid references public.workspaces(id) on delete set null,
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now()
+);
+
+-- ============================================================
+-- 7A. CRM ADMIN (notas e tarefas de acompanhamento por account, uso
+--     exclusivo dos admins internos da MedScale — nunca exposto a membros
+--     de account)
+-- ============================================================
+
+-- Timeline de interações (ligação, e-mail, reunião, nota livre) registrada
+-- por um admin sobre uma account. Append-only por design — só create/delete,
+-- sem edição, pra manter a timeline como um log confiável.
+create table public.account_notes (
+  id          uuid default uuid_generate_v4() primary key,
+  account_id  uuid references public.accounts(id) on delete cascade not null,
+  type        text not null default 'note'
+              check (type in ('note','call','email','meeting')),
+  body        text not null,
+  created_by  uuid references auth.users(id) on delete set null,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now()
+);
+
+-- Tarefas/lembretes de follow-up (ex: "renovação em 30 dias"). account_id é
+-- opcional — uma tarefa pode não estar atrelada a nenhum cliente (ex: tarefa
+-- interna do time), por isso não tem "on delete cascade" implícito em nada
+-- além do cliente em si sendo removido.
+create table public.account_tasks (
+  id            uuid default uuid_generate_v4() primary key,
+  account_id    uuid references public.accounts(id) on delete cascade,
+  title         text not null,
+  description   text,
+  due_date      date,
+  assigned_to   uuid references auth.users(id) on delete set null,
+  status        text not null default 'pending' check (status in ('pending','done')),
+  created_by    uuid references auth.users(id) on delete set null,
+  completed_at  timestamptz,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
 );
 
 -- ============================================================
@@ -491,6 +531,9 @@ create index idx_transcriptions_appointment  on public.transcriptions(appointmen
 create index idx_transcriptions_patient      on public.transcriptions(patient_id);
 create index idx_transcriptions_status       on public.transcriptions(status);
 create index idx_transcriptions_archived_at  on public.transcriptions(archived_at);
+create index idx_account_notes_account       on public.account_notes(account_id, created_at desc);
+create index idx_account_tasks_account       on public.account_tasks(account_id, status);
+create index idx_account_tasks_assignee      on public.account_tasks(assigned_to, status, due_date);
 
 -- ============================================================
 -- 10. TRIGGERS updated_at
@@ -525,6 +568,14 @@ create trigger trg_google_tokens_updated_at
 
 create trigger trg_transcriptions_updated_at
   before update on public.transcriptions
+  for each row execute procedure public.handle_updated_at();
+
+create trigger trg_account_notes_updated_at
+  before update on public.account_notes
+  for each row execute procedure public.handle_updated_at();
+
+create trigger trg_account_tasks_updated_at
+  before update on public.account_tasks
   for each row execute procedure public.handle_updated_at();
 
 -- ============================================================
@@ -660,6 +711,8 @@ alter table public.webhook_logs           enable row level security;
 alter table public.handoff_logs           enable row level security;
 alter table public.handoff_hours          enable row level security;
 alter table public.transcriptions         enable row level security;
+alter table public.account_notes          enable row level security;
+alter table public.account_tasks          enable row level security;
 
 -- Accounts: membro lê o(s) próprio(s); admin do account edita
 create policy "accounts: members read" on public.accounts
@@ -758,6 +811,14 @@ create policy "handoff_hours: workspace members" on public.handoff_hours
 
 create policy "transcriptions: workspace members" on public.transcriptions
   for all using (workspace_id = any(public.my_workspace_ids()));
+
+-- account_notes/account_tasks: dado interno de CRM, uso exclusivo dos admins
+-- MedScale — sem policy tenant-facing, nunca exposto a membros de account.
+create policy "account_notes: medscale admin full" on public.account_notes
+  for all using (public.is_medscale_admin());
+
+create policy "account_tasks: medscale admin full" on public.account_tasks
+  for all using (public.is_medscale_admin());
 
 -- Necessário para a subscription Realtime da página de detalhe de
 -- transcrição (RLS habilitado não é suficiente, a tabela precisa estar na

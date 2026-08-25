@@ -33,6 +33,37 @@ export function WorkspacesClient({ initialWorkspaces, canManage, apiBase = '/api
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [cepLoading, setCepLoading] = useState(false)
+  const [cepError, setCepError] = useState(false)
+
+  const handleCepChange = async (raw: string) => {
+    const digits = raw.replace(/\D/g, '').slice(0, 8)
+    const masked = digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits
+    setForm((f) => ({ ...f, zip_code: masked }))
+    setCepError(false)
+
+    if (digits.length !== 8) return
+
+    setCepLoading(true)
+    try {
+      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
+      const data = await res.json()
+      if (data.erro) {
+        setCepError(true)
+        return
+      }
+      setForm((f) => ({
+        ...f,
+        address: [data.logradouro, data.bairro].filter(Boolean).join(', '),
+        city: data.localidade || f.city,
+        state: data.uf || f.state,
+      }))
+    } catch {
+      setCepError(true)
+    } finally {
+      setCepLoading(false)
+    }
+  }
 
   const handleCreate = async () => {
     if (!form.name) return
@@ -116,6 +147,19 @@ export function WorkspacesClient({ initialWorkspaces, canManage, apiBase = '/api
               <Input id="name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
             </div>
             <div>
+              <Label htmlFor="zip_code">CEP</Label>
+              <Input
+                id="zip_code"
+                value={form.zip_code}
+                onChange={(e) => handleCepChange(e.target.value)}
+                placeholder="00000-000"
+                inputMode="numeric"
+                maxLength={9}
+              />
+              {cepLoading && <p className="mt-1 text-xs text-gray-400">Buscando endereço...</p>}
+              {cepError && <p className="mt-1 text-xs text-red-500">CEP não encontrado</p>}
+            </div>
+            <div>
               <Label htmlFor="address">Endereço</Label>
               <Input id="address" value={form.address} onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))} />
             </div>
@@ -128,10 +172,6 @@ export function WorkspacesClient({ initialWorkspaces, canManage, apiBase = '/api
                 <Label htmlFor="state">Estado</Label>
                 <Input id="state" value={form.state} onChange={(e) => setForm((f) => ({ ...f, state: e.target.value }))} />
               </div>
-            </div>
-            <div>
-              <Label htmlFor="zip_code">CEP</Label>
-              <Input id="zip_code" value={form.zip_code} onChange={(e) => setForm((f) => ({ ...f, zip_code: e.target.value }))} />
             </div>
           </div>
           <DialogFooter>
