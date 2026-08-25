@@ -16,9 +16,25 @@ type RecordingButtonProps = {
 type RecordingState = 'idle' | 'recording' | 'uploading'
 
 function pickMimeType() {
-  const preferred = 'audio/webm;codecs=opus'
-  if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(preferred)) return preferred
-  return 'audio/webm'
+  const candidates = [
+    'audio/webm;codecs=opus',
+    'audio/webm',
+    'audio/mp4',
+    'audio/ogg;codecs=opus',
+    'audio/ogg',
+  ]
+  for (const type of candidates) {
+    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(type)) return type
+  }
+  return ''
+}
+
+function isRecordingSupported() {
+  return (
+    typeof window !== 'undefined' &&
+    !!navigator.mediaDevices?.getUserMedia &&
+    typeof MediaRecorder !== 'undefined'
+  )
 }
 
 function formatDuration(seconds: number) {
@@ -33,6 +49,7 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
   const [consentOpen, setConsentOpen] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [isSupported, setIsSupported] = useState(true)
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -41,6 +58,7 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
+    setIsSupported(isRecordingSupported())
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
       streamRef.current?.getTracks().forEach((t) => t.stop())
@@ -54,7 +72,7 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
       streamRef.current = stream
 
       const mimeType = pickMimeType()
-      const recorder = new MediaRecorder(stream, { mimeType })
+      const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {})
       chunksRef.current = []
 
       recorder.ondataavailable = (e) => {
@@ -69,8 +87,20 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
         setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000))
       }, 1000)
       setState('recording')
-    } catch {
-      setError('Não foi possível acessar o microfone. Verifique as permissões do navegador.')
+    } catch (err) {
+      const error = err as DOMException
+      let message = 'Não foi possível acessar o microfone.'
+
+      if (error?.name === 'NotAllowedError') {
+        message = 'Permissão de microfone negada. Verifique as configurações do navegador e tente novamente.'
+      } else if (error?.name === 'NotFoundError') {
+        message = 'Nenhum microfone encontrado neste dispositivo.'
+      } else if (error?.name === 'NotSupportedError' || error?.name === 'SecurityError') {
+        message = 'Gravação de áudio não suportada. Verifique se o site está acessado via HTTPS.'
+      }
+
+      console.error('[RecordingButton] getUserMedia error:', error?.name, error?.message)
+      setError(message)
     }
   }
 
@@ -141,6 +171,14 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
       setError(err instanceof Error ? err.message : 'Falha ao enviar a gravação')
       setState('idle')
     }
+  }
+
+  if (!isSupported) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Gravação de áudio não disponível neste navegador.
+      </p>
+    )
   }
 
   if (state === 'recording') {
