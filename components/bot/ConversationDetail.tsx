@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
+import { Archive, ArchiveRestore } from 'lucide-react'
 import type { MessageRole, ConversationStatus } from '@/types/database'
 
 export interface DetailMessage {
@@ -19,10 +20,12 @@ interface ConversationDetailProps {
   patientName: string | null
   status: ConversationStatus
   botPaused: boolean
+  archivedAt: string | null
   messages: DetailMessage[]
   onSend: (message: string) => Promise<void>
   onResolve: () => Promise<void>
   onReactivateBot: () => Promise<void>
+  onToggleArchived: (archived: boolean) => Promise<void>
 }
 
 export function ConversationDetail({
@@ -31,14 +34,17 @@ export function ConversationDetail({
   patientName,
   status,
   botPaused,
+  archivedAt,
   messages,
   onSend,
   onResolve,
   onReactivateBot,
+  onToggleArchived,
 }: ConversationDetailProps) {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [reactivating, setReactivating] = useState(false)
+  const [archiving, setArchiving] = useState(false)
 
   const handleSend = async () => {
     if (!draft.trim()) return
@@ -60,6 +66,15 @@ export function ConversationDetail({
     }
   }
 
+  const handleToggleArchived = async () => {
+    setArchiving(true)
+    try {
+      await onToggleArchived(!archivedAt)
+    } finally {
+      setArchiving(false)
+    }
+  }
+
   return (
     <div key={conversationId} className="flex h-full flex-col">
       <div className="flex items-center justify-between border-b border-[var(--navy-06)] px-5 py-4">
@@ -73,8 +88,20 @@ export function ConversationDetail({
               Marcar como resolvida
             </Button>
           )}
+          <Button variant="outline" size="sm" onClick={handleToggleArchived} disabled={archiving} className="gap-1.5">
+            {archivedAt ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
+            {archivedAt ? 'Desarquivar' : 'Arquivar'}
+          </Button>
         </div>
       </div>
+
+      {archivedAt && (
+        <div className="border-b border-gray-100 bg-gray-50 px-5 py-2.5">
+          <p className="text-xs text-gray-500">
+            Conversa arquivada — some da caixa de entrada, mas volta automaticamente se o paciente mandar outra mensagem.
+          </p>
+        </div>
+      )}
 
       {botPaused && (
         <div className="flex items-center justify-between gap-3 border-b border-amber-100 bg-amber-50 px-5 py-2.5">

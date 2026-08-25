@@ -256,6 +256,7 @@ create table public.transcriptions (
   retry_count           int not null default 0,
   signed_at             timestamptz,
   signed_by             uuid references auth.users(id) on delete set null,
+  archived_at           timestamptz,
   created_at            timestamptz not null default now(),
   updated_at            timestamptz not null default now()
 );
@@ -277,6 +278,7 @@ create table public.conversations (
   appointment_id  uuid references public.appointments(id) on delete set null,
   started_at      timestamptz not null default now(),
   resolved_at     timestamptz,
+  archived_at     timestamptz,
   summary         text
 );
 
@@ -474,6 +476,7 @@ create index idx_patients_account            on public.patients(account_id, phon
 create index idx_appointments_workspace      on public.appointments(workspace_id, scheduled_at);
 create index idx_appointments_doctor         on public.appointments(doctor_id, scheduled_at);
 create index idx_conversations_workspace     on public.conversations(workspace_id, status);
+create index idx_conversations_archived_at   on public.conversations(archived_at);
 create index idx_messages_conversation       on public.messages(conversation_id, sent_at);
 create index idx_availability_workspace      on public.availability_rules(workspace_id, day_of_week);
 create index idx_availability_exc_workspace  on public.availability_exceptions(workspace_id, date);
@@ -487,6 +490,7 @@ create index idx_transcriptions_workspace    on public.transcriptions(workspace_
 create index idx_transcriptions_appointment  on public.transcriptions(appointment_id);
 create index idx_transcriptions_patient      on public.transcriptions(patient_id);
 create index idx_transcriptions_status       on public.transcriptions(status);
+create index idx_transcriptions_archived_at  on public.transcriptions(archived_at);
 
 -- ============================================================
 -- 10. TRIGGERS updated_at

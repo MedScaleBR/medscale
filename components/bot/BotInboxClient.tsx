@@ -66,6 +66,21 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
     }
   }
 
+  const handleToggleArchived = async (archived: boolean) => {
+    if (!selected) return
+    const res = await fetch(`/api/bot/conversations/${selected.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ archived }),
+    })
+    if (res.ok) {
+      const data = await res.json()
+      setConversations((prev) =>
+        prev.map((c) => (c.id === selected.id ? { ...c, archived_at: data.archived_at } : c))
+      )
+    }
+  }
+
   return (
     <div className="grid h-[calc(100vh-160px)] grid-cols-1 gap-0 overflow-hidden rounded-xl border border-[var(--navy-06)] bg-white shadow-[var(--shadow-sm)] md:grid-cols-[280px_1fr]">
       <div className="min-h-0 overflow-hidden border-r border-[var(--navy-06)]">
@@ -79,10 +94,12 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
             patientName={selected.patient_name}
             status={selected.status}
             botPaused={selected.bot_paused}
+            archivedAt={selected.archived_at}
             messages={selected.messages}
             onSend={handleSend}
             onResolve={handleResolve}
             onReactivateBot={handleReactivateBot}
+            onToggleArchived={handleToggleArchived}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-gray-400">

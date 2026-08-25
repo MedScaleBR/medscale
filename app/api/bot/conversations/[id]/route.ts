@@ -10,10 +10,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { session } = result
 
   const supabase = await createClient()
-  const { status, bot_paused } = await req.json()
+  const { status, bot_paused, archived } = await req.json()
 
-  if (status === undefined && bot_paused === undefined) {
-    return NextResponse.json({ error: 'status ou bot_paused são obrigatórios' }, { status: 400 })
+  if (status === undefined && bot_paused === undefined && archived === undefined) {
+    return NextResponse.json({ error: 'status, bot_paused ou archived são obrigatórios' }, { status: 400 })
   }
   if (status !== undefined && !['open', 'resolved', 'handoff'].includes(status)) {
     return NextResponse.json({ error: 'status inválido' }, { status: 400 })
@@ -21,14 +21,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (bot_paused !== undefined && typeof bot_paused !== 'boolean') {
     return NextResponse.json({ error: 'bot_paused inválido' }, { status: 400 })
   }
+  if (archived !== undefined && typeof archived !== 'boolean') {
+    return NextResponse.json({ error: 'archived inválido' }, { status: 400 })
+  }
 
-  const updates: { status?: ConversationStatus; resolved_at?: string | null; bot_paused?: boolean } = {}
+  const updates: {
+    status?: ConversationStatus
+    resolved_at?: string | null
+    bot_paused?: boolean
+    archived_at?: string | null
+  } = {}
   if (status !== undefined) {
     updates.status = status as ConversationStatus
     updates.resolved_at = status === 'resolved' ? new Date().toISOString() : null
   }
   if (bot_paused !== undefined) {
     updates.bot_paused = bot_paused
+  }
+  if (archived !== undefined) {
+    updates.archived_at = archived ? new Date().toISOString() : null
   }
 
   const { data, error } = await supabase

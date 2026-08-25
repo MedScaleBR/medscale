@@ -16,7 +16,7 @@ export default async function TranscricoesPage() {
 
   const { data: transcriptionsRaw } = await supabase
     .from('transcriptions')
-    .select('id, status, created_at, duration_seconds, recorded_by, patient:patients(full_name)')
+    .select('id, status, created_at, duration_seconds, recorded_by, archived_at, patient:patients(full_name)')
     .eq('workspace_id', session.workspaceId)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -38,6 +38,7 @@ export default async function TranscricoesPage() {
     durationSeconds: t.duration_seconds,
     patientName: (t.patient as unknown as { full_name: string } | null)?.full_name ?? '—',
     doctorName: doctorNameById.get(t.recorded_by) ?? '—',
+    archivedAt: t.archived_at,
   }))
 
   return (
