@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { createEvent } from '@/lib/google/calendar'
+import { createEvent, cancelEvent } from '@/lib/google/calendar'
 import { isGoogleConnected } from '@/lib/google/auth'
+import { reconcileCalendar } from '@/lib/google/reconcile'
 import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
 
 export async function GET(req: NextRequest) {
@@ -11,18 +12,14 @@ export async function GET(req: NextRequest) {
   const moduleCheck = requireModule(session, 'agenda')
   if (moduleCheck) return moduleCheck
 
-  const supabase = await createClient()
-  const from = req.nextUrl.searchParams.get('from')
-  const to = req.nextUrl.searchParams.get('to')
+  const fromParam = req.nextUrl.searchParams.get('from')
+  const toParam = req.nextUrl.searchParams.get('to')
+  const now = new Date()
+  const from = fromParam ? new Date(fromParam) : new Date(now.getFullYear(), now.getMonth() - 1, 1)
+  const to = toParam ? new Date(toParam) : new Date(now.getFullYear(), now.getMonth() + 2, 0)
 
-  let query = supabase.from('appointments').select('*').eq('workspace_id', session.workspaceId).order('scheduled_at')
-
-  if (from) query = query.gte('scheduled_at', from)
-  if (to) query = query.lte('scheduled_at', to)
-
-  const { data, error } = await query
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+  const reconciled = await reconcileCalendar(session.workspaceId, from, to)
+  return NextResponse.json(reconciled)
 }
 
 export async function POST(req: NextRequest) {
@@ -41,6 +38,38 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Google Calendar é a fonte de verdade: se o workspace está conectado, o
+  // evento precisa existir lá antes de gravarmos qualquer coisa no Supabase —
+  // sem isso, uma falha do Google ficava em silêncio e o /agenda mostrava uma
+  // consulta que não existia de verdade na agenda do médico.
+  const { connected, email } = await isGoogleConnected(session.workspaceId)
+  let gcalEventId: string | null = null
+
+  if (connected && email) {
+    try {
+      const { data: workspace } = await supabase.from('workspaces').select('name').eq('id', session.workspaceId).single()
+      const gcalEvent = await createEvent({
+        workspaceId: session.workspaceId,
+        patientName: body.patient_name,
+        patientEmail: body.patient_email,
+        patientPhone: body.patient_phone,
+        appointmentType: body.type ?? 'consulta',
+        startTime: new Date(body.scheduled_at),
+        durationMin: body.duration_min ?? 30,
+        notes: body.notes,
+        workspaceName: workspace?.name ?? 'MedScale',
+        doctorEmail: email,
+      })
+      gcalEventId = gcalEvent.id ?? null
+    } catch (gcalErr) {
+      console.error('Google Calendar create failed:', gcalErr)
+      return NextResponse.json(
+        { error: 'Não foi possível criar o evento no Google Calendar. A consulta não foi salva.' },
+        { status: 502 }
+      )
+    }
+  }
+
   const { data, error } = await supabase
     .from('appointments')
     .insert({
@@ -57,39 +86,23 @@ export async function POST(req: NextRequest) {
       status: body.status ?? 'agendado',
       notes: body.notes ?? null,
       price: body.price ?? null,
+      gcal_event_id: gcalEventId,
     })
     .select()
     .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-
-  // Sincroniza com o Google Calendar quando conectado — best-effort, não
-  // bloqueia a criação do agendamento no CRM se o Google falhar.
-  const { connected, email } = await isGoogleConnected(session.workspaceId)
-  if (connected && email) {
-    try {
-      const { data: workspace } = await supabase.from('workspaces').select('name').eq('id', session.workspaceId).single()
-
-      const gcalEvent = await createEvent({
-        workspaceId: session.workspaceId,
-        patientName: body.patient_name,
-        patientEmail: body.patient_email,
-        patientPhone: body.patient_phone,
-        appointmentType: body.type ?? 'consulta',
-        startTime: new Date(body.scheduled_at),
-        durationMin: body.duration_min ?? 30,
-        notes: body.notes,
-        workspaceName: workspace?.name ?? 'MedScale',
-        doctorEmail: email,
-      })
-
-      if (gcalEvent.id) {
-        await supabase.from('appointments').update({ gcal_event_id: gcalEvent.id }).eq('id', data.id)
-        data.gcal_event_id = gcalEvent.id
+  if (error) {
+    // Google já aceitou o evento mas o Supabase falhou — desfaz no Google pra
+    // não deixar um evento órfão que o próximo reconcile reimportaria sem
+    // nenhum dado de CRM por trás.
+    if (gcalEventId) {
+      try {
+        await cancelEvent(session.workspaceId, gcalEventId)
+      } catch (cleanupErr) {
+        console.error('Google Calendar cleanup failed after Supabase insert error:', cleanupErr)
       }
-    } catch (gcalErr) {
-      console.error('Google Calendar sync failed:', gcalErr)
     }
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
   return NextResponse.json(data, { status: 201 })
