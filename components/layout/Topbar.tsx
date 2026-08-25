@@ -12,14 +12,18 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { LogOut, Settings } from 'lucide-react'
 import Link from 'next/link'
+import { MobileNav } from './MobileNav'
+import type { ActiveSession, AccountSummary } from '@/lib/session/context'
 
 interface TopbarProps {
   userName: string
   userEmail: string
   avatarUrl?: string | null
+  session: ActiveSession
+  accounts: AccountSummary[]
 }
 
-export function Topbar({ userName, userEmail, avatarUrl }: TopbarProps) {
+export function Topbar({ userName, userEmail, avatarUrl, session, accounts }: TopbarProps) {
   const router = useRouter()
 
   const handleLogout = async () => {
@@ -38,7 +42,7 @@ export function Topbar({ userName, userEmail, avatarUrl }: TopbarProps) {
 
   return (
     <header className="flex h-16 items-center justify-between border-b border-[var(--navy-06)] bg-white px-6">
-      <div />
+      <MobileNav session={session} accounts={accounts} />
       <DropdownMenu>
         <DropdownMenuTrigger className="flex items-center gap-3 rounded-lg px-2 py-1.5 outline-none hover:bg-[var(--navy-06)]">
           <div className="text-right">
