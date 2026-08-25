@@ -33,6 +33,8 @@ export type TranscriptionStatus =
   | 'signed'
   | 'error'
 export type TranscriptionSource = 'system' | 'whatsapp'
+export type AccountNoteType = 'note' | 'call' | 'email' | 'meeting'
+export type AccountTaskStatus = 'pending' | 'done'
 
 // Módulos controláveis por account/membership. dashboard, patients e
 // settings são sempre tratados como ativos pelo app (ver lib/session/server.ts).
@@ -155,6 +157,52 @@ export interface Database {
         Insert: { user_id: string; created_at?: string }
         Update: Partial<{ user_id: string; created_at: string }>
         Relationships: []
+      }
+      account_notes: {
+        Row: {
+          id: string
+          account_id: string
+          type: AccountNoteType
+          body: string
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['account_notes']['Row']> & { account_id: string; body: string }
+        Update: Partial<Database['public']['Tables']['account_notes']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'account_notes_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      account_tasks: {
+        Row: {
+          id: string
+          account_id: string | null
+          title: string
+          description: string | null
+          due_date: string | null
+          assigned_to: string | null
+          status: AccountTaskStatus
+          created_by: string | null
+          completed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['account_tasks']['Row']> & { title: string }
+        Update: Partial<Database['public']['Tables']['account_tasks']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'account_tasks_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+        ]
       }
       profiles: {
         Row: {
