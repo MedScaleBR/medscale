@@ -302,19 +302,135 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     patient.full_name = patientName
   }
 
+  // 8. Executar agendamento/cancelamento confirmados pela IA ANTES de montar a
+  // resposta — se o Claude disser "cancelei" ou "confirmei" mas a operação
+  // falhar no banco (ex: horário ocupado nesse meio tempo, consulta que já não
+  // bate mais com o registro real), o paciente nunca pode receber uma
+  // confirmação falsa; a resposta é substituída por uma correção honesta.
+  let bookingFailed = false
+  let cancellationFailed = false
+
+  const confirmMatch = rawMessage.match(CONFIRMATION_MARKER)
+  if (confirmMatch) {
+    const scheduledAt = new Date(confirmMatch[1])
+    const durationMin = 30
+
+    if (!Number.isNaN(scheduledAt.getTime())) {
+      // Revalida contra a disponibilidade real — o horário pode ter sido
+      // ocupado entre o cálculo dos slots (passo 6) e a confirmação do paciente.
+      const stillAvailable = await isSlotAvailable(workspaceId, scheduledAt, durationMin).catch(() => true)
+
+      if (!stillAvailable) {
+        console.warn(`Slot ${confirmMatch[1]} não está mais disponível para workspace ${workspaceId} — agendamento não criado.`)
+        bookingFailed = true
+      } else {
+        const { data: appt } = await supabase
+          .from('appointments')
+          .insert({
+            workspace_id: workspaceId,
+            account_id: accountId,
+            patient_id: patient?.id,
+            patient_name: patient?.full_name ?? 'Paciente',
+            patient_phone: patientPhone,
+            scheduled_at: scheduledAt.toISOString(),
+            duration_min: durationMin,
+            source: 'bot',
+            status: 'agendado',
+          })
+          .select()
+          .single()
+
+        if (appt) {
+          await supabase.from('conversations').update({ appointment_id: appt.id }).eq('id', conversation.id)
+
+          const { connected, email } = await isGoogleConnected(workspaceId)
+          if (connected && email) {
+            try {
+              const gcalEvent = await createEvent({
+                workspaceId,
+                patientName: appt.patient_name,
+                patientPhone: appt.patient_phone,
+                appointmentType: appt.type,
+                startTime: scheduledAt,
+                durationMin,
+                workspaceName,
+                doctorEmail: email,
+              })
+              if (gcalEvent.id) {
+                await supabase.from('appointments').update({ gcal_event_id: gcalEvent.id }).eq('id', appt.id)
+              }
+            } catch (gcalErr) {
+              console.error('Google Calendar sync failed (bot booking):', gcalErr)
+            }
+          }
+        } else {
+          bookingFailed = true
+        }
+      }
+    }
+  }
+
+  // Detectar cancelamento confirmado e atualizar o registro (status + Google
+  // Calendar) — sem isso a consulta continuava "agendado" no banco mesmo
+  // depois da Maria dizer ao paciente que tinha cancelado.
+  const cancelMatch = rawMessage.match(CANCELLATION_MARKER)
+  if (cancelMatch && patient) {
+    const cancelledAt = new Date(cancelMatch[1])
+
+    if (!Number.isNaN(cancelledAt.getTime())) {
+      const { data: apptToCancel } = await supabase
+        .from('appointments')
+        .select('id, gcal_event_id')
+        .eq('workspace_id', workspaceId)
+        .eq('patient_id', patient.id)
+        .eq('scheduled_at', cancelledAt.toISOString())
+        .in('status', ['agendado', 'confirmado'])
+        .maybeSingle()
+
+      if (apptToCancel) {
+        await supabase.from('appointments').update({ status: 'cancelado' }).eq('id', apptToCancel.id)
+
+        if (apptToCancel.gcal_event_id) {
+          try {
+            await cancelEvent(workspaceId, apptToCancel.gcal_event_id)
+          } catch (gcalErr) {
+            console.error('Google Calendar cancel failed (bot cancellation):', gcalErr)
+          }
+        }
+      } else {
+        console.warn(
+          `Cancelamento ${cancelMatch[1]} não encontrou consulta correspondente para paciente ${patient.id} no workspace ${workspaceId}.`
+        )
+        cancellationFailed = true
+      }
+    }
+  }
+
   const { data: workspace } = await supabase
     .from('workspaces')
     .select('phone_number_id, meta_token')
     .eq('id', workspaceId)
     .single()
 
-  // 8. Detectar necessidade de handoff para atendimento humano
+  // 9. Detectar necessidade de handoff para atendimento humano
   const handoffCheck = detectHandoffIntent(cleanedMessage, message)
   const canAttemptHandoff =
     handoffCheck.needed && botConfig.handoffNumber && workspace?.phone_number_id && workspace?.meta_token
 
-  // 9. Decidir a mensagem final para o paciente e se o handoff acontece de verdade
-  let finalMessage = cleanedMessage.replace('[HANDOFF]', '').trim()
+  // 10. Decidir a mensagem final para o paciente e se o handoff acontece de
+  // verdade. Se o agendamento/cancelamento que o Claude anunciou não bateu de
+  // fato no banco (bookingFailed/cancellationFailed), a resposta do Claude é
+  // descartada e substituída por uma mensagem honesta — nunca confirmamos ao
+  // paciente algo que não aconteceu de verdade.
+  let finalMessage: string
+  if (bookingFailed) {
+    finalMessage = 'Poxa, esse horário acabou de ficar indisponível. Pode escolher outro horário entre os que te passei, por favor?'
+  } else if (cancellationFailed) {
+    finalMessage =
+      'Não encontrei essa consulta no sistema para cancelar agora. Pode confirmar comigo a data e o horário certos? Se preferir, chamo alguém da equipe para te ajudar.'
+  } else {
+    finalMessage = cleanedMessage.replace('[HANDOFF]', '').trim()
+  }
   let realHandoff = false
 
   if (canAttemptHandoff) {
@@ -329,7 +445,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     }
   }
 
-  // 10. Salvar e enviar a mensagem final (vazia só quando a resposta do
+  // 11. Salvar e enviar a mensagem final (vazia só quando a resposta do
   // Claude era só o marcador [HANDOFF], o que é normal num handoff real)
   if (finalMessage) {
     await supabase.from('messages').insert({
@@ -375,96 +491,4 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     }
   }
 
-  // 11. Detectar confirmação de agendamento e criar registro
-  const match = rawMessage.match(CONFIRMATION_MARKER)
-  if (match) {
-    const scheduledAt = new Date(match[1])
-    const durationMin = 30
-
-    if (!Number.isNaN(scheduledAt.getTime())) {
-      // Revalida contra a disponibilidade real — o horário pode ter sido
-      // ocupado entre o cálculo dos slots (passo 6) e a confirmação do paciente.
-      const stillAvailable = await isSlotAvailable(workspaceId, scheduledAt, durationMin).catch(() => true)
-
-      if (!stillAvailable) {
-        console.warn(`Slot ${match[1]} não está mais disponível para workspace ${workspaceId} — agendamento não criado.`)
-      } else {
-        const { data: appt } = await supabase
-          .from('appointments')
-          .insert({
-            workspace_id: workspaceId,
-            account_id: accountId,
-            patient_id: patient?.id,
-            patient_name: patient?.full_name ?? 'Paciente',
-            patient_phone: patientPhone,
-            scheduled_at: scheduledAt.toISOString(),
-            duration_min: durationMin,
-            source: 'bot',
-            status: 'agendado',
-          })
-          .select()
-          .single()
-
-        if (appt) {
-          await supabase.from('conversations').update({ appointment_id: appt.id }).eq('id', conversation.id)
-
-          const { connected, email } = await isGoogleConnected(workspaceId)
-          if (connected && email) {
-            try {
-              const gcalEvent = await createEvent({
-                workspaceId,
-                patientName: appt.patient_name,
-                patientPhone: appt.patient_phone,
-                appointmentType: appt.type,
-                startTime: scheduledAt,
-                durationMin,
-                workspaceName,
-                doctorEmail: email,
-              })
-              if (gcalEvent.id) {
-                await supabase.from('appointments').update({ gcal_event_id: gcalEvent.id }).eq('id', appt.id)
-              }
-            } catch (gcalErr) {
-              console.error('Google Calendar sync failed (bot booking):', gcalErr)
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // 12. Detectar cancelamento confirmado e atualizar o registro (status +
-  // Google Calendar) — sem isso a consulta continuava "agendado" no banco
-  // mesmo depois da Maria dizer ao paciente que tinha cancelado.
-  const cancelMatch = rawMessage.match(CANCELLATION_MARKER)
-  if (cancelMatch && patient) {
-    const cancelledAt = new Date(cancelMatch[1])
-
-    if (!Number.isNaN(cancelledAt.getTime())) {
-      const { data: apptToCancel } = await supabase
-        .from('appointments')
-        .select('id, gcal_event_id')
-        .eq('workspace_id', workspaceId)
-        .eq('patient_id', patient.id)
-        .eq('scheduled_at', cancelledAt.toISOString())
-        .in('status', ['agendado', 'confirmado'])
-        .maybeSingle()
-
-      if (apptToCancel) {
-        await supabase.from('appointments').update({ status: 'cancelado' }).eq('id', apptToCancel.id)
-
-        if (apptToCancel.gcal_event_id) {
-          try {
-            await cancelEvent(workspaceId, apptToCancel.gcal_event_id)
-          } catch (gcalErr) {
-            console.error('Google Calendar cancel failed (bot cancellation):', gcalErr)
-          }
-        }
-      } else {
-        console.warn(
-          `Cancelamento ${cancelMatch[1]} não encontrou consulta correspondente para paciente ${patient.id} no workspace ${workspaceId}.`
-        )
-      }
-    }
-  }
 }

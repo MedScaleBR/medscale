@@ -67,8 +67,16 @@ export async function POST(req: NextRequest) {
   const from = message.from // telefone do paciente
   const text = message.type === 'text' ? message.text.body : null
 
-  // Log do webhook para debugging — associado à workspace quando identificável
-  await supabase.from('webhook_logs').insert({ workspace_id: workspace?.id ?? null, payload: body })
+  // Log do webhook para debugging — associado à workspace quando identificável.
+  // Guardamos o id da linha para poder gravar o erro nela especificamente
+  // depois (ver abaixo) — atualizar "a linha mais recente da workspace" era
+  // uma corrida: outra mensagem podia chegar antes do catch rodar e o erro
+  // acabava gravado na linha errada.
+  const { data: webhookLog } = await supabase
+    .from('webhook_logs')
+    .insert({ workspace_id: workspace?.id ?? null, payload: body })
+    .select('id')
+    .single()
 
   if (!workspace) {
     return NextResponse.json({ status: 'workspace_not_found' })
@@ -87,12 +95,13 @@ export async function POST(req: NextRequest) {
         whatsappMessageId: message.id,
       }).catch(async (err) => {
         console.error('processIncomingMessage failed', err)
-        await supabase
-          .from('webhook_logs')
-          .update({ error: String(err) })
-          .eq('workspace_id', workspace.id)
-          .order('received_at', { ascending: false })
-          .limit(1)
+        if (webhookLog) {
+          const { error: updateError } = await supabase
+            .from('webhook_logs')
+            .update({ error: String(err) })
+            .eq('id', webhookLog.id)
+          if (updateError) console.error('failed to persist webhook_logs.error', updateError)
+        }
       })
     )
   } else {
