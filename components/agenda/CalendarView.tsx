@@ -8,8 +8,13 @@ import 'react-big-calendar/lib/css/react-big-calendar.css'
 import './calendar-overrides.css'
 import { AppointmentModal, type AppointmentFormValues } from './AppointmentModal'
 import type { Database } from '@/types/database'
+import type { BusyBlock } from '@/lib/google/reconcile'
 
 type Appointment = Database['public']['Tables']['appointments']['Row']
+
+type CalEvent =
+  | { kind: 'appointment'; id: string; title: string; start: Date; end: Date; resource: Appointment }
+  | { kind: 'busy'; id: string; title: string; start: Date; end: Date; resource: BusyBlock }
 
 const locales = { 'pt-BR': ptBR }
 const localizer = dateFnsLocalizer({
@@ -41,29 +46,37 @@ function toDatetimeLocal(date: Date) {
 
 interface CalendarViewProps {
   appointments: Appointment[]
+  busyBlocks: BusyBlock[]
   onCreate: (values: AppointmentFormValues) => Promise<void>
   onUpdate: (id: string, values: AppointmentFormValues) => Promise<void>
   onDelete: (id: string) => Promise<void>
   showTranscriptions?: boolean
 }
 
-export function CalendarView({ appointments, onCreate, onUpdate, onDelete, showTranscriptions }: CalendarViewProps) {
+export function CalendarView({ appointments, busyBlocks, onCreate, onUpdate, onDelete, showTranscriptions }: CalendarViewProps) {
   const [view, setView] = useState<View>('week')
   const [date, setDate] = useState(new Date())
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<AppointmentFormValues | undefined>(undefined)
 
-  const events = useMemo(
-    () =>
-      appointments
-        .filter((a) => a.status !== 'cancelado')
-        .map((a) => {
-          const start = new Date(a.scheduled_at)
-          const end = new Date(start.getTime() + a.duration_min * 60_000)
-          return { id: a.id, title: a.patient_name, start, end, resource: a }
-        }),
-    [appointments]
-  )
+  const events = useMemo<CalEvent[]>(() => {
+    const apptEvents: CalEvent[] = appointments
+      .filter((a) => a.status !== 'cancelado')
+      .map((a) => {
+        const start = new Date(a.scheduled_at)
+        const end = new Date(start.getTime() + a.duration_min * 60_000)
+        return { kind: 'appointment', id: a.id, title: a.patient_name, start, end, resource: a }
+      })
+    const busyEvents: CalEvent[] = busyBlocks.map((b, i) => ({
+      kind: 'busy',
+      id: `busy-${i}`,
+      title: b.summary,
+      start: new Date(b.start),
+      end: new Date(b.end),
+      resource: b,
+    }))
+    return [...apptEvents, ...busyEvents]
+  }, [appointments, busyBlocks])
 
   const handleSelectSlot = useCallback((slot: SlotInfo) => {
     setEditing({
@@ -80,7 +93,9 @@ export function CalendarView({ appointments, onCreate, onUpdate, onDelete, showT
   }, [])
 
   const handleSelectEvent = useCallback((event: object) => {
-    const a = (event as { resource: Appointment }).resource
+    const e = event as CalEvent
+    if (e.kind !== 'appointment') return // bloqueio do Google — só visual, não editável
+    const a = e.resource
     setEditing({
       id: a.id,
       patient_id: a.patient_id,
@@ -122,7 +137,21 @@ export function CalendarView({ appointments, onCreate, onUpdate, onDelete, showT
         messages={MESSAGES}
         culture="pt-BR"
         eventPropGetter={(event) => {
-          const a = (event as { resource: Appointment }).resource
+          const e = event as CalEvent
+          if (e.kind === 'busy') {
+            return {
+              style: {
+                backgroundColor: 'var(--navy-06)',
+                color: 'var(--navy)',
+                border: 'none',
+                borderRadius: 6,
+                opacity: 0.7,
+                cursor: 'default',
+              },
+              className: 'pointer-events-none',
+            }
+          }
+          const a = e.resource
           return {
             style: {
               backgroundColor: a.source === 'bot' ? 'var(--cyan)' : 'var(--navy)',
@@ -139,7 +168,18 @@ export function CalendarView({ appointments, onCreate, onUpdate, onDelete, showT
         onOpenChange={setModalOpen}
         initialValues={editing}
         onSave={handleSave}
-        onDelete={editing?.id ? async () => { await onDelete(editing.id!); setModalOpen(false) } : undefined}
+        onDelete={
+          editing?.id
+            ? async () => {
+                try {
+                  await onDelete(editing.id!)
+                  setModalOpen(false)
+                } catch {
+                  // erro já é mostrado pelo AgendaClient — modal fica aberto
+                }
+              }
+            : undefined
+        }
         showTranscriptions={showTranscriptions}
       />
     </div>

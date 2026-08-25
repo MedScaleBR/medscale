@@ -98,6 +98,8 @@ function AppointmentForm({ initialValues, onSave, onDelete, onOpenChange, showTr
     try {
       await onSave(values)
       onOpenChange(false)
+    } catch {
+      // erro já é mostrado pelo AgendaClient — modal fica aberto pro usuário tentar de novo
     } finally {
       setSaving(false)
     }

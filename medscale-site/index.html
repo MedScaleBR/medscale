@@ -100,8 +100,50 @@
     /* ── Alpine cloak ─────────────────────────────────────────────────── */
     [x-cloak] { display: none !important; }
 
+    /* ── Agenda do hero — horários vazios que vão sendo ocupados ─────── */
+    .agenda-field {
+      position: absolute; inset: 0; z-index: 0;
+      pointer-events: none; overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .agenda {
+      width: min(1000px, 92vw);
+      display: flex; flex-direction: column; gap: 10px;
+      opacity: .55;
+      -webkit-mask-image: radial-gradient(ellipse 70% 62% at 50% 50%, #000 38%, transparent 78%);
+              mask-image: radial-gradient(ellipse 70% 62% at 50% 50%, #000 38%, transparent 78%);
+    }
+    /* Cabeçalho: sete marcas de dia */
+    .agenda-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
+    .agenda-days i {
+      height: 3px; border-radius: 2px;
+      background: rgba(255,255,255,.14);
+    }
+    .agenda-grid {
+      display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px;
+    }
+    .slot {
+      aspect-ratio: 2.5 / 1; border-radius: 5px;
+      background: rgba(255,255,255,.045);
+      border: 1px solid rgba(255,255,255,.05);
+    }
+    .slot.book { animation: slot-fill 15s ease-in-out infinite both; }
+    @keyframes slot-fill {
+      0%, 3%    { background: rgba(255,255,255,.045); border-color: rgba(255,255,255,.05); box-shadow: none; }
+      9%, 68%   { background: rgba(0,185,216,.38);    border-color: rgba(0,185,216,.55);   box-shadow: 0 0 12px rgba(0,185,216,.22); }
+      84%, 100% { background: rgba(255,255,255,.045); border-color: rgba(255,255,255,.05); box-shadow: none; }
+    }
+    @media (max-width: 640px) {
+      .agenda { gap: 7px; opacity: .42; }
+      .agenda-days, .agenda-grid { gap: 7px; }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .slot.book { animation: none; background: rgba(0,185,216,.20); border-color: rgba(0,185,216,.30); }
+    }
+
     /* ── Hero ─────────────────────────────────────────────────────────── */
     .hero {
+      position: relative; overflow: hidden;
       background-color: var(--navy-dark);
       background-image:
         radial-gradient(ellipse 55% 70% at 12% 65%, rgba(0,185,216,.18) 0%, transparent 60%),
@@ -443,6 +485,48 @@
     }
     .nav-link:hover { color: #fff; }
 
+    /* Acesso à plataforma — ação secundária, visualmente abaixo do CTA */
+    .nav-login {
+      display: inline-flex; align-items: center; gap: 7px;
+      min-height: 40px; padding: 0 14px; border-radius: 10px;
+      font-size: .8125rem; font-weight: 700; white-space: nowrap;
+      color: rgba(255,255,255,.78); text-decoration: none;
+      background: var(--w10); border: 1px solid var(--w15);
+      transition: background .15s ease, color .15s ease, border-color .15s ease;
+    }
+    .nav-login:hover {
+      background: var(--w15); color: #fff; border-color: rgba(255,255,255,.30);
+    }
+    .nav-login svg { flex-shrink: 0; opacity: .8; }
+
+    /* Ícone do logo encolhe no mobile para caber nav + login + CTA */
+    .nav-logo-img { width: 69px; height: auto; flex-shrink: 0; }
+    @media (max-width: 480px) { .nav-logo-img { width: 54px; } }
+    @media (max-width: 419px) { .nav-login { padding: 0 11px; gap: 6px; } }
+
+    /* Abaixo de 640px o CTA sai da barra do topo: quem manda é a barra
+       fixa de baixo, ao alcance do polegar. */
+    .nav-cta-sm { display: none; }
+
+    /* ── Barra fixa de conversão (só celular) ─────────────────────────── */
+    .sticky-cta {
+      position: fixed; left: 0; right: 0; bottom: 0; z-index: 45;
+      display: flex; align-items: center; gap: 12px;
+      padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+      background: rgba(15,30,69,.97); backdrop-filter: blur(14px);
+      border-top: 1px solid var(--w15);
+      box-shadow: 0 -6px 24px rgba(0,0,0,.28);
+      transform: translateY(115%);
+      transition: transform .32s cubic-bezier(.22,1,.36,1);
+    }
+    .sticky-cta.show { transform: none; }
+    .sticky-txt { display: flex; flex-direction: column; line-height: 1.25; min-width: 0; }
+    .sticky-txt b { font-size: .8125rem; font-weight: 800; color: #fff; }
+    .sticky-txt span { font-size: .6875rem; color: rgba(255,255,255,.50); }
+    .sticky-cta .btn { margin-left: auto; flex-shrink: 0; min-height: 42px; padding: 0 18px; }
+    @media (min-width: 640px) { .sticky-cta { display: none; } }
+    @media (prefers-reduced-motion: reduce) { .sticky-cta { transition: none; } }
+
     /* Compensa a nav fixa ao pular por âncora */
     section[id], div[id] { scroll-margin-top: 84px; }
 
@@ -514,11 +598,16 @@
       height: 100%; border-radius: 8px; min-width: 7px;
       background: linear-gradient(90deg, var(--cyan) 0%, #5CD9EE 100%);
       transform-origin: left;
-      animation: ev-grow .9s cubic-bezier(.22,1,.36,1) both;
+      /* Cresce só quando a seção entra na tela — antes disso o impacto se perde */
+      transform: scaleX(0);
+      transition: transform 1s cubic-bezier(.22,1,.36,1);
     }
+    .ev-card.in .ev-fill { transform: scaleX(1); }
+    .ev-card.in .ev-row:nth-child(2) .ev-fill { transition-delay: .28s; }
     .ev-fill.muted { background: #CBD5E1; }
-    @keyframes ev-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
-    @media (prefers-reduced-motion: reduce) { .ev-fill { animation: none; } }
+    @media (prefers-reduced-motion: reduce) {
+      .ev-fill { transition: none; transform: scaleX(1); }
+    }
     .ev-note {
       margin-top: auto; padding-top: 16px; border-top: 1px dashed #E2E8F0;
       font-size: .8125rem; line-height: 1.6; color: #64748B;
@@ -760,6 +849,23 @@
       font-size: .625rem; font-weight: 600; letter-spacing: .06em; text-transform: uppercase;
     }
 
+    /* A conversa se monta quando entra na tela: cada mensagem chega na sua vez */
+    .wa-log > * {
+      opacity: 0; transform: translateY(9px);
+      transition: opacity .42s ease, transform .42s cubic-bezier(.22,1,.36,1);
+    }
+    .in .wa-log > *          { opacity: 1; transform: none; }
+    .in .wa-log > *:nth-child(1) { transition-delay: .15s; }
+    .in .wa-log > *:nth-child(2) { transition-delay: .62s; }
+    .in .wa-log > *:nth-child(3) { transition-delay: 1.06s; }
+    .in .wa-log > *:nth-child(4) { transition-delay: 1.46s; }
+    .in .wa-log > *:nth-child(5) { transition-delay: 1.92s; }
+    .in .wa-log > *:nth-child(6) { transition-delay: 2.22s; }
+    .in .wa-log > *:nth-child(7) { transition-delay: 2.66s; }
+    @media (prefers-reduced-motion: reduce) {
+      .wa-log > * { opacity: 1; transform: none; transition: none; }
+    }
+
     /* ── Secretária IA — mapa de cobertura ────────────────────────────── */
     .cov-block { display: flex; flex-direction: column; gap: 10px; }
     .cov-head {
@@ -781,12 +887,20 @@
       aspect-ratio: 1; border-radius: 1.5px;
       background: rgba(255,255,255,.06);
     }
-    .cov-cell.on { background: rgba(255,255,255,.30); }
+    /* As horas cobertas acendem em varredura quando a seção aparece */
+    .cov-cell.on { background: rgba(255,255,255,.06); transition: background .45s ease; }
+    .in .cov-cell.on { background: rgba(255,255,255,.30); }
+    @media (prefers-reduced-motion: reduce) {
+      .cov-cell.on { background: rgba(255,255,255,.30); transition: none; }
+    }
     .cov-new .cov-hours, .cov-new .cov-label { color: #fff; }
     .cov-new .cov-grid { border-color: var(--cyan-30); background: rgba(0,185,216,.05); }
-    .cov-new .cov-cell.on {
+    .in .cov-new .cov-cell.on {
       background: var(--cyan);
       box-shadow: 0 0 5px rgba(0,185,216,.55);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .cov-new .cov-cell.on { background: var(--cyan); box-shadow: 0 0 5px rgba(0,185,216,.55); }
     }
     .cov-axis {
       display: flex; justify-content: space-between;
@@ -810,29 +924,39 @@
              alt=""
              aria-hidden="true"
              width="69" height="48"
-             style="flex-shrink:0">
+             class="nav-logo-img">
 
-        <!-- Wordmark -->
-        <span class="text-white font-black text-xl tracking-tight leading-none">
+        <!-- Wordmark (o ícone sozinho segura a marca em tela estreita) -->
+        <span class="nav-wordmark text-white font-black text-xl tracking-tight leading-none">
           Med<span style="color:var(--cyan)">Scale</span>
         </span>
-        <span class="hidden sm:block text-xs font-semibold tracking-widest" style="color:rgba(255,255,255,.35); padding-top:2px">
+        <span class="hidden xl:block text-xs font-semibold tracking-widest" style="color:rgba(255,255,255,.35); padding-top:2px">
           ASSESSORIA MÉDICA
         </span>
       </a>
 
       <!-- Âncoras (desktop) -->
-      <div class="hidden lg:flex items-center gap-7" role="list">
-        <a href="#jornada" class="nav-link">Jornada</a>
+      <div class="hidden lg:flex items-center gap-8" role="list">
         <a href="#pilares" class="nav-link">O que fazemos</a>
-        <a href="#secretaria" class="nav-link">Secretária IA</a>
         <a href="#como-funciona" class="nav-link">Como começa</a>
         <a href="#faq" class="nav-link">Dúvidas</a>
       </div>
 
-      <a href="#diagnostico" class="btn shiny text-sm px-5" style="min-height:40px">
-        <span>Quero começar</span>
-      </a>
+      <!-- Ações: acesso à plataforma (secundário) + CTA (primário) -->
+      <div class="flex items-center gap-2 sm:gap-3">
+
+        <a href="https://medscalebr.com/login" class="nav-login">
+          <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.1" viewBox="0 0 24 24" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M11 16l4-4m0 0l-4-4m4 4H3m6-8h6a2 2 0 012 2v12a2 2 0 01-2 2H9"/>
+          </svg>
+          Entrar
+        </a>
+
+        <a href="#diagnostico" class="btn shiny text-sm px-5 hidden sm:inline-flex" style="min-height:40px">
+          <span>Quero começar</span>
+        </a>
+
+      </div>
     </div>
   </nav>
 
@@ -841,7 +965,18 @@
 
     <!-- ─────────────────────────────────────────────────────── HERO ── -->
     <section class="hero" aria-labelledby="hero-h1" style="padding: 140px 24px 96px">
-      <div class="max-w-3xl mx-auto text-center">
+
+      <!-- Agenda enchendo ao fundo. Decorativa: escondida de leitores de tela. -->
+      <div class="agenda-field" aria-hidden="true">
+        <div class="agenda">
+          <div class="agenda-days">
+            <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+          </div>
+          <div class="agenda-grid" id="agenda-grid"></div>
+        </div>
+      </div>
+
+      <div class="max-w-3xl mx-auto text-center" style="position:relative; z-index:1">
 
         <!-- Headline -->
         <h1 id="hero-h1" class="font-black text-white leading-tight mb-6"
@@ -851,13 +986,11 @@
         </h1>
 
         <!-- Sub -->
-        <p class="text-lg sm:text-xl leading-relaxed mb-10 max-w-2xl mx-auto"
-           style="color:rgba(255,255,255,.65)">
-          A empresa por trás do seu consultório — marketing, agenda, secretária e tecnologia.
-          Dados em tempo real, previsão de faturamento e conformidade CFM.
-          Não um PDF no fim do mês.
-          Você se concentra no que só você faz:
-          <strong style="color:#fff; font-weight:600">cuidar do paciente.</strong>
+        <p class="text-lg sm:text-xl leading-relaxed mb-10 mx-auto"
+           style="color:rgba(255,255,255,.68); max-width:34ch">
+          Marketing, agenda, secretária 24h e
+          <strong style="color:var(--cyan); font-weight:700">IA</strong> que trabalha por você.
+          <strong style="color:#fff; font-weight:600">Você só atende.</strong>
         </p>
 
         <!-- CTAs -->
@@ -2370,7 +2503,7 @@
     </section>
 
     <!-- ─────────────────────────────────────────────────── CTA FINAL ── -->
-    <section class="section-sm section-dark" aria-labelledby="cta-final-heading">
+    <section id="cta-final" class="section-sm section-dark" aria-labelledby="cta-final-heading">
       <div class="max-w-2xl mx-auto text-center reveal">
         <h2 id="cta-final-heading" class="font-black leading-tight mb-5"
             style="font-size:clamp(1.6rem,3.8vw,2.25rem); color:#fff; letter-spacing:-0.02em">
@@ -2390,6 +2523,17 @@
 
   </main>
 
+  <!-- ───────────────────────────────────── BARRA FIXA (só celular) ── -->
+  <div class="sticky-cta" id="sticky-cta">
+    <div class="sticky-txt">
+      <b>Diagnóstico gratuito</b>
+      <span>4 perguntas · sem compromisso</span>
+    </div>
+    <a href="#diagnostico" class="btn shiny text-sm">
+      <span>Começar</span>
+    </a>
+  </div>
+
   <!-- ─────────────────────────────────────────────────────── FOOTER ── -->
   <footer style="background:var(--navy-dark); padding:40px 24px; border-top:1px solid rgba(255,255,255,.08)"
           role="contentinfo">
@@ -2405,6 +2549,11 @@
         Conteúdos em conformidade com o Conselho Federal de Medicina (CFM).
       </p>
       <div class="flex items-center gap-5">
+        <a href="https://medscalebr.com/login"
+           class="text-xs font-semibold no-underline transition-colors"
+           style="color:rgba(255,255,255,.55)">
+          Acessar a plataforma
+        </a>
         <a href="mailto:medscalebr@gmail.com"
            class="text-xs no-underline transition-colors"
            style="color:rgba(255,255,255,.30)">
@@ -2575,6 +2724,72 @@
     /* ── Utility ──────────────────────────────────────────────────────── */
     const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+    /* ── Barra fixa de conversão: aparece após a hero, some onde já há CTA ── */
+    document.addEventListener('DOMContentLoaded', () => {
+      const barra = document.getElementById('sticky-cta');
+      const hero  = document.querySelector('.hero');
+      if (!barra || !hero || !('IntersectionObserver' in window)) return;
+
+      let passouHero = false;
+      const zonasVisiveis = new Set();
+
+      const atualizar = () => {
+        barra.classList.toggle('show', passouHero && zonasVisiveis.size === 0);
+      };
+
+      // Some enquanto a hero está na tela
+      new IntersectionObserver(([e]) => {
+        passouHero = !e.isIntersecting;
+        atualizar();
+      }, { threshold: 0 }).observe(hero);
+
+      // Some onde a página já oferece a mesma ação
+      ['diagnostico', 'cta-final'].forEach(id => {
+        const alvo = document.getElementById(id);
+        if (!alvo) return;
+        new IntersectionObserver(([e]) => {
+          e.isIntersecting ? zonasVisiveis.add(id) : zonasVisiveis.delete(id);
+          atualizar();
+        }, { threshold: 0 }).observe(alvo);
+      });
+
+      // E no rodapé, onde já não há para onde rolar
+      const rodape = document.querySelector('footer');
+      if (rodape) {
+        new IntersectionObserver(([e]) => {
+          e.isIntersecting ? zonasVisiveis.add('footer') : zonasVisiveis.delete('footer');
+          atualizar();
+        }, { threshold: 0 }).observe(rodape);
+      }
+    });
+
+    /* ── Agenda do hero: 7 dias × 6 horários, enchendo em looping ────── */
+    document.addEventListener('DOMContentLoaded', () => {
+      const grid = document.getElementById('agenda-grid');
+      if (!grid) return;
+
+      const DIAS = 7, HORARIOS = 6, CICLO = 15;
+      const frag = document.createDocumentFragment();
+
+      for (let h = 0; h < HORARIOS; h++) {
+        for (let d = 0; d < DIAS; d++) {
+          const slot = document.createElement('i');
+          slot.className = 'slot';
+
+          // Sexta e sábado enchem primeiro; fim de tarde depois. Deixa ~30%
+          // dos horários vagos, senão parece grade cheia em vez de agenda.
+          const prioridade = (d >= 4 ? 0 : 1) + (h >= 4 ? 0.6 : 0);
+          if (Math.random() > 0.30) {
+            slot.classList.add('book');
+            const atraso = (Math.random() * 6 + prioridade * 1.6) % (CICLO * 0.55);
+            slot.style.animationDelay = atraso.toFixed(2) + 's';
+          }
+          frag.appendChild(slot);
+        }
+      }
+      grid.appendChild(frag);
+    });
+
     /* ── Mapa de cobertura (7 dias × 24 h) ────────────────────────────── */
     document.addEventListener('DOMContentLoaded', () => {
       const paint = (id, alwaysOn) => {
@@ -2586,7 +2801,12 @@
             // Referência: seg–sex, 8h às 18h
             const comercial = day < 5 && hour >= 8 && hour < 18;
             const cell = document.createElement('i');
-            cell.className = 'cov-cell' + (alwaysOn || comercial ? ' on' : '');
+            const aceso = alwaysOn || comercial;
+            cell.className = 'cov-cell' + (aceso ? ' on' : '');
+            // Varredura da esquerda para a direita, dia após dia
+            if (aceso) {
+              cell.style.transitionDelay = (((day * 24 + hour) / 168) * 1.1).toFixed(3) + 's';
+            }
             frag.appendChild(cell);
           }
         }
