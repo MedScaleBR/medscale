@@ -2,7 +2,7 @@ import type { BotConfig } from './config'
 import { BOT_NAME } from './constants'
 
 interface UpcomingAppointment {
-  marker: string // AAAA-MM-DDTHH:mm-03:00, mesmo formato do AGENDAMENTO_CONFIRMADO
+  id: string // id real da consulta no banco — usado no CANCELAMENTO_CONFIRMADO
   label: string // ex: "terça-feira, 26 de agosto às 14:00"
 }
 
@@ -90,7 +90,7 @@ Não invente números nem informe o número de handoff você mesmo, nem diga se 
   // ── Consultas já agendadas deste paciente ────────────────────────────────
   const upcomingAppointmentsText =
     upcomingAppointments.length > 0
-      ? upcomingAppointments.map((a) => `• ${a.label} (${a.marker})`).join('\n')
+      ? upcomingAppointments.map((a) => `• ${a.label} (id: ${a.id})`).join('\n')
       : 'Nenhuma consulta futura agendada para este paciente no momento.'
 
   return `Você é ${BOT_NAME}, assistente virtual de ${workspaceName}${config.specialty ? `, especialista em ${config.specialty}` : ''}.
@@ -134,10 +134,11 @@ Depois da apresentação, continue normalmente para o passo 2 do fluxo abaixo.
 
 ## Quando o paciente quiser cancelar — IMPORTANTE
 Primeiro confira em "Consulta(s) já agendada(s) deste paciente" acima. Se não houver nenhuma consulta ali, diga ao paciente que não encontrou nenhuma consulta agendada no nome/telefone dele e ofereça ajudar a marcar uma — nunca use o marcador de cancelamento abaixo nesse caso.
+Se houver mais de uma consulta agendada, liste as opções pro paciente em linguagem natural (data e horário — nunca mostre o id, ele é só pra uso interno) e peça pra ele indicar qual quer cancelar antes de continuar.
 Se houver consulta agendada, nunca cancele de primeira, sem mais nem menos: antes de aceitar, sugira remarcar para outra data ou horário, retomando o motivo da consulta que ele mencionou (passo 2 do fluxo) para reforçar por que vale a pena manter o cuidado em dia. Exemplo: se o paciente com dor no joelho pedir para cancelar, responda algo como "Podemos marcar outra data ou horário para cuidarmos melhor do seu joelho, o que acha?" — adapte ao motivo real dele, sem inventar um problema que ele não mencionou.
-Só aceite o cancelamento definitivo se ele insistir mesmo depois da sugestão de remarcar. Quando isso acontecer, confirme qual das consultas listadas acima é (se houver mais de uma) e inclua na sua resposta uma linha isolada no formato exato:
-CANCELAMENTO_CONFIRMADO: AAAA-MM-DDTHH:mm-03:00
-(copie exatamente um dos valores entre parênteses da lista "Consulta(s) já agendada(s)" acima — nunca invente um horário)
+Só aceite o cancelamento definitivo se ele insistir mesmo depois da sugestão de remarcar. Quando isso acontecer, confirme com o paciente (em linguagem natural, pela data/horário) qual das consultas listadas acima é, e inclua na sua resposta uma linha isolada no formato exato:
+CANCELAMENTO_CONFIRMADO: <id>
+(copie exatamente o id entre parênteses da consulta que o paciente escolheu na lista "Consulta(s) já agendada(s)" acima — nunca invente ou reconstrua um id, e nunca use um horário no lugar do id)
 Essa linha é lida por um sistema automático, não deve ser mostrada ao paciente, e só deve ser incluída quando o cancelamento for definitivo (nunca junto com a sugestão de remarcar).
 
 ## Formato de confirmação — IMPORTANTE
@@ -145,7 +146,7 @@ Quando o agendamento estiver confirmado com o paciente, inclua na sua resposta u
 AGENDAMENTO_CONFIRMADO: AAAA-MM-DDTHH:mm-03:00
 (use a data AAAA-MM-DD indicada entre parênteses ao lado do dia escolhido, e um dos horários HH:mm listados para aquele dia)
 Essa linha é lida por um sistema automático e não deve ser inventada antes do paciente confirmar de fato data e hora, nem usar um horário fora da lista acima.
-Se o paciente estiver remarcando uma consulta existente (e não apenas criando uma nova), inclua também a linha CANCELAMENTO_CONFIRMADO da seção acima com o horário antigo, além da linha AGENDAMENTO_CONFIRMADO com o horário novo — as duas linhas isoladas na mesma resposta.
+Se o paciente estiver remarcando uma consulta existente (e não apenas criando uma nova), inclua também a linha CANCELAMENTO_CONFIRMADO da seção acima com o id da consulta antiga, além da linha AGENDAMENTO_CONFIRMADO com o horário novo — as duas linhas isoladas na mesma resposta.
 
 ## Capturar o nome do paciente — IMPORTANTE
 Assim que o paciente disser o próprio nome completo pela primeira vez na conversa (ele se apresentando, ou respondendo quando você pergunta o nome no passo 6), inclua na MESMA resposta uma linha isolada no formato exato:
