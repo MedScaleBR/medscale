@@ -245,7 +245,12 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     const day = addDays(today, i)
     const slots = await getFreeSlotsForBot(workspaceId, day).catch(() => [])
     if (slots.length > 0) {
-      freeSlotsByDay[format(day, 'yyyy-MM-dd')] = slots
+      // format(day, ...) sozinho lê o dia no fuso do servidor (UTC na
+      // Vercel), não de São Paulo — perto da meia-noite BRT isso rotulava o
+      // dia errado (o servidor já tinha virado a data ~3h antes daqui), mesmo
+      // os horários em si já sendo calculados certos via TZDate dentro de
+      // getAvailableSlots.
+      freeSlotsByDay[format(new TZDate(day, 'America/Sao_Paulo'), 'yyyy-MM-dd')] = slots
     }
   }
 

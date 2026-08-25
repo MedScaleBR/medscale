@@ -182,5 +182,10 @@ Hoje é ${new Date().toLocaleDateString('pt-BR', {
     year: 'numeric',
     month: 'long',
     day: 'numeric',
-  })}.`
+    timeZone: 'America/Sao_Paulo',
+  })}, agora são ${new Date().toLocaleTimeString('pt-BR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  })} (horário de São Paulo).`
 }
