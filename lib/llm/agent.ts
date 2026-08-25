@@ -27,7 +27,9 @@ interface ProcessMessageParams {
 // Data com offset explícito de São Paulo — evita que o `new Date(...)` do
 // Node interprete o horário como local do servidor (Vercel roda em UTC).
 const CONFIRMATION_MARKER = /AGENDAMENTO_CONFIRMADO:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?-03:00)/
-const CANCELLATION_MARKER = /CANCELAMENTO_CONFIRMADO:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?-03:00)/
+// Cancelamento referencia o id real da consulta (copiado do system prompt),
+// não um horário reconstruído — ver upcomingAppointments mais abaixo.
+const CANCELLATION_MARKER = /CANCELAMENTO_CONFIRMADO:\s*([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/
 const PATIENT_NAME_MARKER = /NOME_PACIENTE:\s*(.+)/
 
 // Mensagens fixas usadas quando o agendamento/cancelamento que a IA anunciou
@@ -255,7 +257,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   const { data: upcomingRows } = patient
     ? await supabase
         .from('appointments')
-        .select('scheduled_at')
+        .select('id, scheduled_at')
         .eq('workspace_id', workspaceId)
         .eq('patient_id', patient.id)
         .in('status', ['agendado', 'confirmado'])
@@ -264,12 +266,17 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
         .limit(5)
     : { data: null }
 
+  // O identificador que a IA copia pra cancelar é o id real da consulta, não
+  // um horário reconstruído — evita a classe inteira de bug onde o marcador
+  // que o Claude reconstrói (só com precisão de minuto) nunca bate contra um
+  // scheduled_at que carrega segundos/milissegundos (ex: um evento do Google
+  // Calendar movido manualmente e reconciliado de volta pro Supabase).
   const upcomingAppointments = (upcomingRows ?? []).map((row) => {
     const zoned = new TZDate(new Date(row.scheduled_at), 'America/Sao_Paulo')
     const dateLabel = zoned.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
     const timeLabel = format(zoned, 'HH:mm')
     return {
-      marker: `${format(zoned, 'yyyy-MM-dd')}T${timeLabel}-03:00`,
+      id: row.id,
       label: `${dateLabel} às ${timeLabel}`,
     }
   })
@@ -380,46 +387,36 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
 
   // Detectar cancelamento confirmado e atualizar o registro (status + Google
   // Calendar) — sem isso a consulta continuava "agendado" no banco mesmo
-  // depois da Maria dizer ao paciente que tinha cancelado.
+  // depois da Maria dizer ao paciente que tinha cancelado. Casa por id (não
+  // por horário reconstruído) — o id é copiado do system prompt exatamente
+  // como está no banco, então não sofre com precisão de timestamp.
   const cancelMatch = rawMessage.match(CANCELLATION_MARKER)
   if (cancelMatch && patient) {
-    const cancelledAt = new Date(cancelMatch[1])
+    const apptId = cancelMatch[1]
+    const { data: apptToCancel } = await supabase
+      .from('appointments')
+      .select('id, gcal_event_id')
+      .eq('id', apptId)
+      .eq('workspace_id', workspaceId)
+      .eq('patient_id', patient.id)
+      .in('status', ['agendado', 'confirmado'])
+      .maybeSingle()
 
-    if (!Number.isNaN(cancelledAt.getTime())) {
-      // Compara por janela de 1 minuto, não igualdade exata — o marcador que
-      // o paciente/Claude reconstroem só tem precisão de minuto (HH:mm), mas
-      // o scheduled_at real pode ter segundos/milissegundos (ex: reconciliado
-      // a partir de um evento do Google Calendar movido manualmente), então
-      // uma comparação exata nunca batia e o cancelamento falhava sempre.
-      const windowEnd = new Date(cancelledAt.getTime() + 60_000)
-      const { data: apptToCancel } = await supabase
-        .from('appointments')
-        .select('id, gcal_event_id')
-        .eq('workspace_id', workspaceId)
-        .eq('patient_id', patient.id)
-        .gte('scheduled_at', cancelledAt.toISOString())
-        .lt('scheduled_at', windowEnd.toISOString())
-        .in('status', ['agendado', 'confirmado'])
-        .order('scheduled_at', { ascending: true })
-        .limit(1)
-        .maybeSingle()
+    if (apptToCancel) {
+      await supabase.from('appointments').update({ status: 'cancelado' }).eq('id', apptToCancel.id)
 
-      if (apptToCancel) {
-        await supabase.from('appointments').update({ status: 'cancelado' }).eq('id', apptToCancel.id)
-
-        if (apptToCancel.gcal_event_id) {
-          try {
-            await cancelEvent(workspaceId, apptToCancel.gcal_event_id)
-          } catch (gcalErr) {
-            console.error('Google Calendar cancel failed (bot cancellation):', gcalErr)
-          }
+      if (apptToCancel.gcal_event_id) {
+        try {
+          await cancelEvent(workspaceId, apptToCancel.gcal_event_id)
+        } catch (gcalErr) {
+          console.error('Google Calendar cancel failed (bot cancellation):', gcalErr)
         }
-      } else {
-        console.warn(
-          `Cancelamento ${cancelMatch[1]} não encontrou consulta correspondente para paciente ${patient.id} no workspace ${workspaceId}.`
-        )
-        cancellationFailed = true
       }
+    } else {
+      console.warn(
+        `Cancelamento (id ${apptId}) não encontrou consulta correspondente para paciente ${patient.id} no workspace ${workspaceId}.`
+      )
+      cancellationFailed = true
     }
   }
 
