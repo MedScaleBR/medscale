@@ -28,6 +28,8 @@ export default async function DashboardLayout({ children }: { children: React.Re
           userName={profile?.full_name ?? user.email ?? 'Usuário'}
           userEmail={user.email ?? ''}
           avatarUrl={user.user_metadata?.avatar_url}
+          session={session}
+          accounts={accounts}
         />
         <main className="flex-1 overflow-y-auto p-6">{children}</main>
       </div>
