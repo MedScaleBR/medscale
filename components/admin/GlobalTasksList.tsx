@@ -62,6 +62,7 @@ export function GlobalTasksList({
   const [tasks, setTasks] = useState(initialTasks)
   const [statusFilter, setStatusFilter] = useState<'pending' | 'done' | 'all'>('pending')
   const [assigneeFilter, setAssigneeFilter] = useState<string>('all')
+  const [accountFilter, setAccountFilter] = useState<string>('all')
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
@@ -74,6 +75,14 @@ export function GlobalTasksList({
   const assigneeFilterItems = useMemo(
     () => ({ all: 'Todos os admins', ...Object.fromEntries(admins.map((a) => [a.id, a.name])) }),
     [admins]
+  )
+  const accountFilterItems = useMemo(
+    () => ({
+      all: 'Todos os clientes',
+      none: 'Sem cliente',
+      ...Object.fromEntries(accounts.map((a) => [a.id, a.name])),
+    }),
+    [accounts]
   )
   const assigneeFormItems = useMemo(
     () => ({ none: 'Sem responsável', ...Object.fromEntries(admins.map((a) => [a.id, a.name])) }),
@@ -152,6 +161,8 @@ export function GlobalTasksList({
       .filter((t) => {
         if (statusFilter !== 'all' && t.status !== statusFilter) return false
         if (assigneeFilter !== 'all' && t.assignedTo !== assigneeFilter) return false
+        if (accountFilter === 'none' && t.accountId) return false
+        if (accountFilter !== 'all' && accountFilter !== 'none' && t.accountId !== accountFilter) return false
         return true
       })
       .sort((a, b) => {
@@ -159,7 +170,7 @@ export function GlobalTasksList({
         if (!b.dueDate) return -1
         return a.dueDate.localeCompare(b.dueDate)
       })
-  }, [tasks, statusFilter, assigneeFilter])
+  }, [tasks, statusFilter, assigneeFilter, accountFilter])
 
   return (
     <div className="space-y-4">
@@ -248,6 +259,20 @@ export function GlobalTasksList({
           <SelectContent>
             <SelectItem value="all">Todos os admins</SelectItem>
             {admins.map((a) => (
+              <SelectItem key={a.id} value={a.id}>
+                {a.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select items={accountFilterItems} value={accountFilter} onValueChange={(v) => v && setAccountFilter(v)}>
+          <SelectTrigger className="h-9 w-48 text-xs">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Todos os clientes</SelectItem>
+            <SelectItem value="none">Sem cliente</SelectItem>
+            {accounts.map((a) => (
               <SelectItem key={a.id} value={a.id}>
                 {a.name}
               </SelectItem>
