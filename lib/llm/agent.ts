@@ -224,13 +224,25 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     return
   }
 
-  // 5. Buscar histórico da conversa
-  const { data: history } = await supabase
+  // 5. Buscar histórico da conversa — as 20 mensagens mais RECENTES. Ordenar
+  // ascendente com limit(20) pegava as 20 mais ANTIGAS: numa conversa longa
+  // isso congelava a janela no começo da conversa pra sempre, sem nunca
+  // incluir a mensagem atual do paciente (inserida no passo 4, depois desta
+  // query) — o Claude respondia a uma janela travada no passado, o que podia
+  // inclusive terminar numa mensagem de assistente (em vez de paciente),
+  // gerando respostas vazias/degeneradas. Busca descendente e inverte pra
+  // ordem cronológica antes de usar.
+  const { data: recentMessages } = await supabase
     .from('messages')
     .select('role, content')
     .eq('conversation_id', conversation.id)
-    .order('sent_at', { ascending: true })
+    .order('sent_at', { ascending: false })
     .limit(20)
+  const chronological = recentMessages ? [...recentMessages].reverse() : []
+  // A API da Anthropic exige que a lista comece com role "user" e alterne
+  // estritamente — cortar as últimas N mensagens pode calhar de começar num
+  // "assistant" órfão (dependendo da paridade do total), o que a API rejeita.
+  const history = chronological[0]?.role === 'assistant' ? chronological.slice(1) : chronological
 
   // A mensagem do paciente já foi inserida no passo 4, então na primeira
   // troca da conversa o histórico contém só ela (length === 1).
