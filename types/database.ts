@@ -272,6 +272,7 @@ export interface Database {
           retry_count: number
           signed_at: string | null
           signed_by: string | null
+          archived_at: string | null
           created_at: string
           updated_at: string
         }
@@ -316,6 +317,7 @@ export interface Database {
           appointment_id: string | null
           started_at: string
           resolved_at: string | null
+          archived_at: string | null
           summary: string | null
         }
         Insert: Partial<Database['public']['Tables']['conversations']['Row']> & {

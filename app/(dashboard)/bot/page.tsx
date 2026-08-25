@@ -10,7 +10,7 @@ export default async function BotPage() {
   const { data: conversations } = await supabase
     .from('conversations')
     .select(
-      'id, patient_phone, patient_id, status, bot_paused, started_at, patients(full_name), messages(id, role, content, sent_at)'
+      'id, patient_phone, patient_id, status, bot_paused, archived_at, started_at, patients(full_name), messages(id, role, content, sent_at)'
     )
     .eq('workspace_id', session.workspaceId)
     .order('started_at', { ascending: false })
@@ -26,6 +26,7 @@ export default async function BotPage() {
       patient_name: (c.patients as unknown as { full_name: string } | null)?.full_name ?? null,
       status: c.status,
       bot_paused: c.bot_paused,
+      archived_at: c.archived_at,
       started_at: c.started_at,
       last_message: messages.at(-1)?.content ?? null,
       messages,

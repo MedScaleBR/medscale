@@ -100,7 +100,7 @@ async function getOrCreateConversation(
 ) {
   const { data: existing } = await supabase
     .from('conversations')
-    .select('id, status, bot_paused')
+    .select('id, status, bot_paused, archived_at')
     .eq('workspace_id', workspaceId)
     .eq('patient_phone', patientPhone)
     .order('started_at', { ascending: false })
@@ -111,14 +111,26 @@ async function getOrCreateConversation(
     const { data: newConv } = await supabase
       .from('conversations')
       .insert({ workspace_id: workspaceId, account_id: accountId, patient_id: patientId, patient_phone: patientPhone })
-      .select('id, status, bot_paused')
+      .select('id, status, bot_paused, archived_at')
       .single()
     if (!newConv) throw new Error('Failed to create conversation')
     return newConv
   }
 
+  const updates: { status?: 'open'; resolved_at?: null; archived_at?: null } = {}
   if (existing.status === 'resolved' && !existing.bot_paused) {
-    await supabase.from('conversations').update({ status: 'open', resolved_at: null }).eq('id', existing.id)
+    updates.status = 'open'
+    updates.resolved_at = null
+  }
+  // Mensagem nova de um número arquivado traz a conversa de volta pra caixa
+  // de entrada — independente de bot_paused, porque quem precisa ver que o
+  // paciente voltou a falar é o humano, não só o bot.
+  if (existing.archived_at) {
+    updates.archived_at = null
+  }
+  if (Object.keys(updates).length > 0) {
+    await supabase.from('conversations').update(updates).eq('id', existing.id)
+    Object.assign(existing, updates)
   }
 
   return existing

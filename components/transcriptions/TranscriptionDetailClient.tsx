@@ -8,7 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { TranscriptionStatusBadge } from './TranscriptionStatusBadge'
 import { SOAPEditor } from './SOAPEditor'
 import { AlertsPanel } from './AlertsPanel'
-import { Loader2 } from 'lucide-react'
+import { Loader2, Archive, ArchiveRestore } from 'lucide-react'
 import type { Transcription } from '@/lib/transcriptions/types'
 
 const STATUS_MESSAGE: Record<string, string> = {
@@ -25,6 +25,8 @@ export function TranscriptionDetailClient({ initial }: { initial: Transcription 
   const [signing, setSigning] = useState(false)
   const [retrying, setRetrying] = useState(false)
   const [draft, setDraft] = useState(initial.medical_record_draft)
+  const [archiveOpen, setArchiveOpen] = useState(false)
+  const [archiving, setArchiving] = useState(false)
 
   useEffect(() => {
     if (transcription.status === 'signed' || transcription.status === 'error') return
@@ -76,6 +78,26 @@ export function TranscriptionDetailClient({ initial }: { initial: Transcription 
     }
   }
 
+  async function handleArchive() {
+    const archived = !transcription.archived_at
+    setArchiving(true)
+    try {
+      const res = await fetch(`/api/transcriptions/${transcription.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ archived }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setTranscription({ ...transcription, archived_at: data.archived_at })
+        router.refresh()
+      }
+    } finally {
+      setArchiving(false)
+      setArchiveOpen(false)
+    }
+  }
+
   async function handleRetry() {
     setRetrying(true)
     try {
@@ -100,14 +122,26 @@ export function TranscriptionDetailClient({ initial }: { initial: Transcription 
 
   if (transcription.status === 'error') {
     return (
-      <div className="space-y-4 rounded-xl border border-red-200 bg-red-50 p-6">
-        <div>
-          <p className="text-sm font-medium text-red-800">Ocorreu um erro no processamento</p>
-          <p className="mt-1 text-sm text-red-700">{transcription.error_message ?? 'Erro desconhecido.'}</p>
+      <div className="space-y-4">
+        <div className="flex justify-end">
+          <ArchiveButton archived={!!transcription.archived_at} onClick={() => setArchiveOpen(true)} />
         </div>
-        <Button onClick={handleRetry} disabled={retrying} variant="destructive">
-          {retrying ? 'Reprocessando...' : 'Tentar novamente'}
-        </Button>
+        <div className="space-y-4 rounded-xl border border-red-200 bg-red-50 p-6">
+          <div>
+            <p className="text-sm font-medium text-red-800">Ocorreu um erro no processamento</p>
+            <p className="mt-1 text-sm text-red-700">{transcription.error_message ?? 'Erro desconhecido.'}</p>
+          </div>
+          <Button onClick={handleRetry} disabled={retrying} variant="destructive">
+            {retrying ? 'Reprocessando...' : 'Tentar novamente'}
+          </Button>
+        </div>
+        <ArchiveDialog
+          open={archiveOpen}
+          onOpenChange={setArchiveOpen}
+          archived={!!transcription.archived_at}
+          archiving={archiving}
+          onConfirm={handleArchive}
+        />
       </div>
     )
   }
@@ -157,12 +191,68 @@ export function TranscriptionDetailClient({ initial }: { initial: Transcription 
   if (transcription.status === 'signed' && transcription.medical_record_final) {
     return (
       <div className="space-y-4">
+        <div className="flex justify-end">
+          <ArchiveButton archived={!!transcription.archived_at} onClick={() => setArchiveOpen(true)} />
+        </div>
         <div className="rounded-xl border border-[var(--navy-06)] bg-white p-5 shadow-[var(--shadow-sm)]">
           <SOAPEditor initialValue={transcription.medical_record_final} readOnly />
         </div>
+        <ArchiveDialog
+          open={archiveOpen}
+          onOpenChange={setArchiveOpen}
+          archived={!!transcription.archived_at}
+          archiving={archiving}
+          onConfirm={handleArchive}
+        />
       </div>
     )
   }
 
   return null
+}
+
+function ArchiveButton({ archived, onClick }: { archived: boolean; onClick: () => void }) {
+  return (
+    <Button variant="outline" onClick={onClick} className="gap-2">
+      {archived ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+      {archived ? 'Desarquivar' : 'Arquivar'}
+    </Button>
+  )
+}
+
+function ArchiveDialog({
+  open,
+  onOpenChange,
+  archived,
+  archiving,
+  onConfirm,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  archived: boolean
+  archiving: boolean
+  onConfirm: () => void
+}) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>{archived ? 'Desarquivar transcrição' : 'Arquivar transcrição'}</DialogTitle>
+          <DialogDescription>
+            {archived
+              ? 'A transcrição volta a aparecer na lista principal.'
+              : 'A transcrição some da lista principal, mas o registro continua salvo e pode ser desarquivado depois.'}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancelar
+          </Button>
+          <Button onClick={onConfirm} disabled={archiving}>
+            {archiving ? 'Salvando...' : 'Confirmar'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }
