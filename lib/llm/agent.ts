@@ -378,13 +378,22 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     const cancelledAt = new Date(cancelMatch[1])
 
     if (!Number.isNaN(cancelledAt.getTime())) {
+      // Compara por janela de 1 minuto, não igualdade exata — o marcador que
+      // o paciente/Claude reconstroem só tem precisão de minuto (HH:mm), mas
+      // o scheduled_at real pode ter segundos/milissegundos (ex: reconciliado
+      // a partir de um evento do Google Calendar movido manualmente), então
+      // uma comparação exata nunca batia e o cancelamento falhava sempre.
+      const windowEnd = new Date(cancelledAt.getTime() + 60_000)
       const { data: apptToCancel } = await supabase
         .from('appointments')
         .select('id, gcal_event_id')
         .eq('workspace_id', workspaceId)
         .eq('patient_id', patient.id)
-        .eq('scheduled_at', cancelledAt.toISOString())
+        .gte('scheduled_at', cancelledAt.toISOString())
+        .lt('scheduled_at', windowEnd.toISOString())
         .in('status', ['agendado', 'confirmado'])
+        .order('scheduled_at', { ascending: true })
+        .limit(1)
         .maybeSingle()
 
       if (apptToCancel) {
