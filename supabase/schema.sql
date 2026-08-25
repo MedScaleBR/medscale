@@ -394,7 +394,7 @@ create table public.bot_config (
   handoff_message         text not null default
     'Vou te conectar com nossa equipe agora. Um momento!',
   welcome_message         text not null default
-    'Olá! Sou o assistente virtual. Posso ajudar com agendamentos e informações. Como posso ajudar?',
+    'Olá! Posso ajudar com agendamentos e informações. Como posso ajudar?',
   -- O bot conversa e agenda 24/7 — esta mensagem NÃO pausa o bot. É usada só
   -- quando o paciente pede humano fora do horário de `handoff_hours`.
   out_of_hours_message    text not null default
