@@ -103,7 +103,7 @@ export function SOAPEditor({ initialValue, readOnly = false, onChange }: SOAPEdi
       )}
 
       <Tabs defaultValue="s">
-        <TabsList>
+        <TabsList className="max-w-full overflow-x-auto">
           <TabsTrigger value="s">S — Subjetivo</TabsTrigger>
           <TabsTrigger value="o">O — Objetivo</TabsTrigger>
           <TabsTrigger value="a">A — Avaliação</TabsTrigger>
