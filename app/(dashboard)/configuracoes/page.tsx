@@ -48,6 +48,7 @@ export default async function ConfiguracoesPage({
           whatsappNumber: workspace?.whatsapp_number ?? null,
         }}
         google={{ connected: Boolean(googleToken), email: googleToken?.google_email ?? null }}
+        isOwner={session.role === 'owner'}
       />
     </div>
   )

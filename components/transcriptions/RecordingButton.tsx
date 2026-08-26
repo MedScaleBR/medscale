@@ -49,7 +49,7 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
   const [consentOpen, setConsentOpen] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState<string | null>(null)
-  const [isSupported, setIsSupported] = useState(true)
+  const [isSupported] = useState(() => isRecordingSupported())
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
@@ -58,7 +58,6 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => {
-    setIsSupported(isRecordingSupported())
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
       streamRef.current?.getTracks().forEach((t) => t.stop())

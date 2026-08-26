@@ -55,8 +55,22 @@ export const NAV_ORDER: ModuleSlug[] = [
 ]
 
 // Módulos visíveis só para owner, mesmo quando ativos no account — dado
-// pessoal (finance_entries) que não deve aparecer a admin/member convidados.
-const OWNER_ONLY_MODULES: ModuleSlug[] = ['finance']
+// financeiro (finance_entries pessoal e revenue_entries) que não deve
+// aparecer a admin/member convidados, mesmo com module_overrides liberando.
+const OWNER_ONLY_MODULES: ModuleSlug[] = ['finance', 'financial']
+
+// Módulos que um owner pode restringir por pessoa via module_overrides —
+// exclui os sempre-ativos (ALWAYS_ON_MODULES) e os exclusivos de owner
+// (OWNER_ONLY_MODULES, que dependem do papel, não de override).
+export const OVERRIDABLE_MODULES: ModuleSlug[] = [
+  'agenda',
+  'conversations',
+  'locations',
+  'schedule',
+  'waitlist',
+  'campaigns',
+  'transcriptions',
+]
 
 interface NavLinksProps {
   userModules: ModuleSlug[]

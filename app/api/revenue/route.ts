@@ -2,12 +2,24 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
 
+// Financeiro (Receita) é exclusivo do owner — mesmo padrão de finance
+// (agente PF/PJ): admin/member não veem, mesmo com o módulo ativo no
+// account ou liberado via module_overrides.
+function requireOwner(session: { role: string }) {
+  if (session.role !== 'owner') {
+    return NextResponse.json({ error: 'Restrito ao owner da account' }, { status: 403 })
+  }
+  return null
+}
+
 export async function GET(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
   if ('error' in result) return result.error
   const { session } = result
   const moduleCheck = requireModule(session, 'financial')
   if (moduleCheck) return moduleCheck
+  const ownerCheck = requireOwner(session)
+  if (ownerCheck) return ownerCheck
 
   const supabase = await createClient()
   const { data, error } = await supabase
@@ -26,6 +38,8 @@ export async function POST(req: NextRequest) {
   const { session } = result
   const moduleCheck = requireModule(session, 'financial')
   if (moduleCheck) return moduleCheck
+  const ownerCheck = requireOwner(session)
+  if (ownerCheck) return ownerCheck
 
   const supabase = await createClient()
   const body = await req.json()
