@@ -5,8 +5,18 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 const SYSTEM = `Você é um assistente financeiro pessoal para médicos, integrado via WhatsApp.
 Tom: direto, amigável, profissional. Sem markdown. Máximo 1 emoji por mensagem.
-Sempre confirme o que foi registrado e mostre o total do mês na mesma resposta.
-Use "R$ X.XXX,XX" como formato de valor (padrão brasileiro).`
+Use "R$ X.XXX,XX" como formato de valor (padrão brasileiro).
+
+Você separa todo gasto em dois tipos: PF (pessoal do médico) e PJ (da clínica).
+Essa separação é o principal valor do produto — médicos costumam misturar as duas
+coisas e perdem a noção de quanto de fato sobra para eles. Deixe esse papel claro
+sempre que estiver se apresentando ou explicando o que você faz.`
+
+// A instrução de confirmar valor + total só faz sentido ao registrar ou
+// consultar; numa saudação ela faria o modelo inventar um "registro".
+const SYSTEM_COM_TOTAL = `${SYSTEM}
+
+Sempre confirme o que foi registrado e mostre o total do mês na mesma resposta.`
 
 export async function buildConfirmationMessage(entry: FinanceEntry, monthTotal: number): Promise<string> {
   const typeLabel = entry.type === 'pf' ? 'Pessoal (PF)' : 'Clínica (PJ)'
@@ -26,11 +36,11 @@ Total ${typeLabel} em ${mes}: ${total}`
   const msg = await anthropic.messages.create({
     model: 'claude-sonnet-4-5',
     max_tokens: 120,
-    system: SYSTEM,
+    system: SYSTEM_COM_TOTAL,
     messages: [{ role: 'user', content: prompt }],
   })
 
-  return msg.content[0].type === 'text' ? msg.content[0].text : `✅ ${desc} ${valor} registrado.`
+  return msg.content[0].type === 'text' ? toWhatsApp(msg.content[0].text) : `✅ ${desc} ${valor} registrado.`
 }
 
 export interface QueryFilters {
@@ -65,11 +75,11 @@ Quantidade de lançamentos: ${entries.length}`
   const msg = await anthropic.messages.create({
     model: 'claude-sonnet-4-5',
     max_tokens: 400,
-    system: SYSTEM,
+    system: SYSTEM_COM_TOTAL,
     messages: [{ role: 'user', content: prompt }],
   })
 
-  return msg.content[0].type === 'text' ? msg.content[0].text : `${escopo}: ${formatBRL(total)}`
+  return msg.content[0].type === 'text' ? toWhatsApp(msg.content[0].text) : `${escopo}: ${formatBRL(total)}`
 }
 
 export function buildUndoMessage(entry: FinanceEntry): string {
@@ -84,15 +94,21 @@ export function buildNothingToUndoMessage(): string {
 export async function buildSmalltalkMessage(raw: string): Promise<string> {
   const msg = await anthropic.messages.create({
     model: 'claude-sonnet-4-5',
-    max_tokens: 100,
+    max_tokens: 220,
     system: `${SYSTEM}
-Responda à saudação de forma breve e calorosa e lembre, em uma frase, que você registra gastos e responde quanto ele gastou.`,
+
+Responda à saudação de forma breve e calorosa. A separação PF/PJ é o que o médico
+mais precisa entender de cara, então deixe explícito que você registra os gastos
+pessoais dele separados dos gastos da clínica, com um exemplo curto de cada um
+(ex: "gastei 35 na Netflix" e "paguei 3500 de aluguel do consultório").
+Feche mencionando que ele também pode perguntar quanto gastou.
+No máximo 5 linhas curtas.`,
     messages: [{ role: 'user', content: raw }],
   })
 
   return msg.content[0].type === 'text'
-    ? msg.content[0].text
-    : `Olá! Posso registrar seus gastos e te dizer quanto você gastou. 😊`
+    ? toWhatsApp(msg.content[0].text)
+    : `Olá! Eu registro seus gastos separando o que é pessoal (PF) do que é da clínica (PJ). É só me dizer, por exemplo, "gastei 35 na Netflix" ou "paguei 3500 de aluguel do consultório". 😊`
 }
 
 export function buildHelpMessage(): string {
@@ -172,6 +188,20 @@ function listEntries(entries: FinanceEntry[]): string {
     .join('\n')
 
   return `Lançamentos:\n${lines}`
+}
+
+// O system prompt pede "sem markdown", mas o modelo às vezes devolve
+// **negrito** assim mesmo. O WhatsApp usa *asterisco simples* — o formato do
+// markdown não é renderizado e o médico veria os asteriscos crus no meio da
+// frase. Converte em vez de remover, preservando a ênfase pretendida.
+function toWhatsApp(text: string): string {
+  // [\s\S] em vez da flag /s: o target do tsconfig é anterior a es2018,
+  // onde dotAll não existe (TS1501).
+  return text
+    .replace(/\*\*\*([\s\S]+?)\*\*\*/g, '*_$1_*')
+    .replace(/\*\*([\s\S]+?)\*\*/g, '*$1*')
+    .replace(/__([\s\S]+?)__/g, '_$1_')
+    .trim()
 }
 
 function formatBRL(value: number): string {
