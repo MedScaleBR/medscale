@@ -72,7 +72,7 @@ grant all on public.transcriptions to service_role;
 -- Sem isto, a subscription Realtime da página de detalhe
 -- (components/transcriptions/TranscriptionDetailClient.tsx) nunca recebe
 -- eventos — a tabela precisa estar na publicação replicada explicitamente,
--- não basta ter RLS habilitado.
+-- não ter RLS habilitado.
 alter publication supabase_realtime add table public.transcriptions;
 
 -- ============================================================

@@ -22,9 +22,10 @@ interface SettingsClientProps {
     whatsappNumber: string | null
   }
   google: { connected: boolean; email: string | null }
+  isOwner: boolean
 }
 
-export function SettingsClient({ initialProfile, workspace, google }: SettingsClientProps) {
+export function SettingsClient({ initialProfile, workspace, google, isOwner }: SettingsClientProps) {
   const [form, setForm] = useState({
     full_name: initialProfile.full_name ?? '',
     specialty: initialProfile.specialty ?? '',
@@ -134,6 +135,21 @@ export function SettingsClient({ initialProfile, workspace, google }: SettingsCl
         </div>
         <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
       </Link>
+
+      {isOwner && (
+        <Link
+          href="/configuracoes/equipe"
+          className="flex items-center justify-between rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)] transition-colors hover:border-[var(--cyan)]"
+        >
+          <div>
+            <h2 className="text-sm font-medium text-gray-900">Equipe</h2>
+            <p className="mt-0.5 text-xs text-gray-400">
+              Convide pessoas e controle quais módulos cada uma pode ver.
+            </p>
+          </div>
+          <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
+        </Link>
+      )}
     </div>
   )
 }

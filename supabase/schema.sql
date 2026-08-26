@@ -840,8 +840,10 @@ create policy "availability_exceptions: workspace members" on public.availabilit
 create policy "waitlist: workspace members" on public.waitlist
   for all using (workspace_id = any(public.my_workspace_ids()));
 
-create policy "revenue_entries: workspace members" on public.revenue_entries
-  for all using (workspace_id = any(public.my_workspace_ids()));
+-- Exclusivo do owner — mesmo padrão de finance_entries (dado financeiro não
+-- é estendido a admin/member, nem via module_overrides).
+create policy "revenue_entries: owner only" on public.revenue_entries
+  for all using (public.is_account_owner(account_id));
 
 create policy "ad_campaigns: workspace members" on public.ad_campaigns
   for all using (workspace_id = any(public.my_workspace_ids()));

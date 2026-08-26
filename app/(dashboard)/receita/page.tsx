@@ -1,3 +1,4 @@
+import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { RevenueClient } from '@/components/receita/RevenueClient'
@@ -5,6 +6,10 @@ import { RevenueClient } from '@/components/receita/RevenueClient'
 export default async function ReceitaPage() {
   const session = await resolveActiveSession()
   if (!session) return null
+
+  // Painel exclusivo do owner — não abrir para admin/member, mesmo que o
+  // módulo esteja ativo no account ou liberado via module_overrides.
+  if (session.role !== 'owner') redirect('/dashboard')
 
   const supabase = await createClient()
   const { data: entries } = await supabase
