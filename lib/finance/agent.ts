@@ -141,8 +141,14 @@ export async function sendFinanceReply(to: string, text: string): Promise<void> 
   await sendWhatsAppMessage({ to, message: text, phoneNumberId, token })
 }
 
-// Normaliza número de telefone para comparação. Remove +, espaços, traços.
-// Ex: "+55 11 99999-9999" → "5511999999999"
+// Normaliza número de telefone para comparação. O `from` que a Meta manda
+// sempre vem em formato internacional (código do país + DDD + número, sem
+// símbolos — ex: "5511999999999"), mas profiles.phone pode ter sido salvo
+// local, com máscara e sem o 55 (ex: "(11) 99999-9999" → "11999999999",
+// 11 dígitos). Números de celular/fixo brasileiros nunca passam de 11
+// dígitos sem o código do país, então abaixo disso assume-se Brasil e
+// prefixa o 55 antes de comparar.
 function normalizePhone(phone: string): string {
-  return phone.replace(/[^\d]/g, '')
+  const digits = phone.replace(/[^\d]/g, '')
+  return digits.length >= 12 ? digits : `55${digits}`
 }
