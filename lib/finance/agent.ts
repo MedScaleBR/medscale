@@ -1,15 +1,20 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { sendWhatsAppMessage } from '@/lib/whatsapp/send'
 import { parseCommand } from './parser'
+import { interpretMessage } from './interpret'
 import { categorizeEntry } from './categorize'
 import {
   buildConfirmationMessage,
-  buildSummaryMessage,
+  buildQueryMessage,
+  buildSmalltalkMessage,
+  buildUndoMessage,
+  buildNothingToUndoMessage,
   buildHelpMessage,
   buildUnknownMessage,
   buildUnregisteredMessage,
+  type QueryFilters,
 } from './respond'
-import type { FinanceEntry, FinanceEntryType } from './types'
+import type { FinanceEntry } from './types'
 
 export async function processFinancialMessage(senderPhone: string, messageText: string): Promise<void> {
   const supabase = createAdminClient()
@@ -78,30 +83,48 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
     return
   }
 
-  // 3. Parsear comando
-  const command = parseCommand(messageText)
+  // 3. Entender a mensagem. Atalho com barra primeiro (instantâneo e sem
+  // custo); só o que não for comando vai para o Claude interpretar.
+  const today = new Date().toISOString().split('T')[0]
+  const shortcut = parseCommand(messageText)
+  const intent = shortcut.kind === 'unknown' ? await interpretMessage(messageText, today) : shortcut
 
-  if (command.kind === 'help') {
+  if (intent.kind === 'help') {
     await sendFinanceReply(senderPhone, buildHelpMessage())
     return
   }
 
-  if (command.kind === 'unknown') {
+  if (intent.kind === 'unknown') {
     await sendFinanceReply(senderPhone, buildUnknownMessage())
     return
   }
 
-  if (command.kind === 'summary') {
-    const entries = await getMonthEntries(accountId, command.type)
-    const response = await buildSummaryMessage(entries, command.type)
+  if (intent.kind === 'smalltalk') {
+    await sendFinanceReply(senderPhone, await buildSmalltalkMessage(intent.raw))
+    return
+  }
+
+  if (intent.kind === 'undo') {
+    await handleUndo(supabase, accountId, senderPhone)
+    return
+  }
+
+  if (intent.kind === 'query') {
+    const entries = await getEntries(accountId, {
+      type: intent.type,
+      category: intent.category,
+      month: intent.month,
+    })
+    const response = await buildQueryMessage(entries, intent)
     await sendFinanceReply(senderPhone, response)
     return
   }
 
-  // 4. Categorizar (se tem descrição)
-  let category: string | null = null
-  if (command.description) {
-    category = await categorizeEntry(command.description, command.type)
+  // 4. Categorizar. A interpretação por linguagem natural já traz a
+  // categoria; só o caminho dos atalhos precisa desta chamada extra.
+  let category = intent.category
+  if (!category && intent.description) {
+    category = await categorizeEntry(intent.description, intent.type)
   }
 
   // 5. Salvar no banco
@@ -110,12 +133,12 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
     .insert({
       account_id: accountId,
       recorded_by_phone: senderPhone,
-      type: command.type,
-      description: command.description,
-      amount: command.amount,
+      type: intent.type,
+      description: intent.description,
+      amount: intent.amount,
       category,
       raw_message: messageText,
-      entry_date: new Date().toISOString().split('T')[0],
+      entry_date: today,
     })
     .select('*')
     .single()
@@ -126,27 +149,66 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
   }
 
   // 6. Calcular total do mês para a confirmação
-  const monthEntries = await getMonthEntries(accountId, command.type)
+  const monthEntries = await getEntries(accountId, { type: intent.type, category: null, month: null })
   const monthTotal = monthEntries.reduce((s, e) => s + e.amount, 0)
 
   const response = await buildConfirmationMessage(entry, monthTotal)
   await sendFinanceReply(senderPhone, response)
 }
 
-async function getMonthEntries(accountId: string, type: FinanceEntryType): Promise<FinanceEntry[]> {
-  const supabase = createAdminClient()
-  const now = new Date()
-  const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
-  const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0]
-
-  const { data } = await supabase
+// Apaga o lançamento mais recente da account. Existe porque o registro por
+// linguagem natural grava direto, sem etapa de confirmação — sem um jeito de
+// desfazer pelo WhatsApp, um valor lido errado só sairia via SQL.
+async function handleUndo(
+  supabase: ReturnType<typeof createAdminClient>,
+  accountId: string,
+  senderPhone: string
+): Promise<void> {
+  const { data: last } = await supabase
     .from('finance_entries')
     .select('*')
     .eq('account_id', accountId)
-    .eq('type', type)
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (!last) {
+    await sendFinanceReply(senderPhone, buildNothingToUndoMessage())
+    return
+  }
+
+  const { error } = await supabase.from('finance_entries').delete().eq('id', last.id)
+
+  if (error) {
+    await sendFinanceReply(senderPhone, `Não consegui apagar o lançamento agora. Tente novamente.`)
+    return
+  }
+
+  await sendFinanceReply(senderPhone, buildUndoMessage(last))
+}
+
+// Lançamentos da account com os filtros da consulta. `type`/`category` nulos
+// significam "todos"; `month` nulo significa o mês atual.
+async function getEntries(accountId: string, filters: QueryFilters): Promise<FinanceEntry[]> {
+  const supabase = createAdminClient()
+
+  const ref = filters.month
+    ? new Date(Number(filters.month.slice(0, 4)), Number(filters.month.slice(5, 7)) - 1, 1)
+    : new Date()
+  const firstDay = new Date(ref.getFullYear(), ref.getMonth(), 1).toISOString().split('T')[0]
+  const lastDay = new Date(ref.getFullYear(), ref.getMonth() + 1, 0).toISOString().split('T')[0]
+
+  let query = supabase
+    .from('finance_entries')
+    .select('*')
+    .eq('account_id', accountId)
     .gte('entry_date', firstDay)
     .lte('entry_date', lastDay)
-    .order('created_at', { ascending: false })
+
+  if (filters.type) query = query.eq('type', filters.type)
+  if (filters.category) query = query.eq('category', filters.category)
+
+  const { data } = await query.order('entry_date', { ascending: false })
 
   return data ?? []
 }
