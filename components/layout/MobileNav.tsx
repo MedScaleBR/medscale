@@ -43,6 +43,7 @@ export function MobileNav({ session, accounts }: MobileNavProps) {
 
         <NavLinks
           userModules={userModules}
+          role={role}
           className="flex-1 space-y-1 px-3 py-4"
           onNavigate={() => setOpen(false)}
         />

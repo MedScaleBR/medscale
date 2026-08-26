@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import type { ModuleSlug } from '@/lib/session/context'
+import type { MembershipRole } from '@/types/database'
 import {
   LayoutDashboard,
   CalendarDays,
@@ -34,6 +35,7 @@ export const MODULE_NAV: Record<ModuleSlug, { label: string; href: string; icon:
   patients: { label: 'Meus pacientes', href: '/pacientes', icon: Users },
   settings: { label: 'Configuração', href: '/configuracoes', icon: Settings },
   transcriptions: { label: 'Transcrições', href: '/transcricoes', icon: FileAudio },
+  finance: { label: 'Financeiro', href: '/finance', icon: Wallet },
 }
 
 // Ordem fixa de exibição, independente da ordem em accountModules/userModules
@@ -45,21 +47,29 @@ export const NAV_ORDER: ModuleSlug[] = [
   'schedule',
   'waitlist',
   'financial',
+  'finance',
   'campaigns',
   'patients',
   'transcriptions',
   'settings',
 ]
 
+// Módulos visíveis só para owner, mesmo quando ativos no account — dado
+// pessoal (finance_entries) que não deve aparecer a admin/member convidados.
+const OWNER_ONLY_MODULES: ModuleSlug[] = ['finance']
+
 interface NavLinksProps {
   userModules: ModuleSlug[]
+  role: MembershipRole
   className?: string
   onNavigate?: () => void
 }
 
-export function NavLinks({ userModules, className, onNavigate }: NavLinksProps) {
+export function NavLinks({ userModules, role, className, onNavigate }: NavLinksProps) {
   const pathname = usePathname()
-  const visibleModules = NAV_ORDER.filter((slug) => userModules.includes(slug))
+  const visibleModules = NAV_ORDER.filter(
+    (slug) => userModules.includes(slug) && (role === 'owner' || !OWNER_ONLY_MODULES.includes(slug))
+  )
 
   return (
     <nav className={className}>
