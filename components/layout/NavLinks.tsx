@@ -30,7 +30,7 @@ export const MODULE_NAV: Record<ModuleSlug, { label: string; href: string; icon:
   locations: { label: 'Meus locais', href: '/locais', icon: MapPin },
   schedule: { label: 'Meu expediente', href: '/expediente', icon: Clock },
   waitlist: { label: 'Lista de espera', href: '/lista-espera', icon: Hourglass },
-  financial: { label: 'Meu financeiro', href: '/receita', icon: Wallet },
+  financial: { label: 'Receita', href: '/receita', icon: Wallet },
   campaigns: { label: 'Atribuição', href: '/trafego', icon: TrendingUp },
   patients: { label: 'Meus pacientes', href: '/pacientes', icon: Users },
   settings: { label: 'Configuração', href: '/configuracoes', icon: Settings },
