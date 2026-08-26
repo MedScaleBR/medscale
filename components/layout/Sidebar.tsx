@@ -27,7 +27,7 @@ export function Sidebar({ session, accounts }: SidebarProps) {
       {accounts.length > 1 && <AccountSwitcher accounts={accounts} activeId={accountId} />}
       {allWorkspaces.length > 1 && <WorkspaceSwitcher workspaces={allWorkspaces} activeId={workspaceId} />}
 
-      <NavLinks userModules={userModules} className="flex-1 space-y-1 px-3 py-4" />
+      <NavLinks userModules={userModules} role={role} className="flex-1 space-y-1 px-3 py-4" />
 
       <div className="border-t border-[var(--w10)] px-6 py-4">
         <p className="truncate text-xs font-medium text-white/80">{accountName}</p>

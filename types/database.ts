@@ -35,6 +35,7 @@ export type TranscriptionStatus =
 export type TranscriptionSource = 'system' | 'whatsapp'
 export type AccountNoteType = 'note' | 'call' | 'email' | 'meeting'
 export type AccountTaskStatus = 'pending' | 'done'
+export type FinanceEntryType = 'pf' | 'pj'
 
 // Módulos controláveis por account/membership. dashboard, patients e
 // settings são sempre tratados como ativos pelo app (ver lib/session/server.ts).
@@ -50,6 +51,7 @@ export type ModuleSlug =
   | 'patients'
   | 'settings'
   | 'transcriptions'
+  | 'finance'
 
 export interface Database {
   public: {
@@ -711,12 +713,64 @@ export interface Database {
           },
         ]
       }
+      finance_entries: {
+        Row: {
+          id: string
+          account_id: string
+          recorded_by_phone: string
+          type: FinanceEntryType
+          description: string | null
+          amount: number
+          category: string | null
+          raw_message: string
+          entry_date: string
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['finance_entries']['Row']> & {
+          account_id: string
+          recorded_by_phone: string
+          type: FinanceEntryType
+          amount: number
+          raw_message: string
+        }
+        Update: Partial<Database['public']['Tables']['finance_entries']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'finance_entries_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      finance_sessions: {
+        Row: {
+          phone: string
+          account_id: string
+          pending_entry: Record<string, unknown> | null
+          last_message_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['finance_sessions']['Row']> & {
+          phone: string
+          account_id: string
+        }
+        Update: Partial<Database['public']['Tables']['finance_sessions']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'finance_sessions_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+        ]
+      }
     }
     Views: Record<string, never>
     Functions: {
       my_account_ids: { Args: Record<string, never>; Returns: string[] }
       my_workspace_ids: { Args: Record<string, never>; Returns: string[] }
       is_account_admin: { Args: { p_account_id: string }; Returns: boolean }
+      is_account_owner: { Args: { p_account_id: string }; Returns: boolean }
       is_medscale_admin: { Args: Record<string, never>; Returns: boolean }
       trigger_transcription_process: {
         Args: { p_transcription_id: string; p_app_url: string }

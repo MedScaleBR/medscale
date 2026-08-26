@@ -18,6 +18,8 @@ drop trigger if exists on_auth_user_created on auth.users;
 -- `cascade` aqui também remove automaticamente todas as policies, índices e
 -- triggers de cada tabela — não é preciso dropar isso separadamente.
 drop table if exists
+  public.finance_sessions,
+  public.finance_entries,
   public.transcriptions,
   public.handoff_hours,
   public.handoff_logs,
@@ -46,6 +48,7 @@ cascade;
 drop type if exists public.transcription_status cascade;
 
 drop function if exists public.is_medscale_admin() cascade;
+drop function if exists public.is_account_owner(uuid) cascade;
 drop function if exists public.is_account_admin(uuid) cascade;
 drop function if exists public.my_workspace_ids() cascade;
 drop function if exists public.my_account_ids() cascade;
@@ -210,6 +213,36 @@ create table public.account_tasks (
   completed_at  timestamptz,
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
+);
+
+-- ============================================================
+-- 7B. AGENTE FINANCEIRO (lançamentos PF/PJ via WhatsApp, número dedicado
+--     da MedScale — ver FINANCE_PHONE_NUMBER_ID/FINANCE_META_TOKEN)
+-- ============================================================
+
+-- Lançamento individual, criado pelo owner via comando no WhatsApp
+-- (/pf, /pj). Por account, não por workspace: um owner com múltiplas
+-- clínicas tem uma única visão financeira consolidada.
+create table public.finance_entries (
+  id                uuid default uuid_generate_v4() primary key,
+  account_id        uuid references public.accounts(id) on delete cascade not null,
+  recorded_by_phone text not null,
+  type              text not null check (type in ('pf','pj')),
+  description       text,
+  amount            numeric(12, 2) not null check (amount > 0),
+  category          text,
+  raw_message       text not null,
+  entry_date        date not null default current_date,
+  created_at        timestamptz not null default now()
+);
+
+-- Contexto de conversa por telefone, para manter estado entre mensagens
+-- (ex: confirmação pendente). Lida/gravada só via createAdminClient().
+create table public.finance_sessions (
+  phone             text primary key,
+  account_id        uuid references public.accounts(id) on delete cascade not null,
+  pending_entry     jsonb,
+  last_message_at   timestamptz not null default now()
 );
 
 -- ============================================================
@@ -534,6 +567,8 @@ create index idx_transcriptions_archived_at  on public.transcriptions(archived_a
 create index idx_account_notes_account       on public.account_notes(account_id, created_at desc);
 create index idx_account_tasks_account       on public.account_tasks(account_id, status);
 create index idx_account_tasks_assignee      on public.account_tasks(assigned_to, status, due_date);
+create index idx_finance_entries_account     on public.finance_entries(account_id, entry_date desc);
+create index idx_finance_entries_type        on public.finance_entries(account_id, type);
 
 -- ============================================================
 -- 10. TRIGGERS updated_at
@@ -647,6 +682,21 @@ returns boolean language sql security definer stable as $$
   )
 $$;
 
+-- papel = owner do usuário atual num account. Distinto de is_account_admin
+-- (que também aceita 'admin') porque o painel financeiro e finance_entries
+-- são exclusivos do owner — dado pessoal, não estendido a sócios/secretárias
+-- convidados como 'admin'.
+create or replace function public.is_account_owner(p_account_id uuid)
+returns boolean language sql security definer stable as $$
+  select exists (
+    select 1 from public.memberships
+    where account_id = p_account_id
+      and user_id    = auth.uid()
+      and status     = 'active'
+      and role       = 'owner'
+  )
+$$;
+
 -- ============================================================
 -- 12.1 FUNÇÕES — disparo assíncrono do pipeline de transcrição via pg_net.
 -- Mesmo padrão de supabase/cron.sql: net.http_post + CRON_SECRET lido do
@@ -713,6 +763,8 @@ alter table public.handoff_hours          enable row level security;
 alter table public.transcriptions         enable row level security;
 alter table public.account_notes          enable row level security;
 alter table public.account_tasks          enable row level security;
+alter table public.finance_entries        enable row level security;
+alter table public.finance_sessions       enable row level security;
 
 -- Accounts: membro lê o(s) próprio(s); admin do account edita
 create policy "accounts: members read" on public.accounts
@@ -819,6 +871,16 @@ create policy "account_notes: medscale admin full" on public.account_notes
 
 create policy "account_tasks: medscale admin full" on public.account_tasks
   for all using (public.is_medscale_admin());
+
+-- finance_entries: dado financeiro pessoal — exclusivo do owner do account,
+-- não estendido a admin/member como o restante dos dados operacionais.
+create policy "finance_entries: owner only" on public.finance_entries
+  for all using (public.is_account_owner(account_id));
+
+-- finance_sessions: contexto de conversa do bot financeiro — só o webhook
+-- (service role) acessa; sem policy tenant-facing.
+create policy "finance_sessions: service role only" on public.finance_sessions
+  for all using (false);
 
 -- Necessário para a subscription Realtime da página de detalhe de
 -- transcrição (RLS habilitado não é suficiente, a tabela precisa estar na

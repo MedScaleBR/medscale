@@ -2,6 +2,8 @@ import { NextRequest, NextResponse, after } from 'next/server'
 import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/server'
 import { processIncomingMessage, handleUnsupportedMessage } from '@/lib/llm/agent'
+import { processFinancialMessage, sendFinanceReply } from '@/lib/finance/agent'
+import { buildUnsupportedTypeMessage } from '@/lib/finance/respond'
 import { decryptToken } from '@/lib/crypto'
 
 // Valida a assinatura HMAC enviada pela Meta para garantir que o payload
@@ -64,8 +66,29 @@ export async function POST(req: NextRequest) {
   }
 
   const message = value.messages[0]
-  const from = message.from // telefone do paciente
+  const from = message.from // telefone do paciente (ou do owner, no fluxo financeiro)
   const text = message.type === 'text' ? message.text.body : null
+
+  // Mensagem chegou no número financeiro dedicado da MedScale — fora do
+  // modelo de workspace (o owner registra PF/PJ consolidado por account),
+  // então é tratada antes da resolução de workspace abaixo. Mesmo App Meta
+  // e mesmo META_APP_SECRET do fluxo compartilhado, só o phone_number_id
+  // e o token de envio (FINANCE_META_TOKEN) são diferentes.
+  if (phoneNumberId && phoneNumberId === process.env.FINANCE_PHONE_NUMBER_ID) {
+    if (message.type !== 'text') {
+      after(() =>
+        sendFinanceReply(from, buildUnsupportedTypeMessage()).catch((err) =>
+          console.error('sendFinanceReply (unsupported type) failed', err)
+        )
+      )
+      return NextResponse.json({ status: 'ok' })
+    }
+
+    after(() =>
+      processFinancialMessage(from, text ?? '').catch((err) => console.error('processFinancialMessage failed', err))
+    )
+    return NextResponse.json({ status: 'ok' })
+  }
 
   // Log do webhook para debugging — associado à workspace quando identificável.
   // Guardamos o id da linha para poder gravar o erro nela especificamente
