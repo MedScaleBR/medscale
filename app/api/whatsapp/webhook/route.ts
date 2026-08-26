@@ -37,26 +37,50 @@ export async function POST(req: NextRequest) {
   const value = changes?.value
   const phoneNumberId: string | undefined = value?.metadata?.phone_number_id
 
+  // O número financeiro não é de nenhuma workspace (é o número único da
+  // MedScale, por account) — não adianta procurar workspace pra ele.
+  const isFinanceNumber = Boolean(phoneNumberId && phoneNumberId === process.env.FINANCE_PHONE_NUMBER_ID)
+
   // Encontrar a workspace pelo phone_number_id — precisamos disso já aqui
   // (antes de aceitar/rejeitar a assinatura) porque, no fluxo "número
   // próprio", a assinatura só é validável com o App Secret daquela workspace.
-  const { data: workspace } = phoneNumberId
-    ? await supabase
-        .from('workspaces')
-        .select('id, name, account_id, meta_app_secret')
-        .eq('phone_number_id', phoneNumberId)
-        .single()
-    : { data: null }
+  const { data: workspace } =
+    phoneNumberId && !isFinanceNumber
+      ? await supabase
+          .from('workspaces')
+          .select('id, name, account_id, meta_app_secret')
+          .eq('phone_number_id', phoneNumberId)
+          .single()
+      : { data: null }
 
   const workspaceSecret = workspace?.meta_app_secret ? decryptToken(workspace.meta_app_secret) : null
+
+  // O número financeiro pode estar num App Meta diferente do App único da
+  // MedScale (ex: adicionado na mesma WABA de um número do fluxo "número
+  // próprio", que é assinada pelo App daquela clínica). Como ele não tem
+  // workspace, o secret dele não sai do banco — vem de env var própria,
+  // caindo em META_APP_SECRET quando não configurada (caso em que o número
+  // financeiro está mesmo no App único da MedScale).
+  const financeSecret = isFinanceNumber
+    ? (process.env.FINANCE_META_APP_SECRET ?? process.env.META_APP_SECRET)
+    : null
+
   const validSignature =
     validateMetaSignature(rawBody, signature, process.env.META_APP_SECRET) ||
-    validateMetaSignature(rawBody, signature, workspaceSecret)
+    validateMetaSignature(rawBody, signature, workspaceSecret) ||
+    validateMetaSignature(rawBody, signature, financeSecret)
 
   if (!validSignature) {
+    // Nunca logar os secrets em si — só o suficiente pra diferenciar "env
+    // var não configurada" de "valor errado" (ver o GET mais abaixo).
     console.warn('[whatsapp webhook] signature validation failed', {
+      phoneNumberId: phoneNumberId ?? null,
+      isFinanceNumber,
       workspaceId: workspace?.id ?? null,
       hasWorkspaceSecret: Boolean(workspaceSecret),
+      hasGlobalSecret: Boolean(process.env.META_APP_SECRET),
+      hasFinanceSecret: Boolean(process.env.FINANCE_META_APP_SECRET),
+      hasSignatureHeader: Boolean(signature),
     })
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
   }
