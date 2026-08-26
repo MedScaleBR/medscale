@@ -3,12 +3,15 @@ import type { FinanceEntryType } from './types'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-const PF_CATEGORIES = [
+// Exportadas porque interpret.ts também precisa delas — sem a lista, o
+// modelo devolveria "assinatura"/"streaming" em vez da categoria exata
+// gravada no banco, e o filtro por categoria não acharia nada.
+export const PF_CATEGORIES = [
   'Alimentação', 'Moradia', 'Saúde', 'Educação', 'Lazer',
   'Transporte', 'Vestuário', 'Assinaturas', 'Investimentos', 'Outros',
 ]
 
-const PJ_CATEGORIES = [
+export const PJ_CATEGORIES = [
   'Aluguel', 'Equipamentos', 'Salários', 'Marketing', 'Software',
   'Impostos', 'Contabilidade', 'Materiais médicos', 'Manutenção', 'Outros',
 ]

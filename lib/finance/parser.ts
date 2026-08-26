@@ -1,26 +1,33 @@
-import type { ParsedCommand, FinanceEntryType } from './types'
+import type { FinanceIntent, FinanceEntryType } from './types'
 
-// Interpreta a mensagem do owner. Roda antes do LLM — o Claude só entra
-// para categorizar e redigir respostas, nunca para parsing de comandos.
+// Atalhos com barra — caminho rápido, determinístico e sem custo de LLM,
+// para quem já decorou os comandos. O que não casar aqui volta como
+// `unknown` e é interpretado por interpret.ts (linguagem natural).
 //
 // Formatos aceitos:
 //   /pf Netflix 35                  → entry PF, desc "Netflix", valor 35
 //   /pj Aluguel consultório 3500,50 → entry PJ, desc, valor
 //   /pf 35                          → entry PF, sem desc, valor 35
-//   /resumo pf                      → summary PF
-//   /resumo pj                      → summary PJ
+//   /resumo pf                      → query PF do mês atual
+//   /resumo pj                      → query PJ do mês atual
+//   /desfazer                       → apaga o último lançamento
 //   /ajuda                          → help
-//   qualquer outra coisa            → unknown
 //
 // Aceita vírgula ou ponto como separador decimal, ignora "R$" e espaços extras.
-export function parseCommand(raw: string): ParsedCommand {
+export function parseCommand(raw: string): FinanceIntent {
   const text = raw.trim()
 
   if (/^\/ajuda$/i.test(text)) return { kind: 'help' }
+  if (/^\/desfazer$/i.test(text)) return { kind: 'undo' }
 
   const resumoMatch = text.match(/^\/resumo\s+(pf|pj)$/i)
   if (resumoMatch) {
-    return { kind: 'summary', type: resumoMatch[1].toLowerCase() as FinanceEntryType }
+    return {
+      kind: 'query',
+      type: resumoMatch[1].toLowerCase() as FinanceEntryType,
+      category: null,
+      month: null,
+    }
   }
 
   const entryMatch = text.match(/^\/(pf|pj)\s+(.+)$/i)
@@ -39,6 +46,8 @@ export function parseCommand(raw: string): ParsedCommand {
           type,
           description: descRaw.length > 0 ? descRaw : null,
           amount,
+          // Atalho não deduz categoria — quem categoriza é o agente.
+          category: null,
         }
       }
     }
