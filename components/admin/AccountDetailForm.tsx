@@ -25,7 +25,7 @@ const TOGGLEABLE_MODULES: { slug: ModuleSlug; label: string }[] = [
   { slug: 'locations', label: 'Meus locais' },
   { slug: 'schedule', label: 'Meu expediente' },
   { slug: 'waitlist', label: 'Lista de espera' },
-  { slug: 'financial', label: 'Meu financeiro' },
+  { slug: 'financial', label: 'Receita' },
   { slug: 'campaigns', label: 'Atribuição' },
   { slug: 'transcriptions', label: 'Transcrições' },
   { slug: 'finance', label: 'Financeiro (agente PF/PJ)' },
