@@ -28,6 +28,7 @@ const TOGGLEABLE_MODULES: { slug: ModuleSlug; label: string }[] = [
   { slug: 'financial', label: 'Meu financeiro' },
   { slug: 'campaigns', label: 'Atribuição' },
   { slug: 'transcriptions', label: 'Transcrições' },
+  { slug: 'finance', label: 'Financeiro (agente PF/PJ)' },
 ]
 
 interface AccountDetailFormProps {
