@@ -162,6 +162,25 @@ select cron.schedule(
   $$
 );
 
+-- DAILY-REVENUE-SUMMARY: fechamento de receita do dia no WhatsApp do owner —
+-- roda de hora em hora; a rota só envia para os workspaces cujo
+-- revenue_settings.daily_summary_hour bate com a hora atual (São Paulo).
+-- Só afeta accounts com o módulo "revenue_cycle" ativo.
+select cron.schedule(
+  'daily-revenue-summary',
+  '5 * * * *',
+  $$
+    select net.http_post(
+      url     := 'https://app.medscalebr.com/api/cron/daily-revenue-summary',
+      headers := jsonb_build_object(
+        'Content-Type',  'application/json',
+        'Authorization', 'Bearer ' || public.cron_secret()
+      ),
+      body    := '{}'::jsonb
+    );
+  $$
+);
+
 -- ============================================================
 -- 3. VERIFICAÇÃO
 -- ============================================================

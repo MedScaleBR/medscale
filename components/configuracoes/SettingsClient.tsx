@@ -23,9 +23,10 @@ interface SettingsClientProps {
   }
   google: { connected: boolean; email: string | null }
   isOwner: boolean
+  showRevenueCycle: boolean
 }
 
-export function SettingsClient({ initialProfile, workspace, google, isOwner }: SettingsClientProps) {
+export function SettingsClient({ initialProfile, workspace, google, isOwner, showRevenueCycle }: SettingsClientProps) {
   const [form, setForm] = useState({
     full_name: initialProfile.full_name ?? '',
     specialty: initialProfile.specialty ?? '',
@@ -135,6 +136,21 @@ export function SettingsClient({ initialProfile, workspace, google, isOwner }: S
         </div>
         <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
       </Link>
+
+      {isOwner && showRevenueCycle && (
+        <Link
+          href="/configuracoes/receita"
+          className="flex items-center justify-between rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)] transition-colors hover:border-[var(--cyan)]"
+        >
+          <div>
+            <h2 className="text-sm font-medium text-gray-900">Receita</h2>
+            <p className="mt-0.5 text-xs text-gray-400">
+              Catálogo de procedimentos com preço e preferências do fechamento diário.
+            </p>
+          </div>
+          <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
+        </Link>
+      )}
 
       {isOwner && (
         <Link

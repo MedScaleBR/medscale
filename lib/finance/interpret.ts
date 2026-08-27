@@ -23,11 +23,41 @@ const INTENT_TOOL = {
     properties: {
       intencao: {
         type: 'string',
-        enum: ['lancamento', 'consulta', 'desfazer', 'ajuda', 'conversa', 'desconhecido'],
+        enum: [
+          'lancamento',
+          'consulta',
+          'confirmar_pagamento',
+          'desfazer',
+          'ajuda',
+          'conversa',
+          'desconhecido',
+        ],
         description:
           'lancamento = registrar um gasto. consulta = perguntar quanto gastou. ' +
+          'confirmar_pagamento = o médico avisa que um paciente pagou uma consulta ' +
+          '(ex: "João pagou a consulta das 14h", "recebi da Ana, foi no pix"). ' +
           'desfazer = apagar o último lançamento. ajuda = quer saber como usar. ' +
           'conversa = saudação/agradecimento sem pedido. desconhecido = não dá para saber.',
+      },
+      paciente: {
+        type: ['string', 'null'],
+        description: 'Em confirmar_pagamento: o nome do paciente que pagou, como o médico escreveu. Senão null.',
+      },
+      horario: {
+        type: ['string', 'null'],
+        description:
+          'Em confirmar_pagamento: o horário da consulta mencionado, em HH:mm (ex: "14:00"). null se não mencionado.',
+      },
+      forma_pagamento: {
+        anyOf: [
+          {
+            type: 'string',
+            enum: ['pix', 'cartao_credito', 'cartao_debito', 'dinheiro', 'transferencia', 'outro'],
+          },
+          { type: 'null' },
+        ],
+        description:
+          'Em confirmar_pagamento: a forma de pagamento, se o médico disser. "cartão" sem especificar → cartao_credito. null se não disser.',
       },
       // anyOf, e não `type: ['string','null'] + enum`: a API rejeita um enum
       // que mistura null com o tipo declarado ("Enum value 'pf' does not
@@ -57,18 +87,33 @@ const INTENT_TOOL = {
         description: 'Mês da consulta no formato YYYY-MM. null quando é o mês atual.',
       },
     },
-    required: ['intencao', 'tipo', 'descricao', 'valor', 'categoria', 'mes'],
+    required: [
+      'intencao',
+      'tipo',
+      'descricao',
+      'valor',
+      'categoria',
+      'mes',
+      'paciente',
+      'horario',
+      'forma_pagamento',
+    ],
     additionalProperties: false,
   },
 }
 
+type PaymentMethodValue = 'pix' | 'cartao_credito' | 'cartao_debito' | 'dinheiro' | 'transferencia' | 'outro'
+
 type IntentToolInput = {
-  intencao: 'lancamento' | 'consulta' | 'desfazer' | 'ajuda' | 'conversa' | 'desconhecido'
+  intencao: 'lancamento' | 'consulta' | 'confirmar_pagamento' | 'desfazer' | 'ajuda' | 'conversa' | 'desconhecido'
   tipo: FinanceEntryType | null
   descricao: string | null
   valor: number | null
   categoria: string | null
   mes: string | null
+  paciente: string | null
+  horario: string | null
+  forma_pagamento: PaymentMethodValue | null
 }
 
 function buildSystem(today: string): string {
@@ -85,6 +130,7 @@ Categorias válidas em pf: ${PF_CATEGORIES.join(', ')}
 Categorias válidas em pj: ${PJ_CATEGORIES.join(', ')}
 
 Regras:
+- "confirmar_pagamento" é sobre um PACIENTE que pagou uma consulta ("o João pagou", "recebi da Ana"), não sobre um gasto do médico. Extraia o nome do paciente em "paciente"; o horário em "horario" se ele disser; a forma de pagamento em "forma_pagamento" se ele disser.
 - Em "consulta", se o médico citar um assunto (ex: "assinaturas", "aluguel"), mapeie para a categoria EXATA das listas acima. Se não citar, categoria = null.
 - Em "lancamento", nunca invente valor: se a mensagem não tiver um número claro, use intencao "desconhecido".
 - Se a mensagem misturar vários gastos de uma vez, use "desconhecido" — o registro é de um gasto por vez.
@@ -144,6 +190,14 @@ function toIntent(input: IntentToolInput, raw: string): FinanceIntent {
         type: input.tipo,
         category: input.categoria,
         month: /^\d{4}-\d{2}$/.test(input.mes ?? '') ? input.mes : null,
+      }
+
+    case 'confirmar_pagamento':
+      return {
+        kind: 'confirm_payment',
+        patient: input.paciente?.trim() || null,
+        time: /^\d{1,2}:\d{2}$/.test(input.horario ?? '') ? input.horario : null,
+        method: input.forma_pagamento ?? null,
       }
 
     case 'desfazer':

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
+import { syncRevenueEntryToAppointmentStatus } from '@/lib/revenue/cycle'
 import type { SOAPRecord } from '@/lib/transcriptions/types'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -44,6 +45,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (transcription.appointment_id) {
     await supabase.from('appointments').update({ status: 'realizado' }).eq('id', transcription.appointment_id)
+    // Ciclo de receita: move a entrada previsão → realizada. Client admin
+    // porque revenue_entries tem RLS exclusiva de owner e quem assina pode
+    // ser outro papel. A transcrição já foi validada contra o workspace da
+    // sessão acima, então o appointment_id é confiável.
+    await syncRevenueEntryToAppointmentStatus(createAdminClient(), transcription.appointment_id, 'realizado')
   }
 
   return NextResponse.json({ ok: true })

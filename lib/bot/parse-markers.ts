@@ -12,6 +12,12 @@ export const CONFIRMATION_MARKER = /AGENDAMENTO_CONFIRMADO:\s*(\d{4}-\d{2}-\d{2}
 export const CANCELLATION_MARKER =
   /CANCELAMENTO_CONFIRMADO:\s*([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/
 export const PATIENT_NAME_MARKER = /NOME_PACIENTE:\s*(.+)/
+// Procedimento escolhido, para o ciclo de receita — id copiado da lista de
+// procedimentos no system prompt. Opcional: só aparece quando a clínica tem
+// catálogo de procedimentos cadastrado. Linha própria, não altera o
+// CONFIRMATION_MARKER (regex acima) que já é sensível a formato.
+export const PROCEDURE_ID_MARKER =
+  /PROCEDIMENTO_ID:\s*([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/
 
 export const HANDOFF_MARKER = '[HANDOFF]'
 
@@ -22,6 +28,8 @@ export interface ParsedMarkers {
   confirmedDate: Date | null
   /** Id da consulta a cancelar, ou null. */
   cancelledAppointmentId: string | null
+  /** Id do procedimento escolhido (catálogo), ou null. */
+  procedureId: string | null
   /** Nome completo informado pelo paciente, já com trim, ou null. */
   patientName: string | null
   /** O Claude sinalizou transferência para atendimento humano. */
@@ -39,6 +47,7 @@ export interface ParsedMarkers {
 export function parseMarkers(rawMessage: string): ParsedMarkers {
   const confirmMatch = rawMessage.match(CONFIRMATION_MARKER)
   const cancelMatch = rawMessage.match(CANCELLATION_MARKER)
+  const procedureMatch = rawMessage.match(PROCEDURE_ID_MARKER)
   const nameMatch = rawMessage.match(PATIENT_NAME_MARKER)
 
   const confirmedSlot = confirmMatch?.[1] ?? null
@@ -49,6 +58,7 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
   const cleanedMessage = rawMessage
     .replace(CONFIRMATION_MARKER, '')
     .replace(CANCELLATION_MARKER, '')
+    .replace(PROCEDURE_ID_MARKER, '')
     .replace(PATIENT_NAME_MARKER, '')
     .trim()
 
@@ -56,6 +66,7 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
     confirmedSlot,
     confirmedDate: confirmedDate && !Number.isNaN(confirmedDate.getTime()) ? confirmedDate : null,
     cancelledAppointmentId: cancelMatch?.[1] ?? null,
+    procedureId: procedureMatch?.[1] ?? null,
     patientName,
     handoffRequested: cleanedMessage.includes(HANDOFF_MARKER),
     cleanedMessage,

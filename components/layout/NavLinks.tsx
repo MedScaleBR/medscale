@@ -17,6 +17,7 @@ import {
   Users,
   Settings,
   FileAudio,
+  Receipt,
 } from 'lucide-react'
 
 // Slug do módulo → rota real do app. Rotas que já existiam antes do modelo
@@ -36,6 +37,7 @@ export const MODULE_NAV: Record<ModuleSlug, { label: string; href: string; icon:
   settings: { label: 'Configuração', href: '/configuracoes', icon: Settings },
   transcriptions: { label: 'Transcrições', href: '/transcricoes', icon: FileAudio },
   finance: { label: 'Financeiro', href: '/finance', icon: Wallet },
+  revenue_cycle: { label: 'Ciclo de receita', href: '/ciclo-receita', icon: Receipt },
 }
 
 // Ordem fixa de exibição, independente da ordem em accountModules/userModules
@@ -48,6 +50,7 @@ export const NAV_ORDER: ModuleSlug[] = [
   'waitlist',
   'financial',
   'finance',
+  'revenue_cycle',
   'campaigns',
   'patients',
   'transcriptions',
@@ -58,6 +61,11 @@ export const NAV_ORDER: ModuleSlug[] = [
 // financeiro (finance_entries pessoal e revenue_entries) que não deve
 // aparecer a admin/member convidados, mesmo com module_overrides liberando.
 const OWNER_ONLY_MODULES: ModuleSlug[] = ['finance', 'financial']
+
+// Módulos que exigem no mínimo papel admin — a recepção confirma pagamentos
+// no ciclo de receita, mas member não acessa (os totais continuam só do owner,
+// gate feito na própria página).
+const ADMIN_MIN_MODULES: ModuleSlug[] = ['revenue_cycle']
 
 // Módulos que um owner pode restringir por pessoa via module_overrides —
 // exclui os sempre-ativos (ALWAYS_ON_MODULES) e os exclusivos de owner
@@ -82,7 +90,10 @@ interface NavLinksProps {
 export function NavLinks({ userModules, role, className, onNavigate }: NavLinksProps) {
   const pathname = usePathname()
   const visibleModules = NAV_ORDER.filter(
-    (slug) => userModules.includes(slug) && (role === 'owner' || !OWNER_ONLY_MODULES.includes(slug))
+    (slug) =>
+      userModules.includes(slug) &&
+      (role === 'owner' || !OWNER_ONLY_MODULES.includes(slug)) &&
+      (role !== 'member' || !ADMIN_MIN_MODULES.includes(slug))
   )
 
   return (

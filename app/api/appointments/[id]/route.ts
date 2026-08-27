@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { cancelEvent, updateEvent } from '@/lib/google/calendar'
 import { requireWorkspaceSession } from '@/lib/session/api'
+import { syncRevenueEntryToAppointmentStatus } from '@/lib/revenue/cycle'
 
 // Google Calendar é a fonte de verdade: se a consulta tem um evento vinculado
 // (gcal_event_id), a mudança precisa ser aceita lá antes de gravar no
@@ -66,6 +67,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Ciclo de receita: encerrar/cancelar/no-show a consulta move a entrada de
+  // receita vinculada. Client admin — revenue_entries é RLS exclusiva de
+  // owner e quem edita a agenda pode ser admin/member. O id já foi validado
+  // contra o workspace da sessão acima.
+  if (typeof body.status === 'string' && body.status !== current.status) {
+    await syncRevenueEntryToAppointmentStatus(createAdminClient(), id, body.status)
+  }
+
   return NextResponse.json(data)
 }
 
@@ -108,6 +118,10 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  if (current.status !== 'cancelado') {
+    await syncRevenueEntryToAppointmentStatus(createAdminClient(), id, 'cancelado')
+  }
 
   return NextResponse.json({ ok: true, gcal_event_id: data?.gcal_event_id ?? null })
 }

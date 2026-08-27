@@ -6,12 +6,19 @@ interface UpcomingAppointment {
   label: string // ex: "terça-feira, 26 de agosto às 14:00"
 }
 
+interface CatalogProcedure {
+  id: string // id real em procedure_catalog — usado no PROCEDIMENTO_ID
+  name: string
+  price: number
+}
+
 interface BuildPromptInput {
   workspaceName: string
   config: BotConfig
   freeSlotsByDay: Record<string, string[]> // vem do Google Calendar, chave AAAA-MM-DD
   isFirstMessage: boolean
   upcomingAppointments: UpcomingAppointment[] // consultas futuras já agendadas deste paciente
+  procedureCatalog?: CatalogProcedure[] // catálogo estruturado (ciclo de receita); vazio = clínica sem catálogo
 }
 
 export function buildDynamicSystemPrompt({
@@ -20,6 +27,7 @@ export function buildDynamicSystemPrompt({
   freeSlotsByDay,
   isFirstMessage,
   upcomingAppointments,
+  procedureCatalog = [],
 }: BuildPromptInput): string {
   // ── Procedimentos ──────────────────────────────────────────────────────────
   const proceduresText = config.procedures.length > 0 ? config.procedures.join(', ') : 'consultas gerais'
@@ -93,6 +101,18 @@ Não invente números nem informe o número de handoff você mesmo, nem diga se 
       ? upcomingAppointments.map((a) => `• ${a.label} (id: ${a.id})`).join('\n')
       : 'Nenhuma consulta futura agendada para este paciente no momento.'
 
+  // ── Catálogo de procedimentos (ciclo de receita) ─────────────────────────
+  // Só entra no prompt quando a clínica cadastrou o catálogo; sem ele, o
+  // agendamento segue igual e nenhuma linha PROCEDIMENTO_ID é pedida.
+  const procedureCatalogSection =
+    procedureCatalog.length > 0
+      ? `\n## Procedimentos e valores (tabela real da clínica)
+${procedureCatalog.map((p) => `• ${p.name} — R$${p.price.toFixed(0)} (id: ${p.id})`).join('\n')}
+Ao confirmar um agendamento, além da linha AGENDAMENTO_CONFIRMADO, inclua uma linha isolada no formato exato:
+PROCEDIMENTO_ID: <id>
+(copie o id do procedimento mais adequado ao que o paciente descreveu, exatamente como está entre parênteses na lista acima). Nunca invente um id. Se nenhum procedimento da lista se aplicar, omita essa linha. Nunca mostre o id nem os valores desta lista ao paciente de forma diferente do que já está configurado.\n`
+      : ''
+
   return `Você é ${BOT_NAME}, faz parte da equipe de ${workspaceName}${config.specialty ? `, especialista em ${config.specialty}` : ''}, e cuida do atendimento pelo WhatsApp.
 Converse de forma natural e humana, como uma pessoa da equipe conversaria — nunca se descreva como "assistente virtual", "chatbot", "robô", "inteligência artificial" ou termos parecidos. Apresente-se só pelo nome.
 Você atende pelo WhatsApp 24 horas por dia, todos os dias, e seu único objetivo é ajudar pacientes a agendar, remarcar ou cancelar consultas — a qualquer hora, inclusive de madrugada ou fim de semana. Nunca diga que está fora do horário de atendimento ou que vai parar de responder; você nunca "fecha".
@@ -115,7 +135,7 @@ Todos os horários estão no fuso de São Paulo (America/Sao_Paulo).
 ## Consulta(s) já agendada(s) deste paciente
 ${upcomingAppointmentsText}
 Essa é a lista real do sistema — nunca diga que uma consulta foi cancelada ou remarcada se ela não estiver aqui, e nunca invente uma consulta que não está nesta lista.
-
+${procedureCatalogSection}
 ${
     isFirstMessage
       ? `## Primeira mensagem desta conversa — IMPORTANTE

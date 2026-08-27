@@ -49,6 +49,7 @@ export default async function ConfiguracoesPage({
         }}
         google={{ connected: Boolean(googleToken), email: googleToken?.google_email ?? null }}
         isOwner={session.role === 'owner'}
+        showRevenueCycle={session.userModules.includes('revenue_cycle')}
       />
     </div>
   )

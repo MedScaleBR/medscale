@@ -24,7 +24,7 @@ export async function getDashboardStats(
 
     supabase
       .from('revenue_entries')
-      .select('amount, status, workspace_id')
+      .select('amount, status, payment_status, workspace_id')
       .in('workspace_id', workspaceIds)
       .gte('entry_date', today.slice(0, 7) + '-01')
       .lte('entry_date', monthEnd.slice(0, 10)),
@@ -55,9 +55,26 @@ export async function getDashboardStats(
 
   const totalAppts = appts.count ?? 0
   const botAppts = appts.data?.filter((a) => a.source === 'bot').length ?? 0
-  const totalRevenue = revenue.data?.reduce((s, r) => s + Number(r.amount), 0) ?? 0
-  const confirmedRev =
-    revenue.data?.filter((r) => r.status === 'confirmado').reduce((s, r) => s + Number(r.amount), 0) ?? 0
+
+  // Ciclo de receita via payment_status, com ponte para lançamentos legados
+  // (payment_status ainda no default 'pending' mas com o status antigo já
+  // 'confirmado'/'cancelado').
+  let projectedRev = 0
+  let realizedRev = 0
+  let receivedRev = 0
+  for (const r of revenue.data ?? []) {
+    const amount = Number(r.amount) || 0
+    const legacyPending = r.payment_status === 'pending'
+    const isPaid = r.payment_status === 'paid' || (legacyPending && r.status === 'confirmado')
+    const isCancelled =
+      r.payment_status === 'cancelled' ||
+      r.payment_status === 'refunded' ||
+      (legacyPending && r.status === 'cancelado')
+    if (isCancelled) continue
+    projectedRev += amount
+    if (isPaid || r.payment_status === 'realized') realizedRev += amount
+    if (isPaid) receivedRev += amount
+  }
   const noShowRate = totalAppts > 0 ? Math.round(((noshow.count ?? 0) / totalAppts) * 100) : 0
 
   const trafficByChannel = (campaigns.data ?? []).reduce(
@@ -75,12 +92,26 @@ export async function getDashboardStats(
     workspaceId,
     appointments: appts.data?.filter((a) => a.workspace_id === workspaceId).length ?? 0,
     revenue:
-      revenue.data?.filter((r) => r.workspace_id === workspaceId).reduce((s, r) => s + Number(r.amount), 0) ?? 0,
+      revenue.data
+        ?.filter(
+          (r) =>
+            r.workspace_id === workspaceId &&
+            r.payment_status !== 'cancelled' &&
+            r.payment_status !== 'refunded' &&
+            !(r.payment_status === 'pending' && r.status === 'cancelado')
+        )
+        .reduce((s, r) => s + Number(r.amount), 0) ?? 0,
   }))
 
   return {
     appointments: { total: totalAppts, bot: botAppts, manual: totalAppts - botAppts },
-    revenue: { total: totalRevenue, confirmed: confirmedRev, projected: totalRevenue },
+    revenue: {
+      total: projectedRev,
+      confirmed: receivedRev,
+      projected: projectedRev,
+      realized: realizedRev,
+      received: receivedRev,
+    },
     noShow: { rate: noShowRate, total: noshow.count ?? 0 },
     todayAgenda: todayAppts.data ?? [],
     traffic: trafficByChannel,

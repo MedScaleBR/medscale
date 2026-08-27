@@ -28,7 +28,9 @@ drop table if exists
   public.google_tokens,
   public.bot_config,
   public.ad_campaigns,
+  public.revenue_settings,
   public.revenue_entries,
+  public.procedure_catalog,
   public.waitlist,
   public.availability_exceptions,
   public.availability_rules,
@@ -265,6 +267,21 @@ create table public.patients (
   unique(account_id, phone)
 );
 
+-- Catálogo de procedimentos (por workspace) — nome + preço estruturados que
+-- alimentam a agenda, o bot e o ciclo de receita. bot_config.procedures (text[])
+-- continua existindo em paralelo para o prompt da Maria.
+create table public.procedure_catalog (
+  id            uuid default uuid_generate_v4() primary key,
+  workspace_id  uuid not null references public.workspaces(id) on delete cascade,
+  name          text not null,
+  code          text,                 -- código interno da clínica (opcional)
+  default_price numeric(10,2) not null,
+  duration_min  int,                  -- duração em minutos (alimenta o agendador)
+  is_active     boolean not null default true,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
 -- Consultas / agendamentos
 create table public.appointments (
   id              uuid default uuid_generate_v4() primary key,
@@ -283,6 +300,11 @@ create table public.appointments (
   status          text not null default 'agendado'
                   check (status in ('agendado','confirmado','realizado','cancelado','no_show')),
   notes           text,
+  -- procedure_id + snapshots de nome/preço no momento do agendamento. O
+  -- snapshot é imutável: mudar o preço do procedimento depois não altera
+  -- agendamentos passados (ver revenue_entries.amount).
+  procedure_id    uuid references public.procedure_catalog(id) on delete set null,
+  procedure_name  text,
   price           numeric(10,2),
   gcal_event_id   text,
   reminder_sent   boolean default false,
@@ -410,19 +432,47 @@ create table public.waitlist (
   created_at      timestamptz not null default now()
 );
 
--- Entradas de receita
+-- Entradas de receita. `status` (previsto/confirmado/cancelado) é mantido por
+-- compatibilidade; `payment_status` é o campo canônico do ciclo de receita
+-- automático (ver prompts/CICLO_RECEITA_COMO_FUNCIONA.md).
 create table public.revenue_entries (
   id              uuid default uuid_generate_v4() primary key,
   workspace_id    uuid references public.workspaces(id) on delete cascade not null,
   account_id      uuid references public.accounts(id)   on delete cascade not null,
   appointment_id  uuid references public.appointments(id) on delete set null,
+  patient_id      uuid references public.patients(id)   on delete set null,
+  procedure_id    uuid references public.procedure_catalog(id) on delete set null,
+  procedure_name  text,                    -- snapshot do nome no momento do lançamento
   amount          numeric(10,2) not null,
   status          text not null default 'previsto'
                   check (status in ('previsto','confirmado','cancelado')),
-  payment_method  text,
+  payment_status  text not null default 'pending'
+                  check (payment_status in ('pending','realized','paid','cancelled','refunded')),
+  payment_method  text
+                  check (payment_method is null or payment_method in (
+                    'pix','cartao_credito','cartao_debito','dinheiro','transferencia','outro'
+                  )),
+  installments    int not null default 1,
+  source          text not null default 'manual'
+                  check (source in ('bot','manual','whatsapp_agent')),
+  due_date        date,                    -- data esperada de recebimento
+  paid_at         timestamptz,             -- quando o pagamento foi confirmado
   notes           text,
   entry_date      date not null default current_date,
   created_at      timestamptz not null default now()
+);
+
+-- Preferências do ciclo de receita automático (por workspace) — alimenta o
+-- cron daily-revenue-summary e a tela /configuracoes/receita. Exclusivo do
+-- owner, como revenue_entries.
+create table public.revenue_settings (
+  workspace_id                     uuid primary key references public.workspaces(id) on delete cascade,
+  account_id                       uuid not null references public.accounts(id) on delete cascade,
+  daily_summary_enabled            boolean not null default true,
+  daily_summary_hour               int not null default 20 check (daily_summary_hour between 0 and 23),
+  daily_summary_only_with_activity boolean not null default false,
+  overdue_tolerance_days           int not null default 2 check (overdue_tolerance_days >= 0),
+  updated_at                       timestamptz not null default now()
 );
 
 -- Campanhas de tráfego pago
@@ -571,6 +621,9 @@ create index idx_availability_workspace      on public.availability_rules(worksp
 create index idx_availability_exc_workspace  on public.availability_exceptions(workspace_id, date);
 create index idx_waitlist_workspace          on public.waitlist(workspace_id, status);
 create index idx_revenue_workspace           on public.revenue_entries(workspace_id, entry_date);
+create index idx_revenue_appointment         on public.revenue_entries(appointment_id);
+create index idx_revenue_payment_status      on public.revenue_entries(workspace_id, payment_status, due_date);
+create index idx_procedure_catalog_workspace on public.procedure_catalog(workspace_id, is_active);
 create index idx_ad_campaigns_workspace      on public.ad_campaigns(workspace_id, period_start);
 create index idx_webhook_logs_workspace      on public.webhook_logs(workspace_id, received_at desc);
 create index idx_rate_limit_workspace_phone  on public.rate_limit_log(workspace_id, phone);
@@ -608,6 +661,14 @@ create trigger trg_profiles_updated_at
 
 create trigger trg_appointments_updated_at
   before update on public.appointments
+  for each row execute procedure public.handle_updated_at();
+
+create trigger trg_procedure_catalog_updated_at
+  before update on public.procedure_catalog
+  for each row execute procedure public.handle_updated_at();
+
+create trigger trg_revenue_settings_updated_at
+  before update on public.revenue_settings
   for each row execute procedure public.handle_updated_at();
 
 create trigger trg_bot_config_updated_at
@@ -770,7 +831,9 @@ alter table public.messages               enable row level security;
 alter table public.availability_rules     enable row level security;
 alter table public.availability_exceptions enable row level security;
 alter table public.waitlist               enable row level security;
+alter table public.procedure_catalog      enable row level security;
 alter table public.revenue_entries        enable row level security;
+alter table public.revenue_settings       enable row level security;
 alter table public.ad_campaigns           enable row level security;
 alter table public.bot_config             enable row level security;
 alter table public.google_tokens          enable row level security;
@@ -858,9 +921,18 @@ create policy "availability_exceptions: workspace members" on public.availabilit
 create policy "waitlist: workspace members" on public.waitlist
   for all using (workspace_id = any(public.my_workspace_ids()));
 
+-- Catálogo de procedimentos: leitura/escrita por membro da workspace (o bot e
+-- a /agenda leem os preços). O cadastro (create/update) é restrito a owner na
+-- camada de API — não é dado sensível como revenue_entries.
+create policy "procedure_catalog: workspace members" on public.procedure_catalog
+  for all using (workspace_id = any(public.my_workspace_ids()));
+
 -- Exclusivo do owner — mesmo padrão de finance_entries (dado financeiro não
 -- é estendido a admin/member, nem via module_overrides).
 create policy "revenue_entries: owner only" on public.revenue_entries
+  for all using (public.is_account_owner(account_id));
+
+create policy "revenue_settings: owner only" on public.revenue_settings
   for all using (public.is_account_owner(account_id));
 
 create policy "ad_campaigns: workspace members" on public.ad_campaigns
