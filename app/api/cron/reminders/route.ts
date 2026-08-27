@@ -33,10 +33,21 @@ export async function POST(req: NextRequest) {
   const workspaceIds = [...new Set(appointments.map((a) => a.workspace_id))]
   const { data: workspaces } = await supabase
     .from('workspaces')
-    .select('id, name, phone_number_id, meta_token, address, city, state')
+    .select('id, name, phone_number_id, meta_token, address, city, state, zip_code')
     .in('id', workspaceIds)
 
   const workspaceById = new Map((workspaces ?? []).map((w) => [w.id, w]))
+
+  // Endereço livre cadastrado no contexto do bot (tela Contexto) — usado como
+  // fallback quando a unidade não tem logradouro estruturado em Locais.
+  const { data: botConfigs } = await supabase
+    .from('bot_config')
+    .select('workspace_id, address')
+    .in('workspace_id', workspaceIds)
+
+  const botAddressByWorkspace = new Map(
+    (botConfigs ?? []).map((c) => [c.workspace_id, c.address]),
+  )
 
   let sent = 0
   const errors: string[] = []
@@ -46,8 +57,21 @@ export async function POST(req: NextRequest) {
     if (!workspace?.phone_number_id || !workspace?.meta_token) continue
 
     const scheduledAt = new Date(appt.scheduled_at)
+    const structuredAddress = [
+      workspace.address,
+      workspace.city,
+      workspace.state,
+      workspace.zip_code,
+    ]
+      .filter(Boolean)
+      .join(', ')
+
+    // Preferência: endereço de Locais com logradouro > endereço livre do
+    // contexto do bot > cidade/UF > nome da unidade (a Meta rejeita param vazio).
     const address =
-      [workspace.address, workspace.city, workspace.state].filter(Boolean).join(', ') ||
+      (workspace.address && structuredAddress) ||
+      botAddressByWorkspace.get(workspace.id) ||
+      structuredAddress ||
       workspace.name
 
     try {
