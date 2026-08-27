@@ -23,6 +23,7 @@ drop table if exists
   public.transcriptions,
   public.handoff_hours,
   public.handoff_logs,
+  public.rate_limit_log,
   public.webhook_logs,
   public.google_tokens,
   public.bot_config,
@@ -515,6 +516,21 @@ create table public.webhook_logs (
   received_at  timestamptz not null default now()
 );
 
+-- Rate limiting do webhook do WhatsApp por (workspace, número). Acesso
+-- exclusivo via service role (ver lib/rate-limit/webhook.ts) — RLS habilitado
+-- sem policies na seção 13. Sem FK para patients: o número pode ainda não ser
+-- de um paciente cadastrado.
+create table public.rate_limit_log (
+  id            bigserial primary key,
+  workspace_id  uuid        references public.workspaces(id) on delete cascade not null,
+  phone         text        not null,
+  window_start  timestamptz not null default now(),  -- início da janela deslizante atual
+  message_count int         not null default 1,
+  blocked_at    timestamptz,                          -- 1ª vez que o bloqueio foi ativado nesta janela
+  notified      boolean     not null default false,   -- se o aviso já foi enviado nesta janela
+  unique (workspace_id, phone)
+);
+
 -- Log de handoffs (auditoria)
 create table public.handoff_logs (
   id              uuid default uuid_generate_v4() primary key,
@@ -557,6 +573,7 @@ create index idx_waitlist_workspace          on public.waitlist(workspace_id, st
 create index idx_revenue_workspace           on public.revenue_entries(workspace_id, entry_date);
 create index idx_ad_campaigns_workspace      on public.ad_campaigns(workspace_id, period_start);
 create index idx_webhook_logs_workspace      on public.webhook_logs(workspace_id, received_at desc);
+create index idx_rate_limit_workspace_phone  on public.rate_limit_log(workspace_id, phone);
 create index idx_handoff_logs_workspace      on public.handoff_logs(workspace_id, sent_at desc);
 create index idx_handoff_hours_workspace     on public.handoff_hours(workspace_id, day_of_week);
 create index idx_transcriptions_workspace    on public.transcriptions(workspace_id, created_at desc);
@@ -758,6 +775,7 @@ alter table public.ad_campaigns           enable row level security;
 alter table public.bot_config             enable row level security;
 alter table public.google_tokens          enable row level security;
 alter table public.webhook_logs           enable row level security;
+alter table public.rate_limit_log         enable row level security;
 alter table public.handoff_logs           enable row level security;
 alter table public.handoff_hours          enable row level security;
 alter table public.transcriptions         enable row level security;
@@ -882,6 +900,12 @@ create policy "finance_entries: owner only" on public.finance_entries
 -- finance_sessions: contexto de conversa do bot financeiro — só o webhook
 -- (service role) acessa; sem policy tenant-facing.
 create policy "finance_sessions: service role only" on public.finance_sessions
+  for all using (false);
+
+-- rate_limit_log: controle de rate limiting do webhook do WhatsApp — só o
+-- webhook (service role, que ignora RLS) acessa; deny-all para todo role
+-- tenant-facing, mesmo padrão de finance_sessions.
+create policy "rate_limit_log: service role only" on public.rate_limit_log
   for all using (false);
 
 -- Necessário para a subscription Realtime da página de detalhe de

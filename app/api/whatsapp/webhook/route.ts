@@ -5,6 +5,8 @@ import { processIncomingMessage, handleUnsupportedMessage } from '@/lib/llm/agen
 import { processFinancialMessage, sendFinanceReply } from '@/lib/finance/agent'
 import { buildUnsupportedTypeMessage } from '@/lib/finance/respond'
 import { decryptToken } from '@/lib/crypto'
+import { checkRateLimit, RATE_LIMIT_NOTICE_MESSAGE } from '@/lib/rate-limit/webhook'
+import { sendWhatsAppMessage } from '@/lib/whatsapp/send'
 
 // Valida a assinatura HMAC enviada pela Meta para garantir que o payload
 // realmente veio da Meta e não foi forjado. `secret` é o App Secret do App
@@ -48,7 +50,7 @@ export async function POST(req: NextRequest) {
     phoneNumberId && !isFinanceNumber
       ? await supabase
           .from('workspaces')
-          .select('id, name, account_id, meta_app_secret')
+          .select('id, name, account_id, meta_app_secret, phone_number_id, meta_token')
           .eq('phone_number_id', phoneNumberId)
           .single()
       : { data: null }
@@ -131,9 +133,28 @@ export async function POST(req: NextRequest) {
 
   // A Meta exige resposta em <20s — o processamento roda após a resposta HTTP
   // ser enviada, via `after()` (equivalente a waitUntil no Vercel).
-  if (text) {
-    after(() =>
-      processIncomingMessage({
+  after(async () => {
+    // Rate limiting por (workspace, número) ANTES de qualquer processamento —
+    // inclusive antes do getBotConfig() e do check de bot_paused dentro do
+    // agente. Conta todo tipo de mensagem (texto, áudio, imagem): o custo de
+    // processar existe em todos. A mensagem excedente já foi gravada em
+    // webhook_logs acima (rastreabilidade); aqui ela só não é processada.
+    const rateLimit = await checkRateLimit(workspace.id, from)
+    if (!rateLimit.allowed) {
+      if (rateLimit.shouldNotify && workspace.phone_number_id && workspace.meta_token) {
+        // Uma única vez por janela de bloqueio (flag `notified` em checkRateLimit).
+        await sendWhatsAppMessage({
+          to: from,
+          message: RATE_LIMIT_NOTICE_MESSAGE,
+          phoneNumberId: workspace.phone_number_id,
+          token: decryptToken(workspace.meta_token),
+        }).catch((err) => console.error('[whatsapp webhook] rate limit notice failed', err))
+      }
+      return
+    }
+
+    if (text) {
+      await processIncomingMessage({
         workspaceId: workspace.id,
         accountId: workspace.account_id,
         workspaceName: workspace.name,
@@ -150,20 +171,18 @@ export async function POST(req: NextRequest) {
           if (updateError) console.error('failed to persist webhook_logs.error', updateError)
         }
       })
-    )
-  } else {
-    // Áudio, imagem, documento, figurinha etc. — a Maria não entende o
-    // conteúdo, mas avisa o paciente em vez de ficar em silêncio.
-    after(() =>
-      handleUnsupportedMessage({
+    } else {
+      // Áudio, imagem, documento, figurinha etc. — a Maria não entende o
+      // conteúdo, mas avisa o paciente em vez de ficar em silêncio.
+      await handleUnsupportedMessage({
         workspaceId: workspace.id,
         accountId: workspace.account_id,
         patientPhone: from,
         messageType: message.type,
         whatsappMessageId: message.id,
       }).catch((err) => console.error('handleUnsupportedMessage failed', err))
-    )
-  }
+    }
+  })
 
   return NextResponse.json({ status: 'ok' })
 }
