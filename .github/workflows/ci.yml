@@ -1,0 +1,34 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Lint
+        run: npx eslint .
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      # Nenhum teste toca a rede nem precisa de segredo: SDKs (Anthropic,
+      # OpenAI, googleapis) e Supabase são mockados, e tests/setup.ts define
+      # as variáveis de ambiente falsas que os módulos leem no import.
+      # O threshold de 80% de statements está em vitest.config.mts — abaixo
+      # disso este passo falha.
+      - name: Testes + cobertura
+        run: npm run test:coverage

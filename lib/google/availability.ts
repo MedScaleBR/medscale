@@ -9,10 +9,26 @@ import { listEvents } from './calendar'
 // processo, o que agendaria a consulta ~3h fora do horário configurado.
 const TZ = 'America/Sao_Paulo'
 
+const DEFAULT_SLOT_DURATION = 30
+
 export interface TimeSlot {
   start: Date
   end: Date
   available: boolean
+}
+
+interface Interval {
+  start: Date
+  end: Date
+}
+
+function overlaps(slot: TimeSlot, interval: Interval): boolean {
+  return slot.start < interval.end && slot.end > interval.start
+}
+
+function parseHM(value: string): [number, number] {
+  const [h, m] = value.split(':').map(Number)
+  return [h, m]
 }
 
 // Retorna todos os slots (livres e ocupados) para uma workspace numa data específica
@@ -22,6 +38,11 @@ export async function getAvailableSlots(workspaceId: string, date: Date): Promis
   const dayOfWeek = zoned.getDay() // 0=Dom ... 6=Sáb
   const dateStr = format(zoned, 'yyyy-MM-dd')
 
+  const y = zoned.getFullYear()
+  const m = zoned.getMonth()
+  const d = zoned.getDate()
+  const at = (h: number, min: number) => new TZDate(y, m, d, h, min, 0, TZ)
+
   // 1. Regras de disponibilidade para esse dia da semana
   const { data: rules } = await supabase
     .from('availability_rules')
@@ -30,63 +51,109 @@ export async function getAvailableSlots(workspaceId: string, date: Date): Promis
     .eq('day_of_week', dayOfWeek)
     .eq('is_active', true)
 
-  if (!rules || rules.length === 0) return []
-
-  // 2. Exceção cadastrada para esta data
-  const { data: exception } = await supabase
+  // 2. Exceções cadastradas para esta data. Podem ser mais de uma (ex: bloquear
+  // a manhã e abrir um horário extra à noite), então lê a lista inteira —
+  // `.maybeSingle()` aqui lançava erro justamente nesse caso.
+  const { data: exceptions } = await supabase
     .from('availability_exceptions')
     .select('type, start_time, end_time')
     .eq('workspace_id', workspaceId)
     .eq('date', dateStr)
-    .maybeSingle()
 
-  // Dia inteiro bloqueado
-  if (exception?.type === 'blocked' && !exception.start_time) return []
+  const exceptionList = exceptions ?? []
 
-  // 3. Gerar slots do dia com base nas regras (na wall-clock de São Paulo)
-  const allSlots: TimeSlot[] = []
-  const y = zoned.getFullYear()
-  const m = zoned.getMonth()
-  const d = zoned.getDate()
+  // Dia inteiro bloqueado (type 'blocked' sem horário) — nada disponível,
+  // nem os horários extras, se houver.
+  if (exceptionList.some((e) => e.type === 'blocked' && !e.start_time)) return []
 
-  for (const rule of rules) {
-    const [startH, startM] = rule.start_time.split(':').map(Number)
-    const [endH, endM] = rule.end_time.split(':').map(Number)
+  // 3. Janelas de atendimento do dia: as regras recorrentes + as exceções do
+  // tipo 'extra'. Um horário extra vale por si só — é o caso de um sábado
+  // pontual, em que não existe availability_rules para o dia da semana.
+  const defaultDuration = rules?.[0]?.slot_duration ?? DEFAULT_SLOT_DURATION
+  const windows = [
+    ...(rules ?? []).map((r) => ({ start: r.start_time, end: r.end_time, duration: r.slot_duration })),
+    ...exceptionList
+      .filter((e) => e.type === 'extra' && e.start_time && e.end_time)
+      .map((e) => ({ start: e.start_time as string, end: e.end_time as string, duration: defaultDuration })),
+  ]
 
-    let current = new TZDate(y, m, d, startH, startM, 0, TZ)
-    const end = new TZDate(y, m, d, endH, endM, 0, TZ)
+  if (windows.length === 0) return []
 
-    while (addMinutes(current, rule.slot_duration) <= end) {
-      const slotEnd = addMinutes(current, rule.slot_duration)
-      allSlots.push({ start: current, end: slotEnd, available: true })
+  // 4. Gerar slots das janelas (na wall-clock de São Paulo)
+  const slotsByStart = new Map<number, TimeSlot>()
+  for (const window of windows) {
+    const [startH, startM] = parseHM(window.start)
+    const [endH, endM] = parseHM(window.end)
+    const duration = window.duration || DEFAULT_SLOT_DURATION
+
+    let current = at(startH, startM)
+    const end = at(endH, endM)
+
+    while (addMinutes(current, duration) <= end) {
+      const slotEnd = addMinutes(current, duration)
+      // Janelas sobrepostas (uma regra e um extra no mesmo horário) não podem
+      // gerar o mesmo horário duas vezes na lista oferecida ao paciente.
+      if (!slotsByStart.has(current.getTime())) {
+        slotsByStart.set(current.getTime(), { start: current, end: slotEnd, available: true })
+      }
       current = slotEnd
     }
   }
 
-  // 4. Eventos do Google Calendar no dia (indisponibilidade real)
-  const dayStart = new TZDate(y, m, d, 0, 0, 0, TZ)
-  const dayEnd = new TZDate(y, m, d, 23, 59, 59, TZ)
-  let gcalEvents: Array<{ start: Date; end: Date }> = []
+  const allSlots = [...slotsByStart.values()].sort((a, b) => a.start.getTime() - b.start.getTime())
 
-  try {
-    const events = await listEvents(workspaceId, dayStart, dayEnd)
-    gcalEvents = events
-      .filter((e) => e.status !== 'cancelled')
-      .map((e) => ({
-        start: parseISO(e.start?.dateTime ?? e.start?.date ?? ''),
-        end: parseISO(e.end?.dateTime ?? e.end?.date ?? ''),
-      }))
-  } catch {
-    // Google Calendar não conectado ou indisponível — retorna slots sem
-    // checar conflitos externos (ainda respeita availability_rules).
-    return allSlots
+  // 5. Bloqueios parciais do dia (type 'blocked' com horário) — ex: almoço
+  // estendido, compromisso pessoal cadastrado na própria MedScale.
+  const busy: Interval[] = exceptionList
+    .filter((e) => e.type === 'blocked' && e.start_time && e.end_time)
+    .map((e) => {
+      const [sh, sm] = parseHM(e.start_time as string)
+      const [eh, em] = parseHM(e.end_time as string)
+      return { start: at(sh, sm), end: at(eh, em) }
+    })
+
+  const dayStart = at(0, 0)
+  const dayEnd = new TZDate(y, m, d, 23, 59, 59, TZ)
+
+  // 6. Consultas já marcadas no próprio Supabase. Sem isto, uma workspace sem
+  // Google Calendar conectado oferecia ao paciente um horário em que já havia
+  // outra consulta marcada — o bot agendava duas pessoas no mesmo slot.
+  const { data: appointments } = await supabase
+    .from('appointments')
+    .select('scheduled_at, duration_min')
+    .eq('workspace_id', workspaceId)
+    .in('status', ['agendado', 'confirmado'])
+    .gte('scheduled_at', dayStart.toISOString())
+    .lte('scheduled_at', dayEnd.toISOString())
+
+  for (const appointment of appointments ?? []) {
+    const start = new Date(appointment.scheduled_at)
+    if (Number.isNaN(start.getTime())) continue
+    busy.push({ start, end: addMinutes(start, appointment.duration_min ?? DEFAULT_SLOT_DURATION) })
   }
 
-  // 5. Marcar slots ocupados
-  return allSlots.map((slot) => {
-    const blocked = gcalEvents.some((event) => slot.start < event.end && slot.end > event.start)
-    return { ...slot, available: !blocked }
-  })
+  // 7. Eventos do Google Calendar no dia (indisponibilidade real)
+  try {
+    const events = await listEvents(workspaceId, dayStart, dayEnd)
+    for (const event of events) {
+      if (event.status === 'cancelled') continue
+      const start = parseISO(event.start?.dateTime ?? event.start?.date ?? '')
+      const end = parseISO(event.end?.dateTime ?? event.end?.date ?? '')
+      if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue
+      busy.push({ start, end })
+    }
+  } catch (err) {
+    // Google Calendar não conectado ou indisponível (token expirado, API fora
+    // do ar) — degrada para os bloqueios que já conhecemos, em vez de travar
+    // a agenda inteira. Fica registrado para não virar falha silenciosa.
+    console.error(`getAvailableSlots: listEvents falhou para workspace ${workspaceId}`, err)
+  }
+
+  // 8. Marcar slots ocupados
+  return allSlots.map((slot) => ({
+    ...slot,
+    available: !busy.some((interval) => overlaps(slot, interval)),
+  }))
 }
 
 // Versão resumida para o bot: apenas horários livres, formatados HH:mm
