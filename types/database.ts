@@ -586,6 +586,30 @@ export interface Database {
           },
         ]
       }
+      revenue_settings: {
+        Row: {
+          workspace_id: string
+          account_id: string
+          daily_summary_enabled: boolean
+          daily_summary_hour: number
+          daily_summary_only_with_activity: boolean
+          overdue_tolerance_days: number
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['revenue_settings']['Row']> & {
+          workspace_id: string
+          account_id: string
+        }
+        Update: Partial<Database['public']['Tables']['revenue_settings']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'revenue_settings_workspace_id_fkey'
+            columns: ['workspace_id']
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       ad_campaigns: {
         Row: {
           id: string

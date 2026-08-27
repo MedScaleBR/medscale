@@ -108,3 +108,33 @@ create index if not exists idx_revenue_entries_payment_status
 alter table public.appointments
   add column if not exists procedure_id   uuid references public.procedure_catalog(id) on delete set null,
   add column if not exists procedure_name text;
+
+-- ============================================================
+-- 4. PREFERÊNCIAS DO CICLO DE RECEITA (por workspace)
+-- Alimenta o cron /api/cron/daily-revenue-summary e a tela
+-- /configuracoes/receita. Exclusivo do owner (RLS), como revenue_entries.
+-- ============================================================
+create table if not exists public.revenue_settings (
+  workspace_id                     uuid primary key references public.workspaces(id) on delete cascade,
+  account_id                       uuid not null references public.accounts(id) on delete cascade,
+  daily_summary_enabled            boolean not null default true,
+  daily_summary_hour               int not null default 20 check (daily_summary_hour between 0 and 23),
+  -- quando true, o resumo só é enviado em dias com pelo menos uma consulta realizada
+  daily_summary_only_with_activity boolean not null default false,
+  overdue_tolerance_days           int not null default 2 check (overdue_tolerance_days >= 0),
+  updated_at                       timestamptz not null default now()
+);
+
+alter table public.revenue_settings enable row level security;
+
+drop policy if exists "revenue_settings: owner only" on public.revenue_settings;
+create policy "revenue_settings: owner only"
+  on public.revenue_settings for all
+  using (public.is_account_owner(account_id));
+
+drop trigger if exists trg_revenue_settings_updated_at on public.revenue_settings;
+create trigger trg_revenue_settings_updated_at
+  before update on public.revenue_settings
+  for each row execute procedure public.handle_updated_at();
+
+grant all on public.revenue_settings to authenticated, service_role;

@@ -28,6 +28,7 @@ drop table if exists
   public.google_tokens,
   public.bot_config,
   public.ad_campaigns,
+  public.revenue_settings,
   public.revenue_entries,
   public.procedure_catalog,
   public.waitlist,
@@ -461,6 +462,19 @@ create table public.revenue_entries (
   created_at      timestamptz not null default now()
 );
 
+-- Preferências do ciclo de receita automático (por workspace) — alimenta o
+-- cron daily-revenue-summary e a tela /configuracoes/receita. Exclusivo do
+-- owner, como revenue_entries.
+create table public.revenue_settings (
+  workspace_id                     uuid primary key references public.workspaces(id) on delete cascade,
+  account_id                       uuid not null references public.accounts(id) on delete cascade,
+  daily_summary_enabled            boolean not null default true,
+  daily_summary_hour               int not null default 20 check (daily_summary_hour between 0 and 23),
+  daily_summary_only_with_activity boolean not null default false,
+  overdue_tolerance_days           int not null default 2 check (overdue_tolerance_days >= 0),
+  updated_at                       timestamptz not null default now()
+);
+
 -- Campanhas de tráfego pago
 create table public.ad_campaigns (
   id              uuid default uuid_generate_v4() primary key,
@@ -653,6 +667,10 @@ create trigger trg_procedure_catalog_updated_at
   before update on public.procedure_catalog
   for each row execute procedure public.handle_updated_at();
 
+create trigger trg_revenue_settings_updated_at
+  before update on public.revenue_settings
+  for each row execute procedure public.handle_updated_at();
+
 create trigger trg_bot_config_updated_at
   before update on public.bot_config
   for each row execute procedure public.handle_updated_at();
@@ -815,6 +833,7 @@ alter table public.availability_exceptions enable row level security;
 alter table public.waitlist               enable row level security;
 alter table public.procedure_catalog      enable row level security;
 alter table public.revenue_entries        enable row level security;
+alter table public.revenue_settings       enable row level security;
 alter table public.ad_campaigns           enable row level security;
 alter table public.bot_config             enable row level security;
 alter table public.google_tokens          enable row level security;
@@ -911,6 +930,9 @@ create policy "procedure_catalog: workspace members" on public.procedure_catalog
 -- Exclusivo do owner — mesmo padrão de finance_entries (dado financeiro não
 -- é estendido a admin/member, nem via module_overrides).
 create policy "revenue_entries: owner only" on public.revenue_entries
+  for all using (public.is_account_owner(account_id));
+
+create policy "revenue_settings: owner only" on public.revenue_settings
   for all using (public.is_account_owner(account_id));
 
 create policy "ad_campaigns: workspace members" on public.ad_campaigns
