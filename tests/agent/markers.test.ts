@@ -90,6 +90,20 @@ describe('parseMarkers — parsing puro dos marcadores de controle', () => {
     expect(parsed.cancelledAppointmentId).toBeNull()
   })
 
+  it('deve extrair PROCEDIMENTO_ID quando traz um UUID e removê-lo da mensagem do paciente', () => {
+    const parsed = parseMarkers(
+      `Confirmado!\nAGENDAMENTO_CONFIRMADO: ${SLOT}\nPROCEDIMENTO_ID: ${APPT_UUID}`
+    )
+    expect(parsed.procedureId).toBe(APPT_UUID)
+    expect(parsed.messageForPatient).toBe('Confirmado!')
+    expect(parsed.messageForPatient).not.toContain('PROCEDIMENTO_ID')
+  })
+
+  it('deve devolver procedureId nulo quando não há a linha PROCEDIMENTO_ID', () => {
+    const parsed = parseMarkers(`Confirmado!\nAGENDAMENTO_CONFIRMADO: ${SLOT}`)
+    expect(parsed.procedureId).toBeNull()
+  })
+
   it('deve extrair NOME_PACIENTE em qualquer posição da resposta', () => {
     const noMeio = parseMarkers('Oi!\nNOME_PACIENTE: João Silva\nComo posso ajudar?')
     expect(noMeio.patientName).toBe('João Silva')

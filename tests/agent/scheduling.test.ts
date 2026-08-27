@@ -77,6 +77,11 @@ describe('processIncomingMessage — agendamento pelo bot', () => {
       duration_min: 30,
       source: 'bot',
       status: 'agendado',
+      // Ciclo de receita: sem catálogo de procedimentos e sem preço-base
+      // configurado, os snapshots entram nulos e nenhum revenue_entry é criado.
+      procedure_id: null,
+      procedure_name: null,
+      price: null,
     })
   })
 
