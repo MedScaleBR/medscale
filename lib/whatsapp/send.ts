@@ -60,7 +60,7 @@ export async function sendReminderTemplate({
       to,
       type: 'template',
       template: {
-        name: 'appointment_reminder', // template aprovado pela Meta
+        name: 'appointment_reminder_2', // template aprovado pela Meta
         language: { code: 'pt_BR' },
         components: [
           {
