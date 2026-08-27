@@ -660,6 +660,30 @@ export interface Database {
           },
         ]
       }
+      rate_limit_log: {
+        Row: {
+          id: number
+          workspace_id: string
+          phone: string
+          window_start: string
+          message_count: number
+          blocked_at: string | null
+          notified: boolean
+        }
+        Insert: Partial<Database['public']['Tables']['rate_limit_log']['Row']> & {
+          workspace_id: string
+          phone: string
+        }
+        Update: Partial<Database['public']['Tables']['rate_limit_log']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'rate_limit_log_workspace_id_fkey'
+            columns: ['workspace_id']
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       handoff_logs: {
         Row: {
           id: string

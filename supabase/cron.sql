@@ -148,6 +148,20 @@ select cron.schedule(
   $$
 );
 
+-- CLEANUP-RATE-LIMITS: apaga registros de rate_limit_log com janela expirada
+-- há mais de 10min (ver lib/rate-limit/webhook.ts) — a cada 10min. DELETE
+-- direto no Postgres, sem HTTP: não há rota envolvida. Registros velhos não
+-- causam comportamento incorreto (a próxima mensagem recria a linha via
+-- UPSERT), só acúmulo de dados. Também consta em supabase/migration_rate_limit.sql.
+select cron.schedule(
+  'cleanup-rate-limits',
+  '*/10 * * * *',
+  $$
+    delete from public.rate_limit_log
+    where window_start < now() - interval '10 minutes';
+  $$
+);
+
 -- ============================================================
 -- 3. VERIFICAÇÃO
 -- ============================================================
