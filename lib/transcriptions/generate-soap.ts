@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { SOAPRecord } from './types'
+import { validateSOAPRecord, type SOAPRecord } from './types'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -71,12 +71,30 @@ export async function generateSOAP(transcriptText: string): Promise<SOAPRecord> 
   })
 
   const completion = message.content[0].type === 'text' ? message.content[0].text : ''
-  const raw = stripMarkdownFence(`{${completion}`)
 
+  // O prefill abre o turno do assistente com "{", então normalmente a resposta
+  // continua o JSON a partir dali. Limpar o fence ANTES de repor a chave é o
+  // que faz o stripMarkdownFence valer de alguma coisa: montando `{${completion}}`
+  // primeiro, a string nunca começava com ``` e o fence jamais casava.
+  // Repor a "{" só quando ela realmente falta também cobre o caso em que o
+  // modelo ignora o prefill e repete a chave de abertura.
+  const stripped = stripMarkdownFence(completion)
+  const raw = stripped.startsWith('{') ? stripped : `{${stripped}`
+
+  let parsed: unknown
   try {
-    return JSON.parse(raw) as SOAPRecord
+    parsed = JSON.parse(raw)
   } catch (err) {
     console.error('[generate-soap] Claude returned invalid JSON:', raw.slice(0, 500))
     throw new Error(`Claude returned invalid JSON: ${String(err)}`)
+  }
+
+  // JSON sintaticamente válido ainda pode não ser um prontuário válido —
+  // valida o contrato antes de devolver (ver validateSOAPRecord em ./types).
+  try {
+    return validateSOAPRecord(parsed)
+  } catch (err) {
+    console.error('[generate-soap] Claude returned JSON outside the SOAPRecord contract:', raw.slice(0, 500))
+    throw new Error(`Claude returned an invalid SOAP record: ${String(err)}`)
   }
 }

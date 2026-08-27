@@ -11,6 +11,7 @@ import { cancelEvent, createEvent } from '@/lib/google/calendar'
 import { getBotConfig } from '@/lib/bot/config'
 import { buildDynamicSystemPrompt } from '@/lib/bot/prompt-builder'
 import { detectHandoffIntent, executeHandoff, isHandoffAvailableNow, logHandoffUnavailable } from '@/lib/bot/handoff'
+import { parseMarkers } from '@/lib/bot/parse-markers'
 import type { Database } from '@/types/database'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -23,14 +24,6 @@ interface ProcessMessageParams {
   message: string
   whatsappMessageId: string
 }
-
-// Data com offset explícito de São Paulo — evita que o `new Date(...)` do
-// Node interprete o horário como local do servidor (Vercel roda em UTC).
-const CONFIRMATION_MARKER = /AGENDAMENTO_CONFIRMADO:\s*(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2})?-03:00)/
-// Cancelamento referencia o id real da consulta (copiado do system prompt),
-// não um horário reconstruído — ver upcomingAppointments mais abaixo.
-const CANCELLATION_MARKER = /CANCELAMENTO_CONFIRMADO:\s*([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/
-const PATIENT_NAME_MARKER = /NOME_PACIENTE:\s*(.+)/
 
 // Mensagens fixas usadas quando o agendamento/cancelamento que a IA anunciou
 // não bate no banco — comparadas literalmente contra a última mensagem do
@@ -348,17 +341,14 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   const rawMessage = responseText ?? 'Não consegui processar sua mensagem. Pode repetir?'
 
   // As linhas de marcação (agendamento, cancelamento, nome do paciente) são
-  // lidas pelo sistema e não devem ir ao paciente.
-  const cleanedMessage = rawMessage
-    .replace(CONFIRMATION_MARKER, '')
-    .replace(CANCELLATION_MARKER, '')
-    .replace(PATIENT_NAME_MARKER, '')
-    .trim()
+  // lidas pelo sistema e não devem ir ao paciente — parsing isolado em
+  // lib/bot/parse-markers.ts (função pura, testada em tests/agent/markers).
+  const markers = parseMarkers(rawMessage)
+  const cleanedMessage = markers.cleanedMessage
 
   // Nome do paciente ainda é o placeholder "Paciente" (posto na criação, passo
   // 2) até ele se identificar na conversa — atualiza assim que o bot capturar.
-  const nameMatch = rawMessage.match(PATIENT_NAME_MARKER)
-  const patientName = nameMatch?.[1]?.trim()
+  const patientName = markers.patientName
   if (patient && patientName && patientName !== patient.full_name) {
     await supabase.from('patients').update({ full_name: patientName }).eq('id', patient.id)
     patient.full_name = patientName
@@ -372,62 +362,59 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   let bookingFailed = false
   let cancellationFailed = false
 
-  const confirmMatch = rawMessage.match(CONFIRMATION_MARKER)
-  if (confirmMatch) {
-    const scheduledAt = new Date(confirmMatch[1])
+  if (markers.confirmedDate) {
+    const scheduledAt = markers.confirmedDate
     const durationMin = 30
 
-    if (!Number.isNaN(scheduledAt.getTime())) {
-      // Revalida contra a disponibilidade real — o horário pode ter sido
-      // ocupado entre o cálculo dos slots (passo 6) e a confirmação do paciente.
-      const stillAvailable = await isSlotAvailable(workspaceId, scheduledAt, durationMin).catch(() => true)
+    // Revalida contra a disponibilidade real — o horário pode ter sido
+    // ocupado entre o cálculo dos slots (passo 6) e a confirmação do paciente.
+    const stillAvailable = await isSlotAvailable(workspaceId, scheduledAt, durationMin).catch(() => true)
 
-      if (!stillAvailable) {
-        console.warn(`Slot ${confirmMatch[1]} não está mais disponível para workspace ${workspaceId} — agendamento não criado.`)
-        bookingFailed = true
-      } else {
-        const { data: appt } = await supabase
-          .from('appointments')
-          .insert({
-            workspace_id: workspaceId,
-            account_id: accountId,
-            patient_id: patient?.id,
-            patient_name: patient?.full_name ?? 'Paciente',
-            patient_phone: patientPhone,
-            scheduled_at: scheduledAt.toISOString(),
-            duration_min: durationMin,
-            source: 'bot',
-            status: 'agendado',
-          })
-          .select()
-          .single()
+    if (!stillAvailable) {
+      console.warn(`Slot ${markers.confirmedSlot} não está mais disponível para workspace ${workspaceId} — agendamento não criado.`)
+      bookingFailed = true
+    } else {
+      const { data: appt } = await supabase
+        .from('appointments')
+        .insert({
+          workspace_id: workspaceId,
+          account_id: accountId,
+          patient_id: patient?.id,
+          patient_name: patient?.full_name ?? 'Paciente',
+          patient_phone: patientPhone,
+          scheduled_at: scheduledAt.toISOString(),
+          duration_min: durationMin,
+          source: 'bot',
+          status: 'agendado',
+        })
+        .select()
+        .single()
 
-        if (appt) {
-          await supabase.from('conversations').update({ appointment_id: appt.id }).eq('id', conversation.id)
+      if (appt) {
+        await supabase.from('conversations').update({ appointment_id: appt.id }).eq('id', conversation.id)
 
-          const { connected, email } = await isGoogleConnected(workspaceId)
-          if (connected && email) {
-            try {
-              const gcalEvent = await createEvent({
-                workspaceId,
-                patientName: appt.patient_name,
-                patientPhone: appt.patient_phone,
-                appointmentType: appt.type,
-                startTime: scheduledAt,
-                durationMin,
-                workspaceName,
-                doctorEmail: email,
-              })
-              if (gcalEvent.id) {
-                await supabase.from('appointments').update({ gcal_event_id: gcalEvent.id }).eq('id', appt.id)
-              }
-            } catch (gcalErr) {
-              console.error('Google Calendar sync failed (bot booking):', gcalErr)
+        const { connected, email } = await isGoogleConnected(workspaceId)
+        if (connected && email) {
+          try {
+            const gcalEvent = await createEvent({
+              workspaceId,
+              patientName: appt.patient_name,
+              patientPhone: appt.patient_phone,
+              appointmentType: appt.type,
+              startTime: scheduledAt,
+              durationMin,
+              workspaceName,
+              doctorEmail: email,
+            })
+            if (gcalEvent.id) {
+              await supabase.from('appointments').update({ gcal_event_id: gcalEvent.id }).eq('id', appt.id)
             }
+          } catch (gcalErr) {
+            console.error('Google Calendar sync failed (bot booking):', gcalErr)
           }
-        } else {
-          bookingFailed = true
         }
+      } else {
+        bookingFailed = true
       }
     }
   }
@@ -437,9 +424,8 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   // depois da Maria dizer ao paciente que tinha cancelado. Casa por id (não
   // por horário reconstruído) — o id é copiado do system prompt exatamente
   // como está no banco, então não sofre com precisão de timestamp.
-  const cancelMatch = rawMessage.match(CANCELLATION_MARKER)
-  if (cancelMatch && patient) {
-    const apptId = cancelMatch[1]
+  if (markers.cancelledAppointmentId && patient) {
+    const apptId = markers.cancelledAppointmentId
     const { data: apptToCancel } = await supabase
       .from('appointments')
       .select('id, gcal_event_id')
@@ -491,7 +477,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   } else if (cancellationFailed) {
     finalMessage = CANCELLATION_FAILED_MESSAGE
   } else {
-    finalMessage = cleanedMessage.replace('[HANDOFF]', '').trim()
+    finalMessage = markers.messageForPatient
   }
   let realHandoff = false
 
