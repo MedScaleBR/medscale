@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
+import { syncRevenueEntryToAppointmentStatus } from '@/lib/revenue/cycle'
 
 const GRACE_MINUTES = 30 // considera no-show 30min após o horário agendado
 
@@ -33,6 +34,10 @@ export async function POST(req: NextRequest) {
     .in('id', ids)
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
+
+  // Ciclo de receita: entradas previstas dessas consultas viram 'cancelled'
+  // (histórico financeiro é permanente — nunca se apaga o revenue_entry).
+  await syncRevenueEntryToAppointmentStatus(supabase, ids, 'no_show')
 
   return NextResponse.json({ updated: ids.length })
 }

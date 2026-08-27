@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createEvent, cancelEvent } from '@/lib/google/calendar'
 import { isGoogleConnected } from '@/lib/google/auth'
 import { reconcileCalendar } from '@/lib/google/reconcile'
 import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
+import { createBookingRevenueEntry } from '@/lib/revenue/cycle'
 
 export async function GET(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
@@ -36,6 +37,23 @@ export async function POST(req: NextRequest) {
       { error: 'patient_name, patient_phone e scheduled_at são obrigatórios' },
       { status: 400 }
     )
+  }
+
+  // Ciclo de receita: se veio um procedimento do catálogo, tira o snapshot de
+  // nome e preço agora (imutável). Um body.price explícito tem prioridade.
+  let procedureName: string | null = null
+  let snapshotPrice: number | null = body.price ?? null
+  if (body.procedure_id) {
+    const { data: proc } = await supabase
+      .from('procedure_catalog')
+      .select('name, default_price')
+      .eq('id', body.procedure_id)
+      .eq('workspace_id', session.workspaceId)
+      .maybeSingle()
+    if (proc) {
+      procedureName = proc.name
+      if (snapshotPrice == null) snapshotPrice = Number(proc.default_price)
+    }
   }
 
   // Google Calendar é a fonte de verdade: se o workspace está conectado, o
@@ -85,7 +103,9 @@ export async function POST(req: NextRequest) {
       source: 'manual',
       status: body.status ?? 'agendado',
       notes: body.notes ?? null,
-      price: body.price ?? null,
+      procedure_id: body.procedure_id ?? null,
+      procedure_name: procedureName,
+      price: snapshotPrice,
       gcal_event_id: gcalEventId,
     })
     .select()
@@ -103,6 +123,23 @@ export async function POST(req: NextRequest) {
       }
     }
     return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+
+  // Ciclo de receita: entrada PREVISTA ligada ao agendamento. Client admin
+  // (revenue_entries é RLS exclusiva de owner). No-op se o módulo estiver
+  // inativo, sem preço conhecido, ou já criada para este appointment.
+  if (data && (body.status ?? 'agendado') !== 'cancelado') {
+    await createBookingRevenueEntry(createAdminClient(), {
+      workspaceId: session.workspaceId,
+      accountId: session.accountId,
+      appointmentId: data.id,
+      patientId: data.patient_id ?? null,
+      procedureId: body.procedure_id ?? null,
+      procedureName,
+      amount: snapshotPrice,
+      scheduledAt: data.scheduled_at,
+      source: 'manual',
+    })
   }
 
   return NextResponse.json(data, { status: 201 })

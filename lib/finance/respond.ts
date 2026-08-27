@@ -1,5 +1,8 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { FinanceEntry, FinanceEntryType } from './types'
+import type { RevenuePaymentMethod } from '@/types/database'
+import { PAYMENT_METHOD_LABELS } from '@/lib/revenue/cycle'
+import type { AppointmentPaymentMatch } from './appointment-payment'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -141,6 +144,60 @@ export function buildUnknownMessage(): string {
 
 export function buildUnregisteredMessage(): string {
   return `Número não encontrado na MedScale. Certifique-se de que sua conta está ativa e tente novamente.`
+}
+
+// ── Ciclo de receita: confirmação de pagamento de consulta ─────────────────
+
+export function buildRevenueCycleInactiveMessage(): string {
+  return `O ciclo de receita não está ativo na sua conta. Entre em contato com o suporte MedScale.`
+}
+
+function describeMatch(m: AppointmentPaymentMatch): string {
+  const parts = [m.patientName]
+  if (m.time) parts.push(`às ${m.time}`)
+  if (m.procedureName) parts.push(m.procedureName)
+  parts.push(formatBRL(m.amount))
+  return parts.join(' · ')
+}
+
+export function buildPaymentMatchNotFoundMessage(patient: string | null): string {
+  const who = patient ? ` de ${patient}` : ''
+  return `Não encontrei nenhuma consulta de hoje${who} aguardando pagamento. Confere o nome com a agenda e me chama de novo?`
+}
+
+export function buildPaymentMatchAmbiguousMessage(matches: AppointmentPaymentMatch[]): string {
+  const list = matches.map((m, i) => `${i + 1}. ${describeMatch(m)}`).join('\n')
+  return `Achei mais de uma consulta que pode ser:\n${list}\n\nMe diz o horário ou o nome completo pra eu confirmar a certa.`
+}
+
+export function buildPaymentConfirmPromptMessage(
+  match: AppointmentPaymentMatch,
+  method: RevenuePaymentMethod | null
+): string {
+  const via = method ? ` (${PAYMENT_METHOD_LABELS[method]})` : ''
+  const ask = method
+    ? `Confirmo o recebimento${via}?`
+    : `Confirmo o recebimento? Se puder, me diz também a forma de pagamento.`
+  return `Encontrei: ${describeMatch(match)}.\n${ask} Responda "sim" pra confirmar.`
+}
+
+export function buildPaymentConfirmedMessage(
+  match: AppointmentPaymentMatch,
+  method: RevenuePaymentMethod,
+  today: { received: number; realized: number }
+): string {
+  return (
+    `✅ Confirmado. ${match.patientName} · ${match.procedureName ?? 'Consulta'} · ${formatBRL(match.amount)} · ${PAYMENT_METHOD_LABELS[method]}\n` +
+    `Receita de hoje: ${formatBRL(today.received)} recebidos de ${formatBRL(today.realized)} realizados.`
+  )
+}
+
+export function buildPaymentConfirmCancelledMessage(): string {
+  return `Ok, não confirmei nada. Se precisar, é só me chamar de novo.`
+}
+
+export function buildPaymentMethodNeededMessage(): string {
+  return `Qual foi a forma de pagamento? (Pix, cartão de crédito, cartão de débito, dinheiro, transferência ou outro)`
 }
 
 export function buildUnsupportedTypeMessage(): string {

@@ -24,7 +24,10 @@ export interface WorkspaceBreakdown {
 
 export interface DashboardStats {
   appointments: { total: number; bot: number; manual: number }
-  revenue: { total: number; confirmed: number; projected: number }
+  // Ciclo de receita: projected = tudo não-cancelado; realized = consultas que
+  // aconteceram; received = pagamento confirmado. `confirmed` e `total` são
+  // mantidos (= received / projected) por compatibilidade.
+  revenue: { total: number; confirmed: number; projected: number; realized: number; received: number }
   noShow: { rate: number; total: number }
   todayAgenda: TodayAgendaItem[]
   traffic: Record<string, TrafficChannelStats>

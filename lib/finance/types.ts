@@ -1,4 +1,4 @@
-import type { FinanceEntryType } from '@/types/database'
+import type { FinanceEntryType, RevenuePaymentMethod } from '@/types/database'
 
 export type { FinanceEntryType }
 
@@ -31,6 +31,9 @@ export type FinanceIntent =
     }
   // `type: null` = PF e PJ juntos; `category: null` = todas; `month: null` = mês atual.
   | { kind: 'query'; type: FinanceEntryType | null; category: string | null; month: string | null }
+  // Ciclo de receita: o médico avisa que um paciente pagou uma consulta.
+  // Sempre passa por confirmação explícita antes de persistir.
+  | { kind: 'confirm_payment'; patient: string | null; time: string | null; method: RevenuePaymentMethod | null }
   | { kind: 'undo' }
   | { kind: 'help' }
   // Saudação/agradecimento — responde com simpatia em vez de "não entendi".

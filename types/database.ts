@@ -13,6 +13,16 @@ export type MessageRole = 'user' | 'assistant' | 'system'
 export type AvailabilityExceptionType = 'blocked' | 'extra'
 export type WaitlistStatus = 'waiting' | 'scheduled' | 'cancelled'
 export type RevenueStatus = 'previsto' | 'confirmado' | 'cancelado'
+// Ciclo de receita automático (ver prompts/CICLO_RECEITA_COMO_FUNCIONA.md).
+export type RevenuePaymentStatus = 'pending' | 'realized' | 'paid' | 'cancelled' | 'refunded'
+export type RevenuePaymentMethod =
+  | 'pix'
+  | 'cartao_credito'
+  | 'cartao_debito'
+  | 'dinheiro'
+  | 'transferencia'
+  | 'outro'
+export type RevenueSource = 'bot' | 'manual' | 'whatsapp_agent'
 export type AdChannel = 'instagram' | 'google' | 'facebook' | 'tiktok' | 'outro'
 export type NumberSource = 'own' | 'medscale'
 export type OnboardingStep =
@@ -52,6 +62,7 @@ export type ModuleSlug =
   | 'settings'
   | 'transcriptions'
   | 'finance'
+  | 'revenue_cycle'
 
 export interface Database {
   public: {
@@ -273,6 +284,8 @@ export interface Database {
           source: AppointmentSource
           status: AppointmentStatus
           notes: string | null
+          procedure_id: string | null
+          procedure_name: string | null
           price: number | null
           gcal_event_id: string | null
           reminder_sent: boolean
@@ -504,15 +517,50 @@ export interface Database {
           },
         ]
       }
+      procedure_catalog: {
+        Row: {
+          id: string
+          workspace_id: string
+          name: string
+          code: string | null
+          default_price: number
+          duration_min: number | null
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['procedure_catalog']['Row']> & {
+          workspace_id: string
+          name: string
+          default_price: number
+        }
+        Update: Partial<Database['public']['Tables']['procedure_catalog']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'procedure_catalog_workspace_id_fkey'
+            columns: ['workspace_id']
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       revenue_entries: {
         Row: {
           id: string
           workspace_id: string
           account_id: string
           appointment_id: string | null
+          patient_id: string | null
+          procedure_id: string | null
+          procedure_name: string | null
           amount: number
           status: RevenueStatus
-          payment_method: string | null
+          payment_status: RevenuePaymentStatus
+          payment_method: RevenuePaymentMethod | null
+          installments: number
+          source: RevenueSource
+          due_date: string | null
+          paid_at: string | null
           notes: string | null
           entry_date: string
           created_at: string
@@ -526,6 +574,36 @@ export interface Database {
         Relationships: [
           {
             foreignKeyName: 'revenue_entries_workspace_id_fkey'
+            columns: ['workspace_id']
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'revenue_entries_appointment_id_fkey'
+            columns: ['appointment_id']
+            referencedRelation: 'appointments'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      revenue_settings: {
+        Row: {
+          workspace_id: string
+          account_id: string
+          daily_summary_enabled: boolean
+          daily_summary_hour: number
+          daily_summary_only_with_activity: boolean
+          overdue_tolerance_days: number
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['revenue_settings']['Row']> & {
+          workspace_id: string
+          account_id: string
+        }
+        Update: Partial<Database['public']['Tables']['revenue_settings']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'revenue_settings_workspace_id_fkey'
             columns: ['workspace_id']
             referencedRelation: 'workspaces'
             referencedColumns: ['id']

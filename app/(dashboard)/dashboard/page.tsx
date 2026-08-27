@@ -54,10 +54,10 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           barColor="cyan"
         />
         <KpiCard
-          label="Receita confirmada"
-          value={formatBRL(stats.revenue.confirmed)}
+          label="Receita recebida"
+          value={formatBRL(stats.revenue.received)}
           icon={Wallet}
-          barWidth={stats.revenue.projected > 0 ? Math.round((stats.revenue.confirmed / stats.revenue.projected) * 100) : 0}
+          barWidth={stats.revenue.projected > 0 ? Math.round((stats.revenue.received / stats.revenue.projected) * 100) : 0}
           barColor="green"
         />
         <KpiCard
@@ -77,7 +77,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <RevenueChart confirmed={stats.revenue.confirmed} projected={stats.revenue.projected} />
+        <RevenueChart
+          projected={stats.revenue.projected}
+          realized={stats.revenue.realized}
+          received={stats.revenue.received}
+        />
         <TrafficTable traffic={stats.traffic} />
       </div>
 

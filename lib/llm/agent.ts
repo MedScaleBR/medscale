@@ -12,6 +12,7 @@ import { getBotConfig } from '@/lib/bot/config'
 import { buildDynamicSystemPrompt } from '@/lib/bot/prompt-builder'
 import { detectHandoffIntent, executeHandoff, isHandoffAvailableNow, logHandoffUnavailable } from '@/lib/bot/handoff'
 import { parseMarkers } from '@/lib/bot/parse-markers'
+import { createBookingRevenueEntry } from '@/lib/revenue/cycle'
 import type { Database } from '@/types/database'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -303,6 +304,21 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     }
   })
 
+  // 6.6. Catálogo de procedimentos da workspace (ciclo de receita). Vazio
+  // quando a clínica não cadastrou nada — o agendamento segue igual, só sem
+  // gerar o revenue_entry previsto automaticamente.
+  const { data: catalogRows } = await supabase
+    .from('procedure_catalog')
+    .select('id, name, default_price')
+    .eq('workspace_id', workspaceId)
+    .eq('is_active', true)
+    .order('name', { ascending: true })
+  const procedureCatalog = (catalogRows ?? []).map((p) => ({
+    id: p.id,
+    name: p.name,
+    price: Number(p.default_price),
+  }))
+
   // 7. Montar system prompt dinâmico e chamar Claude
   const systemPrompt = buildDynamicSystemPrompt({
     workspaceName,
@@ -310,6 +326,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     freeSlotsByDay,
     isFirstMessage,
     upcomingAppointments,
+    procedureCatalog,
   })
 
   const claudeMessages = (history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
@@ -366,6 +383,15 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     const scheduledAt = markers.confirmedDate
     const durationMin = 30
 
+    // Procedimento escolhido (ciclo de receita): resolve o marcador
+    // PROCEDIMENTO_ID contra o catálogo real. Snapshots de nome e preço vão
+    // para o appointment e são imutáveis — mudar o preço do procedimento
+    // depois não altera agendamentos passados.
+    const resolvedProcedure = markers.procedureId
+      ? procedureCatalog.find((p) => p.id === markers.procedureId) ?? null
+      : null
+    const snapshotPrice = resolvedProcedure?.price ?? botConfig.consultationPriceFrom ?? null
+
     // Revalida contra a disponibilidade real — o horário pode ter sido
     // ocupado entre o cálculo dos slots (passo 6) e a confirmação do paciente.
     const stillAvailable = await isSlotAvailable(workspaceId, scheduledAt, durationMin).catch(() => true)
@@ -386,12 +412,30 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
           duration_min: durationMin,
           source: 'bot',
           status: 'agendado',
+          procedure_id: resolvedProcedure?.id ?? null,
+          procedure_name: resolvedProcedure?.name ?? null,
+          price: snapshotPrice,
         })
         .select()
         .single()
 
       if (appt) {
         await supabase.from('conversations').update({ appointment_id: appt.id }).eq('id', conversation.id)
+
+        // Ciclo de receita: cria a entrada PREVISTA (payment_status 'pending')
+        // ligada ao agendamento. No-op se o módulo estiver inativo ou não
+        // houver preço conhecido.
+        await createBookingRevenueEntry(supabase, {
+          workspaceId,
+          accountId,
+          appointmentId: appt.id,
+          patientId: patient?.id ?? null,
+          procedureId: resolvedProcedure?.id ?? null,
+          procedureName: resolvedProcedure?.name ?? null,
+          amount: snapshotPrice,
+          scheduledAt: scheduledAt.toISOString(),
+          source: 'bot',
+        })
 
         const { connected, email } = await isGoogleConnected(workspaceId)
         if (connected && email) {

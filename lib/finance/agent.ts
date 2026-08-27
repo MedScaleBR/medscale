@@ -12,9 +12,50 @@ import {
   buildHelpMessage,
   buildUnknownMessage,
   buildUnregisteredMessage,
+  buildRevenueCycleInactiveMessage,
+  buildPaymentMatchNotFoundMessage,
+  buildPaymentMatchAmbiguousMessage,
+  buildPaymentConfirmPromptMessage,
+  buildPaymentConfirmedMessage,
+  buildPaymentConfirmCancelledMessage,
+  buildPaymentMethodNeededMessage,
   type QueryFilters,
 } from './respond'
+import {
+  findTodayUnpaidByPatient,
+  confirmAppointmentPayment,
+  summarizeAccountToday,
+  type AppointmentPaymentMatch,
+} from './appointment-payment'
 import type { FinanceEntry } from './types'
+import type { RevenuePaymentMethod } from '@/types/database'
+
+// Confirmação de pagamento de consulta pendente de "sim" do owner, guardada
+// em finance_sessions.pending_entry entre as duas mensagens.
+interface PendingPaymentConfirm {
+  kind: 'confirm_payment'
+  revenue_entry_id: string
+  method: RevenuePaymentMethod | null
+  match: AppointmentPaymentMatch
+}
+const PENDING_TTL_MS = 30 * 60 * 1000
+
+const AFFIRMATIVE = /^(s|sim|isso|isso mesmo|exato|é isso|e isso|confirmo|confirma|confirmar|pode confirmar|ok|ta|tá|👍|isso ai|isso aí)\b/i
+const NEGATIVE = /^(n|nao|não|cancela|cancelar|deixa|esquece|errado|não era|nao era|para|pare)\b/i
+
+function parsePaymentMethod(text: string): RevenuePaymentMethod | null {
+  const t = text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+  if (/\bpix\b/.test(t)) return 'pix'
+  if (/(cartao|cartão).*(cred|credito)/.test(t) || /\bcredito\b/.test(t)) return 'cartao_credito'
+  if (/(cartao|cartão).*(deb|debito)/.test(t) || /\bdebito\b/.test(t)) return 'cartao_debito'
+  if (/\bcartao\b|\bcartão\b/.test(t)) return 'cartao_credito'
+  if (/\bdinheiro\b|especie|espécie/.test(t)) return 'dinheiro'
+  if (/transfer|\bted\b|\bdoc\b/.test(t)) return 'transferencia'
+  return null
+}
 
 export async function processFinancialMessage(senderPhone: string, messageText: string): Promise<void> {
   const supabase = createAdminClient()
@@ -83,11 +124,45 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
     return
   }
 
+  const revenueCycleActive = account?.modules?.includes('revenue_cycle') ?? false
+
+  // 2.5 Há uma confirmação de pagamento de consulta esperando o "sim" do owner?
+  // (ciclo de receita — fluxo de duas mensagens, ver PendingPaymentConfirm)
+  if (await handlePendingPaymentConfirm(supabase, accountId, senderPhone, messageText)) return
+
   // 3. Entender a mensagem. Atalho com barra primeiro (instantâneo e sem
   // custo); só o que não for comando vai para o Claude interpretar.
   const today = new Date().toISOString().split('T')[0]
   const shortcut = parseCommand(messageText)
   const intent = shortcut.kind === 'unknown' ? await interpretMessage(messageText, today) : shortcut
+
+  if (intent.kind === 'confirm_payment') {
+    if (!revenueCycleActive) {
+      await sendFinanceReply(senderPhone, buildRevenueCycleInactiveMessage())
+      return
+    }
+    const matches = await findTodayUnpaidByPatient(supabase, accountId, {
+      patient: intent.patient,
+      time: intent.time,
+    })
+    if (matches.length === 0) {
+      await sendFinanceReply(senderPhone, buildPaymentMatchNotFoundMessage(intent.patient))
+      return
+    }
+    if (matches.length > 1) {
+      await sendFinanceReply(senderPhone, buildPaymentMatchAmbiguousMessage(matches))
+      return
+    }
+    const match = matches[0]
+    await setPendingPaymentConfirm(supabase, accountId, senderPhone, {
+      kind: 'confirm_payment',
+      revenue_entry_id: match.revenueEntryId,
+      method: intent.method,
+      match,
+    })
+    await sendFinanceReply(senderPhone, buildPaymentConfirmPromptMessage(match, intent.method))
+    return
+  }
 
   if (intent.kind === 'help') {
     await sendFinanceReply(senderPhone, buildHelpMessage())
@@ -185,6 +260,96 @@ async function handleUndo(
   }
 
   await sendFinanceReply(senderPhone, buildUndoMessage(last))
+}
+
+// Trata a mensagem quando há uma confirmação de pagamento de consulta
+// aguardando resposta. Retorna true se a mensagem foi consumida aqui.
+async function handlePendingPaymentConfirm(
+  supabase: ReturnType<typeof createAdminClient>,
+  accountId: string,
+  senderPhone: string,
+  messageText: string
+): Promise<boolean> {
+  const { data: fsession } = await supabase
+    .from('finance_sessions')
+    .select('pending_entry, last_message_at')
+    .eq('phone', senderPhone)
+    .maybeSingle()
+
+  const pending = fsession?.pending_entry as PendingPaymentConfirm | null | undefined
+  if (!pending || pending.kind !== 'confirm_payment') return false
+
+  // Expirou — limpa e deixa a mensagem seguir o fluxo normal.
+  if (
+    fsession?.last_message_at &&
+    Date.now() - new Date(fsession.last_message_at).getTime() > PENDING_TTL_MS
+  ) {
+    await clearPendingFinanceSession(supabase, senderPhone)
+    return false
+  }
+
+  const text = messageText.trim()
+
+  if (NEGATIVE.test(text)) {
+    await clearPendingFinanceSession(supabase, senderPhone)
+    await sendFinanceReply(senderPhone, buildPaymentConfirmCancelledMessage())
+    return true
+  }
+
+  const methodFromText = parsePaymentMethod(text)
+  const affirm = AFFIRMATIVE.test(text)
+  if (!affirm && !methodFromText) {
+    // Nem sim/não nem forma de pagamento — abandona a confirmação e deixa o
+    // fluxo normal tratar (provavelmente é outro assunto).
+    await clearPendingFinanceSession(supabase, senderPhone)
+    return false
+  }
+
+  const method = methodFromText ?? pending.method
+  if (!method) {
+    await sendFinanceReply(senderPhone, buildPaymentMethodNeededMessage())
+    return true
+  }
+
+  const ok = await confirmAppointmentPayment(supabase, pending.revenue_entry_id, method)
+  await clearPendingFinanceSession(supabase, senderPhone)
+  if (!ok) {
+    await sendFinanceReply(
+      senderPhone,
+      'Não consegui confirmar — essa consulta pode já ter sido paga ou cancelada. Dá uma olhada no painel.'
+    )
+    return true
+  }
+  const today = await summarizeAccountToday(supabase, accountId)
+  await sendFinanceReply(senderPhone, buildPaymentConfirmedMessage(pending.match, method, today))
+  return true
+}
+
+async function setPendingPaymentConfirm(
+  supabase: ReturnType<typeof createAdminClient>,
+  accountId: string,
+  senderPhone: string,
+  pending: PendingPaymentConfirm
+): Promise<void> {
+  await supabase.from('finance_sessions').upsert(
+    {
+      phone: senderPhone,
+      account_id: accountId,
+      pending_entry: pending as unknown as Record<string, unknown>,
+      last_message_at: new Date().toISOString(),
+    },
+    { onConflict: 'phone' }
+  )
+}
+
+async function clearPendingFinanceSession(
+  supabase: ReturnType<typeof createAdminClient>,
+  senderPhone: string
+): Promise<void> {
+  await supabase
+    .from('finance_sessions')
+    .update({ pending_entry: null, last_message_at: new Date().toISOString() })
+    .eq('phone', senderPhone)
 }
 
 // Lançamentos da account com os filtros da consulta. `type`/`category` nulos
