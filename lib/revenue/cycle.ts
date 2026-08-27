@@ -1,5 +1,16 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database, AppointmentStatus, RevenueSource } from '@/types/database'
+import type { Database, AppointmentStatus, RevenuePaymentMethod, RevenueSource } from '@/types/database'
+
+// Rótulos das formas de pagamento — compartilhados entre a tela, o agente
+// financeiro e o resumo diário.
+export const PAYMENT_METHOD_LABELS: Record<RevenuePaymentMethod, string> = {
+  pix: 'Pix',
+  cartao_credito: 'Cartão de crédito',
+  cartao_debito: 'Cartão de débito',
+  dinheiro: 'Dinheiro',
+  transferencia: 'Transferência',
+  outro: 'Outro',
+}
 
 // Ciclo de receita automático — transições de revenue_entries disparadas por
 // eventos de agendamento/consulta. Ver prompts/CICLO_RECEITA_COMO_FUNCIONA.md.

@@ -49,6 +49,42 @@ export function summarizeRevenueEntries(entries: EntryRow[]): RevenueTotals {
   return { projected, realized, received, pending, counts }
 }
 
+const formatBRL0 = (v: number) => `R$${Math.round(v).toLocaleString('pt-BR')}`
+
+// Fechamento diário enviado no WhatsApp do owner (ver
+// /api/cron/daily-revenue-summary). Pura — testada em tests/revenue.
+export function buildDailySummaryMessage(opts: {
+  dateLabel: string
+  totals: RevenueTotals
+  pendingPatients: { name: string; amount: number }[]
+}): string {
+  const { dateLabel, totals, pendingPatients } = opts
+  const realizedCount = totals.counts.realized + totals.counts.paid
+  const missedCount = totals.counts.cancelled
+
+  const lines: (string | null)[] = [
+    `📊 *Fechamento de hoje — ${dateLabel}*`,
+    ``,
+    `✅ Realizadas: ${realizedCount} ${realizedCount === 1 ? 'consulta' : 'consultas'} · ${formatBRL0(totals.realized)}`,
+    `💰 Recebido: ${formatBRL0(totals.received)}`,
+    totals.counts.realized > 0
+      ? `⏳ Pendente: ${formatBRL0(totals.pending)} (${totals.counts.realized} ${
+          totals.counts.realized === 1 ? 'consulta' : 'consultas'
+        })`
+      : null,
+    missedCount > 0
+      ? `❌ No-show/cancelado: ${missedCount} ${missedCount === 1 ? 'consulta' : 'consultas'}`
+      : null,
+  ]
+
+  if (pendingPatients.length > 0) {
+    lines.push(``, `Pacientes sem pagamento confirmado:`)
+    for (const p of pendingPatients) lines.push(`· ${p.name} — ${formatBRL0(p.amount)}`)
+  }
+
+  return lines.filter((l) => l !== null).join('\n')
+}
+
 // Totais de um workspace numa janela de datas (due_date), lidos com o client
 // admin — revenue_entries tem RLS exclusiva de owner. Só chamar depois de já
 // ter checado que quem pediu é o owner.
