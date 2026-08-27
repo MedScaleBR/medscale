@@ -36,8 +36,9 @@ interface SendReminderParams {
   phoneNumberId: string
   token: string
   patientName: string
-  workspaceName: string
   appointmentDate: string
+  appointmentTime: string
+  address: string
 }
 
 // Mensagens iniciadas pelo sistema (fora da janela de 24h) precisam usar
@@ -47,8 +48,9 @@ export async function sendReminderTemplate({
   phoneNumberId,
   token,
   patientName,
-  workspaceName,
   appointmentDate,
+  appointmentTime,
+  address,
 }: SendReminderParams) {
   const url = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`
 
@@ -60,15 +62,18 @@ export async function sendReminderTemplate({
       to,
       type: 'template',
       template: {
-        name: 'appointment_reminder', // template aprovado pela Meta
+        name: 'appointment_reminder_2', // template aprovado pela Meta
         language: { code: 'pt_BR' },
         components: [
           {
             type: 'body',
+            // Ordem das variáveis do template: {{1}} nome, {{2}} data,
+            // {{3}} horário, {{4}} endereço.
             parameters: [
               { type: 'text', text: patientName },
-              { type: 'text', text: workspaceName },
               { type: 'text', text: appointmentDate },
+              { type: 'text', text: appointmentTime },
+              { type: 'text', text: address },
             ],
           },
         ],

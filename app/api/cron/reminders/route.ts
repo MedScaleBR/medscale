@@ -33,7 +33,7 @@ export async function POST(req: NextRequest) {
   const workspaceIds = [...new Set(appointments.map((a) => a.workspace_id))]
   const { data: workspaces } = await supabase
     .from('workspaces')
-    .select('id, name, phone_number_id, meta_token')
+    .select('id, name, phone_number_id, meta_token, address, city, state')
     .in('id', workspaceIds)
 
   const workspaceById = new Map((workspaces ?? []).map((w) => [w.id, w]))
@@ -45,17 +45,29 @@ export async function POST(req: NextRequest) {
     const workspace = workspaceById.get(appt.workspace_id)
     if (!workspace?.phone_number_id || !workspace?.meta_token) continue
 
+    const scheduledAt = new Date(appt.scheduled_at)
+    const address =
+      [workspace.address, workspace.city, workspace.state].filter(Boolean).join(', ') ||
+      workspace.name
+
     try {
       await sendReminderTemplate({
         to: appt.patient_phone,
         phoneNumberId: workspace.phone_number_id,
         token: decryptToken(workspace.meta_token),
         patientName: appt.patient_name,
-        workspaceName: workspace.name,
-        appointmentDate: new Date(appt.scheduled_at).toLocaleString('pt-BR', {
-          dateStyle: 'short',
-          timeStyle: 'short',
+        appointmentDate: scheduledAt.toLocaleDateString('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
         }),
+        appointmentTime: scheduledAt.toLocaleTimeString('pt-BR', {
+          timeZone: 'America/Sao_Paulo',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        address,
       })
       await supabase.from('appointments').update({ reminder_sent: true }).eq('id', appt.id)
       sent += 1
