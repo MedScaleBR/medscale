@@ -3,14 +3,16 @@
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
 interface RevenueChartProps {
-  confirmed: number
   projected: number
+  realized: number
+  received: number
 }
 
-export function RevenueChart({ confirmed, projected }: RevenueChartProps) {
+export function RevenueChart({ projected, realized, received }: RevenueChartProps) {
   const data = [
-    { name: 'Confirmada', value: confirmed },
-    { name: 'Prevista', value: Math.max(projected - confirmed, 0) },
+    { name: 'Previsto', value: projected },
+    { name: 'Realizado', value: realized },
+    { name: 'Recebido', value: received },
   ]
 
   const formatBRL = (v: number) =>
