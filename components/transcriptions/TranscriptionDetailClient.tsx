@@ -9,6 +9,8 @@ import { TranscriptionStatusBadge } from './TranscriptionStatusBadge'
 import { SOAPEditor } from './SOAPEditor'
 import { AlertsPanel } from './AlertsPanel'
 import { Loader2, Archive, ArchiveRestore } from 'lucide-react'
+import { useAnalyticsBase } from '@/lib/session/session-context'
+import { trackTranscriptionSigned } from '@/lib/analytics/posthog'
 import type { Transcription } from '@/lib/transcriptions/types'
 
 const STATUS_MESSAGE: Record<string, string> = {
@@ -20,6 +22,7 @@ const STATUS_MESSAGE: Record<string, string> = {
 
 export function TranscriptionDetailClient({ initial }: { initial: Transcription }) {
   const router = useRouter()
+  const analyticsBase = useAnalyticsBase()
   const [transcription, setTranscription] = useState(initial)
   const [signOpen, setSignOpen] = useState(false)
   const [signing, setSigning] = useState(false)
@@ -64,6 +67,10 @@ export function TranscriptionDetailClient({ initial }: { initial: Transcription 
         body: JSON.stringify({ medical_record_final: draft }),
       })
       if (res.ok) {
+        trackTranscriptionSigned({
+          ...analyticsBase,
+          time_to_sign_minutes: (Date.now() - new Date(transcription.created_at).getTime()) / 60000,
+        })
         setTranscription({
           ...transcription,
           status: 'signed',

@@ -13,6 +13,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Plus, X } from 'lucide-react'
+import { useAnalyticsBase } from '@/lib/session/session-context'
+import { trackAvailabilityRulesSaved } from '@/lib/analytics/posthog'
 import type { Database } from '@/types/database'
 
 type AvailabilityRule = Database['public']['Tables']['availability_rules']['Row']
@@ -35,6 +37,7 @@ export function AvailabilitySettings({ initialRules, initialExceptions }: Availa
   const [savingRule, setSavingRule] = useState(false)
   const [excForm, setExcForm] = useState({ date: '', reason: '' })
   const [savingExc, setSavingExc] = useState(false)
+  const analyticsBase = useAnalyticsBase()
 
   const addRule = async () => {
     setSavingRule(true)
@@ -51,7 +54,12 @@ export function AvailabilitySettings({ initialRules, initialExceptions }: Availa
       })
       if (res.ok) {
         const created = await res.json()
-        setRules((prev) => [...prev, created].sort((a, b) => a.day_of_week - b.day_of_week || a.start_time.localeCompare(b.start_time)))
+        const next = [...rules, created]
+        setRules(next.sort((a, b) => a.day_of_week - b.day_of_week || a.start_time.localeCompare(b.start_time)))
+        trackAvailabilityRulesSaved({
+          ...analyticsBase,
+          days_configured: new Set(next.map((r) => r.day_of_week)).size,
+        })
       }
     } finally {
       setSavingRule(false)

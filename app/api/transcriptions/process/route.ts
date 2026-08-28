@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { transcribeAudio } from '@/lib/transcriptions/whisper'
+import { trackTranscriptionCompleted, trackTranscriptionError } from '@/lib/analytics/posthog-server'
 
 export const maxDuration = 60
 
@@ -40,6 +41,12 @@ export async function POST(req: NextRequest) {
       .update({ transcript_text: transcriptText, status: 'transcribed', retry_count: 0, error_message: null })
       .eq('id', transcription_id)
 
+    await trackTranscriptionCompleted(transcription.recorded_by, {
+      workspace_id: transcription.workspace_id,
+      account_id: transcription.account_id,
+      duration_seconds: transcription.duration_seconds ?? 0,
+    })
+
     const { error: triggerError } = await supabase.rpc('trigger_transcription_generate', {
       p_transcription_id: transcription_id,
       p_app_url: process.env.NEXT_PUBLIC_APP_URL ?? '',
@@ -66,6 +73,13 @@ export async function POST(req: NextRequest) {
         .from('transcriptions')
         .update({ status: 'error', error_message: String(err) })
         .eq('id', transcription_id)
+
+      await trackTranscriptionError(transcription.recorded_by, {
+        workspace_id: transcription.workspace_id,
+        account_id: transcription.account_id,
+        error_message: String(err),
+        retry_count: retryCount,
+      })
     }
 
     return NextResponse.json({ error: String(err) }, { status: 500 })

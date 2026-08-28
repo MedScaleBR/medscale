@@ -1,5 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { sendWhatsAppMessage } from '@/lib/whatsapp/send'
+import { trackFinanceEntryCreatedViaWhatsApp } from '@/lib/analytics/posthog-server'
 import { parseCommand } from './parser'
 import { interpretMessage } from './interpret'
 import { categorizeEntry } from './categorize'
@@ -222,6 +223,12 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
     await sendFinanceReply(senderPhone, `Erro ao registrar o lançamento. Tente novamente.`)
     return
   }
+
+  await trackFinanceEntryCreatedViaWhatsApp(membership.user_id, {
+    account_id: accountId,
+    category: category ?? null,
+    amount: entry.amount,
+  })
 
   // 6. Calcular total do mês para a confirmação
   const monthEntries = await getEntries(accountId, { type: intent.type, category: null, month: null })

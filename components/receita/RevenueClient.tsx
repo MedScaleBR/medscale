@@ -21,6 +21,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Plus } from 'lucide-react'
+import { useAnalyticsBase } from '@/lib/session/session-context'
+import { trackRevenueEntryCreated } from '@/lib/analytics/posthog'
 import {
   PAYMENT_METHOD_LABELS,
   PAYMENT_STATUS_LABELS,
@@ -118,6 +120,7 @@ export function RevenueClient({
   healthPlanConsultations: HealthPlanConsultation[]
 }) {
   const router = useRouter()
+  const analyticsBase = useAnalyticsBase()
   const [pending, startTransition] = useTransition()
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -166,6 +169,7 @@ export function RevenueClient({
         }),
       })
       if (res.ok) {
+        trackRevenueEntryCreated({ ...analyticsBase, type: form.status })
         setForm(EMPTY_FORM)
         setOpen(false)
         startTransition(() => router.refresh())

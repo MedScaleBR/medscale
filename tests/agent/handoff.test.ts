@@ -149,6 +149,7 @@ describe('executeHandoff — transferência efetiva', () => {
 
   const params = {
     workspaceId: 'w1',
+    accountId: 'acc1',
     conversationId: 'c1',
     patientPhone: '5511988887777',
     handoffNumber: '+5511999998888',
@@ -186,6 +187,7 @@ describe('logHandoffUnavailable — pedido fora do horário humano', () => {
 
     await logHandoffUnavailable({
       workspaceId: 'w1',
+      accountId: 'acc1',
       conversationId: 'c1',
       patientPhone: '5511988887777',
       handoffNumber: '+5511999998888',

@@ -1,9 +1,11 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { useAnalyticsBase } from '@/lib/session/session-context'
+import { trackBotWizardStarted } from '@/lib/analytics/posthog'
 import type { NumberSource } from '@/types/database'
 
 interface BotOnboardingProps {
@@ -14,6 +16,13 @@ interface BotOnboardingProps {
 
 export function BotOnboarding({ initialNumberSource, webhookVerifyToken, onVerified }: BotOnboardingProps) {
   const [flow, setFlow] = useState<NumberSource | null>(initialNumberSource)
+  const analyticsBase = useAnalyticsBase()
+
+  useEffect(() => {
+    trackBotWizardStarted(analyticsBase)
+    // Só uma vez, quando o wizard aparece.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   if (!flow) {
     return (
