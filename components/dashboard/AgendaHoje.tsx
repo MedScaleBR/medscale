@@ -31,6 +31,9 @@ export function AgendaHoje({ items }: { items: TodayAgendaItem[] }) {
                   {new Date(item.scheduled_at).toLocaleTimeString('pt-BR', {
                     hour: '2-digit',
                     minute: '2-digit',
+                    // Componente renderiza no servidor (UTC) — sem isto uma
+                    // consulta 11:00 BRT (14:00Z) aparecia como "14:00".
+                    timeZone: 'America/Sao_Paulo',
                   })}
                 </span>
                 <div>
