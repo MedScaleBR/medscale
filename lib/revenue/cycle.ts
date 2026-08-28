@@ -58,6 +58,25 @@ export function saoPauloDateOnly(iso: string): string {
   return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
 }
 
+// Limites [início, fim) de um dia (YYYY-MM-DD) no fuso de São Paulo, como
+// instantes ISO — para filtrar colunas timestamptz (ex. appointments.scheduled_at)
+// por dia local. BRT é -03:00 fixo desde 2019 (sem horário de verão).
+export function saoPauloDayRange(dateOnly: string): { startIso: string; endIso: string } {
+  const start = new Date(`${dateOnly}T00:00:00-03:00`)
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000)
+  return { startIso: start.toISOString(), endIso: end.toISOString() }
+}
+
+// Idem para um mês (YYYY-MM).
+export function saoPauloMonthRange(month: string): { startIso: string; endIso: string } {
+  const [y, m] = month.split('-').map(Number)
+  const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
+  return {
+    startIso: new Date(`${month}-01T00:00:00-03:00`).toISOString(),
+    endIso: new Date(`${nextMonth}-01T00:00:00-03:00`).toISOString(),
+  }
+}
+
 // A account tem o módulo "revenue_cycle" ativo?
 export async function isRevenueCycleEnabled(supabase: SupabaseAdmin, accountId: string): Promise<boolean> {
   const { data } = await supabase.from('accounts').select('modules').eq('id', accountId).single()
@@ -170,6 +189,13 @@ interface AppointmentRevenueInput {
   previousStatus: AppointmentStatus | null
   /** Status da consulta depois desta gravação. */
   nextStatus: AppointmentStatus
+  /**
+   * Convênio da consulta (bot_config.insurance_plans) ou null/'' = particular.
+   * Consulta por convênio não entra no ciclo de receita: nenhuma entrada é
+   * criada e uma previsão pendente pré-existente (de quando era particular) é
+   * cancelada.
+   */
+  healthPlan?: string | null
 }
 
 // Aplica, na ordem certa, os dois efeitos do ciclo de receita quando uma
@@ -184,8 +210,26 @@ interface AppointmentRevenueInput {
 // entrada recém-nascida travada em 'previsto/pending', fora dos totais.
 export async function applyAppointmentRevenue(
   supabase: SupabaseAdmin,
-  { booking, previousStatus, nextStatus }: AppointmentRevenueInput
+  { booking, previousStatus, nextStatus, healthPlan }: AppointmentRevenueInput
 ): Promise<void> {
+  // Consulta por convênio fica fora do ciclo de receita. Se virou convênio numa
+  // edição, cancela a previsão pendente que existia de quando era particular
+  // (nunca toca uma entrada já 'paid'/'realized').
+  if (healthPlan) {
+    const { error } = await supabase
+      .from('revenue_entries')
+      .update({ payment_status: 'cancelled' })
+      .eq('appointment_id', booking.appointmentId)
+      .eq('payment_status', 'pending')
+    if (error) {
+      console.error('[revenue-cycle] falha ao cancelar previsão de consulta que virou convênio', {
+        appointmentId: booking.appointmentId,
+        error: error.message,
+      })
+    }
+    return
+  }
+
   if (nextStatus !== 'cancelado' && booking.amount != null && booking.amount > 0) {
     await createBookingRevenueEntry(supabase, booking)
   }

@@ -45,6 +45,13 @@ export interface RevenueLedgerEntry {
   patients: { full_name: string } | null
 }
 
+export interface HealthPlanConsultation {
+  id: string
+  scheduled_at: string
+  patient_name: string
+  health_plan: string
+}
+
 const METHOD_OPTIONS = Object.entries(PAYMENT_METHOD_LABELS) as [RevenuePaymentMethod, string][]
 
 // Presets do filtro de status → valor do query param `status`.
@@ -73,6 +80,14 @@ function recentMonths(currentMonth: string): string[] {
 }
 const monthLabel = (month: string) =>
   new Date(month + '-01T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' })
+const formatDateTime = (iso: string) =>
+  new Date(iso).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'America/Sao_Paulo',
+  })
 
 const EMPTY_FORM = {
   amount: '',
@@ -89,6 +104,7 @@ export function RevenueClient({
   month,
   currentMonth,
   statusFilter,
+  healthPlanConsultations,
 }: {
   initialEntries: RevenueLedgerEntry[]
   totals: RevenueTotals | null
@@ -96,6 +112,7 @@ export function RevenueClient({
   month: string
   currentMonth: string
   statusFilter: RevenuePaymentStatus[]
+  healthPlanConsultations: HealthPlanConsultation[]
 }) {
   const router = useRouter()
   const [pending, startTransition] = useTransition()
@@ -104,6 +121,13 @@ export function RevenueClient({
   const [saving, setSaving] = useState(false)
   const [confirming, setConfirming] = useState<RevenueLedgerEntry | null>(null)
   const [confirmMethod, setConfirmMethod] = useState<RevenuePaymentMethod>('pix')
+  const [planFilter, setPlanFilter] = useState<string>('all')
+
+  const plansPresent = [...new Set(healthPlanConsultations.map((c) => c.health_plan))].sort()
+  const filteredConsultations =
+    planFilter === 'all'
+      ? healthPlanConsultations
+      : healthPlanConsultations.filter((c) => c.health_plan === planFilter)
 
   const statusParam =
     statusFilter.length >= 5
@@ -272,6 +296,54 @@ export function RevenueClient({
           </div>
         )}
       </div>
+
+      {healthPlanConsultations.length > 0 && (
+        <div className="overflow-hidden rounded-xl border border-[var(--navy-06)] bg-white shadow-[var(--shadow-sm)]">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--navy-06)] px-5 py-3">
+            <h2 className="text-sm font-medium text-gray-900">
+              Consultas por plano de saúde
+              <span className="ml-2 text-xs font-normal text-gray-400">
+                {filteredConsultations.length} no período
+              </span>
+            </h2>
+            {plansPresent.length > 1 && (
+              <Select value={planFilter} onValueChange={(v) => setPlanFilter(v ?? 'all')}>
+                <SelectTrigger className="h-8 w-[180px]">
+                  <SelectValue>{planFilter === 'all' ? 'Todos os planos' : planFilter}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os planos</SelectItem>
+                  {plansPresent.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {p}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] text-sm">
+              <thead>
+                <tr className="border-b border-[var(--navy-06)] bg-[var(--navy-06)]/40 text-left text-xs text-gray-400">
+                  <th className="px-5 py-3 font-normal">Data</th>
+                  <th className="px-5 py-3 font-normal">Paciente</th>
+                  <th className="px-5 py-3 font-normal">Plano</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredConsultations.map((c) => (
+                  <tr key={c.id} className="border-b border-[var(--navy-06)] last:border-0">
+                    <td className="px-5 py-3 text-gray-600">{formatDateTime(c.scheduled_at)}</td>
+                    <td className="px-5 py-3 text-gray-900">{c.patient_name}</td>
+                    <td className="px-5 py-3 text-gray-600">{c.health_plan}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-sm">

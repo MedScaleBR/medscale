@@ -52,9 +52,10 @@ interface CalendarViewProps {
   onDelete: (id: string) => Promise<void>
   showTranscriptions?: boolean
   procedures?: CatalogProcedureOption[]
+  healthPlans?: string[]
 }
 
-export function CalendarView({ appointments, busyBlocks, onCreate, onUpdate, onDelete, showTranscriptions, procedures }: CalendarViewProps) {
+export function CalendarView({ appointments, busyBlocks, onCreate, onUpdate, onDelete, showTranscriptions, procedures, healthPlans }: CalendarViewProps) {
   const [view, setView] = useState<View>('week')
   const [date, setDate] = useState(new Date())
   const [modalOpen, setModalOpen] = useState(false)
@@ -90,6 +91,7 @@ export function CalendarView({ appointments, busyBlocks, onCreate, onUpdate, onD
       notes: '',
       price: '',
       procedure_id: null,
+      health_plan: null,
     })
     setModalOpen(true)
   }, [])
@@ -110,6 +112,7 @@ export function CalendarView({ appointments, busyBlocks, onCreate, onUpdate, onD
       notes: a.notes ?? '',
       price: a.price != null ? String(a.price) : '',
       procedure_id: a.procedure_id ?? null,
+      health_plan: a.health_plan ?? null,
     })
     setModalOpen(true)
   }, [])
@@ -185,6 +188,7 @@ export function CalendarView({ appointments, busyBlocks, onCreate, onUpdate, onD
         }
         showTranscriptions={showTranscriptions}
         procedures={procedures}
+        healthPlans={healthPlans}
       />
     </div>
   )

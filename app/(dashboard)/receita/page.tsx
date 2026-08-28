@@ -1,9 +1,13 @@
 import { redirect } from 'next/navigation'
 import { createAdminClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
-import { saoPauloDateOnly } from '@/lib/revenue/cycle'
+import { saoPauloDateOnly, saoPauloMonthRange } from '@/lib/revenue/cycle'
 import { summarizeRevenueEntries } from '@/lib/revenue/summary'
-import { RevenueClient, type RevenueLedgerEntry } from '@/components/receita/RevenueClient'
+import {
+  RevenueClient,
+  type RevenueLedgerEntry,
+  type HealthPlanConsultation,
+} from '@/components/receita/RevenueClient'
 import type { RevenuePaymentStatus } from '@/types/database'
 
 const ALL_STATUSES: RevenuePaymentStatus[] = ['pending', 'realized', 'paid', 'cancelled', 'refunded']
@@ -57,6 +61,23 @@ export default async function ReceitaPage({
   const { data } = await query
   const rows = (data ?? []) as unknown as RevenueLedgerEntry[]
 
+  // Consultas por plano de saúde do período — ficam fora do ciclo de receita
+  // (sem revenue_entry), então vêm direto de appointments.
+  let planQuery = supabase
+    .from('appointments')
+    .select('id, scheduled_at, patient_name, health_plan')
+    .eq('workspace_id', session.workspaceId)
+    .not('health_plan', 'is', null)
+    .neq('status', 'cancelado')
+    .order('scheduled_at', { ascending: false })
+
+  if (month !== 'all') {
+    const range = saoPauloMonthRange(month)
+    planQuery = planQuery.gte('scheduled_at', range.startIso).lt('scheduled_at', range.endIso)
+  }
+  const { data: planData } = await planQuery
+  const healthPlanConsultations = (planData ?? []) as HealthPlanConsultation[]
+
   // Totais do período carregado — exclusivos do owner.
   const totals = isOwner
     ? summarizeRevenueEntries(rows.map((r) => ({ amount: r.amount, payment_status: r.payment_status })))
@@ -76,6 +97,7 @@ export default async function ReceitaPage({
         month={month}
         currentMonth={currentMonth}
         statusFilter={statuses}
+        healthPlanConsultations={healthPlanConsultations}
       />
     </div>
   )

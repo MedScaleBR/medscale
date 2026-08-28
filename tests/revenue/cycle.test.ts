@@ -14,6 +14,8 @@ import {
   applyAppointmentRevenue,
   revenueStatusToPaymentStatus,
   saoPauloDateOnly,
+  saoPauloDayRange,
+  saoPauloMonthRange,
 } from '@/lib/revenue/cycle'
 
 const APPT = 'a1b2c3d4-0000-0000-0000-000000000001'
@@ -199,6 +201,38 @@ describe('applyAppointmentRevenue', () => {
     expect(supabase.callsTo('revenue_entries', 'insert')).toHaveLength(0)
     expect(supabase.callsTo('accounts', 'select')).toHaveLength(0)
     expect(supabase.callsTo('revenue_entries', 'update')[0]?.payload).toEqual({ payment_status: 'realized' })
+  })
+
+  it('consulta por convênio: não cria entrada e cancela a previsão pendente', async () => {
+    const supabase = mock()
+
+    await applyAppointmentRevenue(supabase.client as never, {
+      booking: { ...booking, amount: 500 },
+      previousStatus: 'agendado',
+      nextStatus: 'realizado',
+      healthPlan: 'Unimed',
+    })
+
+    expect(supabase.callsTo('revenue_entries', 'insert')).toHaveLength(0)
+    expect(supabase.callsTo('accounts', 'select')).toHaveLength(0)
+    const update = supabase.callsTo('revenue_entries', 'update')[0]
+    expect(update?.payload).toEqual({ payment_status: 'cancelled' })
+    expect(filterValue(update!, 'eq', 'appointment_id')).toBe(APPT)
+    expect(filterValue(update!, 'eq', 'payment_status')).toBe('pending')
+  })
+})
+
+describe('saoPauloDayRange / saoPauloMonthRange', () => {
+  it('dia: [00:00, 24:00) no fuso BRT como instantes UTC', () => {
+    const r = saoPauloDayRange('2026-03-15')
+    expect(r.startIso).toBe('2026-03-15T03:00:00.000Z')
+    expect(r.endIso).toBe('2026-03-16T03:00:00.000Z')
+  })
+
+  it('mês: início e fim (exclusivo), virando o ano em dezembro', () => {
+    expect(saoPauloMonthRange('2026-02').startIso).toBe('2026-02-01T03:00:00.000Z')
+    expect(saoPauloMonthRange('2026-02').endIso).toBe('2026-03-01T03:00:00.000Z')
+    expect(saoPauloMonthRange('2026-12').endIso).toBe('2027-01-01T03:00:00.000Z')
   })
 })
 

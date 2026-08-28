@@ -33,7 +33,17 @@ export interface RevenueCycleEntry {
   patients: { full_name: string } | null
 }
 
+export interface HealthPlanConsultation {
+  id: string
+  scheduled_at: string
+  patient_name: string
+  health_plan: string
+}
+
 type EntryRow = RevenueCycleEntry
+
+const formatTime = (iso: string) =>
+  new Date(iso).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })
 
 const STATUS: Record<RevenuePaymentStatus, { label: string; style: string }> = {
   pending: { label: 'Agendada', style: 'bg-[var(--navy-06)] text-[var(--navy)]' },
@@ -72,15 +82,26 @@ export function RevenueCycleClient({
   initialEntries,
   monthTotals,
   isOwner,
+  healthPlanConsultations,
+  healthPlanMonthCount,
 }: {
   initialEntries: EntryRow[]
   monthTotals: RevenueTotals | null
   isOwner: boolean
+  healthPlanConsultations: HealthPlanConsultation[]
+  healthPlanMonthCount: number
 }) {
   const [entries, setEntries] = useState(initialEntries)
   const [confirming, setConfirming] = useState<EntryRow | null>(null)
   const [method, setMethod] = useState<RevenuePaymentMethod>('pix')
   const [saving, setSaving] = useState(false)
+  const [planFilter, setPlanFilter] = useState<string>('all')
+
+  const plansPresent = [...new Set(healthPlanConsultations.map((c) => c.health_plan))].sort()
+  const filteredConsultations =
+    planFilter === 'all'
+      ? healthPlanConsultations
+      : healthPlanConsultations.filter((c) => c.health_plan === planFilter)
 
   const openConfirm = (e: EntryRow) => {
     setConfirming(e)
@@ -117,22 +138,24 @@ export function RevenueCycleClient({
   return (
     <div className="space-y-6">
       {isOwner && monthTotals && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           <Kpi label="Previsto no mês" value={formatBRL(monthTotals.projected)} />
           <Kpi label="Realizado" value={formatBRL(monthTotals.realized)} />
           <Kpi label="Recebido" value={formatBRL(monthTotals.received)} accent="green" />
           <Kpi label="A receber" value={formatBRL(monthTotals.pending)} accent="amber" />
+          <Kpi label="Por plano de saúde" value={String(healthPlanMonthCount)} />
         </div>
       )}
 
       <div className="overflow-hidden rounded-xl border border-[var(--navy-06)] bg-white shadow-[var(--shadow-sm)]">
         <div className="flex items-center justify-between border-b border-[var(--navy-06)] px-5 py-3">
           <h2 className="text-sm font-medium text-gray-900">Consultas de hoje</h2>
-          {pendingCount > 0 && (
-            <span className="text-xs text-amber-700">
-              {pendingCount} aguardando pagamento
-            </span>
-          )}
+          <span className="flex items-center gap-2 text-xs">
+            {pendingCount > 0 && <span className="text-amber-700">{pendingCount} aguardando pagamento</span>}
+            {healthPlanConsultations.length > 0 && (
+              <span className="text-gray-400">{healthPlanConsultations.length} por plano de saúde</span>
+            )}
+          </span>
         </div>
         {entries.length === 0 ? (
           <p className="py-12 text-center text-sm text-gray-400">Nenhuma consulta com receita hoje.</p>
@@ -182,6 +205,49 @@ export function RevenueCycleClient({
           </div>
         )}
       </div>
+
+      {healthPlanConsultations.length > 0 && (
+        <div className="overflow-hidden rounded-xl border border-[var(--navy-06)] bg-white shadow-[var(--shadow-sm)]">
+          <div className="flex items-center justify-between gap-3 border-b border-[var(--navy-06)] px-5 py-3">
+            <h2 className="text-sm font-medium text-gray-900">Consultas por plano de saúde — hoje</h2>
+            {plansPresent.length > 1 && (
+              <Select value={planFilter} onValueChange={(v) => setPlanFilter(v ?? 'all')}>
+                <SelectTrigger className="h-8 w-[180px]">
+                  <SelectValue>{planFilter === 'all' ? 'Todos os planos' : planFilter}</SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos os planos</SelectItem>
+                  {plansPresent.map((p) => (
+                    <SelectItem key={p} value={p}>
+                      {p}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[420px] text-sm">
+              <thead>
+                <tr className="border-b border-[var(--navy-06)] bg-[var(--navy-06)]/40 text-left text-xs text-gray-400">
+                  <th className="px-5 py-3 font-normal">Horário</th>
+                  <th className="px-5 py-3 font-normal">Paciente</th>
+                  <th className="px-5 py-3 font-normal">Plano</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredConsultations.map((c) => (
+                  <tr key={c.id} className="border-b border-[var(--navy-06)] last:border-0">
+                    <td className="px-5 py-3 text-gray-600">{formatTime(c.scheduled_at)}</td>
+                    <td className="px-5 py-3 text-gray-900">{c.patient_name}</td>
+                    <td className="px-5 py-3 text-gray-600">{c.health_plan}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <Dialog open={confirming !== null} onOpenChange={(o) => !o && setConfirming(null)}>
         <DialogContent className="sm:max-w-sm">

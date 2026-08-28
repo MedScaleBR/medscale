@@ -39,15 +39,21 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Convênio da consulta (bot_config.insurance_plans). Consulta por convênio
+  // fica fora do ciclo de receita: sem preço, sem procedimento, sem entrada.
+  const healthPlan: string | null =
+    typeof body.health_plan === 'string' && body.health_plan.trim() ? body.health_plan.trim() : null
+
   // Ciclo de receita: se veio um procedimento do catálogo, tira o snapshot de
   // nome e preço agora (imutável). Um body.price explícito tem prioridade.
   let procedureName: string | null = null
-  let snapshotPrice: number | null = body.price ?? null
-  if (body.procedure_id) {
+  let snapshotPrice: number | null = healthPlan ? null : (body.price ?? null)
+  const procedureId: string | null = healthPlan ? null : (body.procedure_id ?? null)
+  if (procedureId) {
     const { data: proc } = await supabase
       .from('procedure_catalog')
       .select('name, default_price')
-      .eq('id', body.procedure_id)
+      .eq('id', procedureId)
       .eq('workspace_id', session.workspaceId)
       .maybeSingle()
     if (proc) {
@@ -103,9 +109,10 @@ export async function POST(req: NextRequest) {
       source: 'manual',
       status: body.status ?? 'agendado',
       notes: body.notes ?? null,
-      procedure_id: body.procedure_id ?? null,
+      procedure_id: procedureId,
       procedure_name: procedureName,
       price: snapshotPrice,
+      health_plan: healthPlan,
       gcal_event_id: gcalEventId,
     })
     .select()
@@ -126,9 +133,10 @@ export async function POST(req: NextRequest) {
   }
 
   // Ciclo de receita: entrada PREVISTA ligada ao agendamento e, se a consulta
-  // já nasce realizada/no-show, promove/cancela a entrada em seguida. Client
-  // admin (revenue_entries é RLS exclusiva de owner). No-op se o módulo estiver
-  // inativo, sem preço conhecido, ou já criada para este appointment.
+  // já nasce realizada/no-show, promove/cancela a entrada em seguida. Consulta
+  // por convênio (healthPlan) fica fora do ciclo. Client admin (revenue_entries
+  // é RLS exclusiva de owner). No-op se o módulo estiver inativo, sem preço
+  // conhecido, ou já criada para este appointment.
   if (data) {
     await applyAppointmentRevenue(createAdminClient(), {
       booking: {
@@ -136,7 +144,7 @@ export async function POST(req: NextRequest) {
         accountId: session.accountId,
         appointmentId: data.id,
         patientId: data.patient_id ?? null,
-        procedureId: body.procedure_id ?? null,
+        procedureId,
         procedureName,
         amount: snapshotPrice,
         scheduledAt: data.scheduled_at,
@@ -144,6 +152,7 @@ export async function POST(req: NextRequest) {
       },
       previousStatus: null,
       nextStatus: data.status,
+      healthPlan,
     })
   }
 

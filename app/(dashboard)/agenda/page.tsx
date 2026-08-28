@@ -13,11 +13,12 @@ export default async function AgendaPage() {
 
   const { appointments, busyBlocks } = await reconcileCalendar(session.workspaceId, from, to)
 
+  const supabase = await createClient()
+
   // Catálogo de procedimentos para o seletor do modal — só quando o ciclo de
   // receita está ativo.
   let procedures: { id: string; name: string; default_price: number }[] = []
   if (session.userModules.includes('revenue_cycle')) {
-    const supabase = await createClient()
     const { data } = await supabase
       .from('procedure_catalog')
       .select('id, name, default_price')
@@ -26,6 +27,15 @@ export default async function AgendaPage() {
       .order('name', { ascending: true })
     procedures = (data ?? []).map((p) => ({ ...p, default_price: Number(p.default_price) }))
   }
+
+  // Convênios atendidos (para o seletor "Atendimento" do modal). Fonte: a mesma
+  // lista que a Maria informa aos pacientes (bot_config.insurance_plans).
+  const { data: botConfig } = await supabase
+    .from('bot_config')
+    .select('insurance_plans')
+    .eq('workspace_id', session.workspaceId)
+    .maybeSingle()
+  const healthPlans = botConfig?.insurance_plans ?? []
 
   return (
     <div className="space-y-6">
@@ -38,6 +48,7 @@ export default async function AgendaPage() {
         initialBusyBlocks={busyBlocks}
         showTranscriptions={session.userModules.includes('transcriptions')}
         procedures={procedures}
+        healthPlans={healthPlans}
       />
     </div>
   )

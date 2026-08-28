@@ -306,6 +306,10 @@ create table public.appointments (
   procedure_id    uuid references public.procedure_catalog(id) on delete set null,
   procedure_name  text,
   price           numeric(10,2),
+  -- Convênio usado na consulta — snapshot do nome (a lista vive em
+  -- bot_config.insurance_plans). NULL = particular. Consulta por convênio não
+  -- gera revenue_entry; entra nas telas de receita só como contagem.
+  health_plan     text,
   gcal_event_id   text,
   reminder_sent   boolean default false,
   created_at      timestamptz not null default now(),
@@ -614,6 +618,7 @@ create index idx_workspaces_account          on public.workspaces(account_id);
 create index idx_patients_account            on public.patients(account_id, phone);
 create index idx_appointments_workspace      on public.appointments(workspace_id, scheduled_at);
 create index idx_appointments_doctor         on public.appointments(doctor_id, scheduled_at);
+create index idx_appointments_health_plan    on public.appointments(workspace_id, health_plan) where health_plan is not null;
 create index idx_conversations_workspace     on public.conversations(workspace_id, status);
 create index idx_conversations_archived_at   on public.conversations(archived_at);
 create index idx_messages_conversation       on public.messages(conversation_id, sent_at);
