@@ -208,7 +208,15 @@ function AppointmentForm({ initialValues, onSave, onDelete, onOpenChange, showTr
               <Label>Procedimento</Label>
               <Select value={values.procedure_id ?? NO_PROCEDURE} onValueChange={onProcedureChange}>
                 <SelectTrigger>
-                  <SelectValue placeholder="Sem procedimento" />
+                  {/* base-ui renderiza o value cru (id / "__none__") sem uma
+                      função aqui pra resolver o rótulo do item selecionado. */}
+                  <SelectValue placeholder="Sem procedimento">
+                    {(id) =>
+                      !id || id === NO_PROCEDURE
+                        ? 'Sem procedimento'
+                        : (procedures.find((p) => p.id === id)?.name ?? 'Sem procedimento')
+                    }
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NO_PROCEDURE}>Sem procedimento</SelectItem>
