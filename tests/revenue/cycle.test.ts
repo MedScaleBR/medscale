@@ -12,6 +12,7 @@ import {
   syncRevenueEntryToAppointmentStatus,
   createBookingRevenueEntry,
   applyAppointmentRevenue,
+  revenueStatusToPaymentStatus,
   saoPauloDateOnly,
 } from '@/lib/revenue/cycle'
 
@@ -198,6 +199,14 @@ describe('applyAppointmentRevenue', () => {
     expect(supabase.callsTo('revenue_entries', 'insert')).toHaveLength(0)
     expect(supabase.callsTo('accounts', 'select')).toHaveLength(0)
     expect(supabase.callsTo('revenue_entries', 'update')[0]?.payload).toEqual({ payment_status: 'realized' })
+  })
+})
+
+describe('revenueStatusToPaymentStatus', () => {
+  it('traduz os 3 estados do lançamento avulso para o payment_status canônico', () => {
+    expect(revenueStatusToPaymentStatus('previsto')).toBe('pending')
+    expect(revenueStatusToPaymentStatus('confirmado')).toBe('paid')
+    expect(revenueStatusToPaymentStatus('cancelado')).toBe('cancelled')
   })
 })
 

@@ -56,7 +56,6 @@ export type ModuleSlug =
   | 'locations'
   | 'schedule'
   | 'waitlist'
-  | 'financial'
   | 'campaigns'
   | 'patients'
   | 'settings'

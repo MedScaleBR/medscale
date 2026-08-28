@@ -1,27 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
+import { revenueStatusToPaymentStatus } from '@/lib/revenue/cycle'
+import type { RevenuePaymentMethod, RevenueStatus } from '@/types/database'
 
-// Financeiro (Receita) é exclusivo do owner — mesmo padrão de finance
-// (agente PF/PJ): admin/member não veem, mesmo com o módulo ativo no
-// account ou liberado via module_overrides.
-function requireOwner(session: { role: string }) {
-  if (session.role !== 'owner') {
-    return NextResponse.json({ error: 'Restrito ao owner da account' }, { status: 403 })
+// Ledger histórico do ciclo de receita (/receita). Owner e admin (recepção) —
+// member não. Client admin porque revenue_entries tem RLS exclusiva de owner;
+// o acesso de admin é liberado aqui, escopado ao workspace da sessão. Mesmo
+// gate de /api/revenue-entries.
+function guard(session: { role: string }) {
+  if (session.role === 'member') {
+    return NextResponse.json({ error: 'Restrito a owner e admin' }, { status: 403 })
   }
   return null
 }
+
+const PAYMENT_METHODS: RevenuePaymentMethod[] = [
+  'pix',
+  'cartao_credito',
+  'cartao_debito',
+  'dinheiro',
+  'transferencia',
+  'outro',
+]
+const REVENUE_STATUSES: RevenueStatus[] = ['previsto', 'confirmado', 'cancelado']
 
 export async function GET(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
   if ('error' in result) return result.error
   const { session } = result
-  const moduleCheck = requireModule(session, 'financial')
+  const moduleCheck = requireModule(session, 'revenue_cycle')
   if (moduleCheck) return moduleCheck
-  const ownerCheck = requireOwner(session)
-  if (ownerCheck) return ownerCheck
+  const denied = guard(session)
+  if (denied) return denied
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('revenue_entries')
     .select('*')
@@ -36,16 +49,26 @@ export async function POST(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
   if ('error' in result) return result.error
   const { session } = result
-  const moduleCheck = requireModule(session, 'financial')
+  const moduleCheck = requireModule(session, 'revenue_cycle')
   if (moduleCheck) return moduleCheck
-  const ownerCheck = requireOwner(session)
-  if (ownerCheck) return ownerCheck
+  const denied = guard(session)
+  if (denied) return denied
 
-  const supabase = await createClient()
+  const supabase = createAdminClient()
   const body = await req.json()
-  if (!body.amount) {
-    return NextResponse.json({ error: 'amount é obrigatório' }, { status: 400 })
+
+  const amount = Number(body.amount)
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return NextResponse.json({ error: 'amount deve ser um número positivo' }, { status: 400 })
   }
+
+  const status: RevenueStatus = REVENUE_STATUSES.includes(body.status) ? body.status : 'previsto'
+  const paymentStatus = revenueStatusToPaymentStatus(status)
+
+  const paymentMethod: RevenuePaymentMethod | null =
+    body.payment_method && PAYMENT_METHODS.includes(body.payment_method) ? body.payment_method : null
+
+  const entryDate: string = body.entry_date ?? new Date().toISOString().split('T')[0]
 
   const { data, error } = await supabase
     .from('revenue_entries')
@@ -53,11 +76,17 @@ export async function POST(req: NextRequest) {
       workspace_id: session.workspaceId,
       account_id: session.accountId,
       appointment_id: body.appointment_id ?? null,
-      amount: body.amount,
-      status: body.status ?? 'previsto',
-      payment_method: body.payment_method ?? null,
+      amount,
+      status,
+      payment_status: paymentStatus,
+      payment_method: paymentMethod,
+      // Lançamento avulso: sem consulta, a data esperada de recebimento é a
+      // própria data do lançamento — mantém o ledger e os totais coerentes.
+      due_date: entryDate,
+      entry_date: entryDate,
+      paid_at: paymentStatus === 'paid' ? new Date().toISOString() : null,
+      source: 'manual',
       notes: body.notes ?? null,
-      entry_date: body.entry_date ?? new Date().toISOString().split('T')[0],
     })
     .select()
     .single()

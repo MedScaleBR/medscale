@@ -1,5 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database, AppointmentStatus, RevenuePaymentMethod, RevenueSource } from '@/types/database'
+import type {
+  Database,
+  AppointmentStatus,
+  RevenuePaymentMethod,
+  RevenuePaymentStatus,
+  RevenueSource,
+  RevenueStatus,
+} from '@/types/database'
 
 // Rótulos das formas de pagamento — compartilhados entre a tela, o agente
 // financeiro e o resumo diário.
@@ -10,6 +17,29 @@ export const PAYMENT_METHOD_LABELS: Record<RevenuePaymentMethod, string> = {
   dinheiro: 'Dinheiro',
   transferencia: 'Transferência',
   outro: 'Outro',
+}
+
+// Rótulo + cor de cada payment_status — o campo canônico do ciclo. Usado no
+// ledger (/receita) e na fila do dia (/ciclo-receita).
+export const PAYMENT_STATUS_LABELS: Record<RevenuePaymentStatus, { label: string; style: string }> = {
+  pending: { label: 'Prevista', style: 'bg-[var(--navy-06)] text-[var(--navy)]' },
+  realized: { label: 'Aguardando pagamento', style: 'bg-amber-100 text-amber-700' },
+  paid: { label: 'Paga', style: 'bg-green-100 text-green-700' },
+  cancelled: { label: 'Cancelada', style: 'bg-red-100 text-red-600' },
+  refunded: { label: 'Reembolsada', style: 'bg-red-100 text-red-600' },
+}
+
+// Lançamento manual avulso no ledger ainda usa os 3 estados simples
+// (previsto/confirmado/cancelado); traduz para o payment_status canônico.
+export function revenueStatusToPaymentStatus(status: RevenueStatus): RevenuePaymentStatus {
+  switch (status) {
+    case 'confirmado':
+      return 'paid'
+    case 'cancelado':
+      return 'cancelled'
+    default:
+      return 'pending'
+  }
 }
 
 // Ciclo de receita automático — transições de revenue_entries disparadas por
