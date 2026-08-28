@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { cancelEvent, updateEvent } from '@/lib/google/calendar'
 import { requireWorkspaceSession } from '@/lib/session/api'
-import { syncRevenueEntryToAppointmentStatus, createBookingRevenueEntry } from '@/lib/revenue/cycle'
+import { syncRevenueEntryToAppointmentStatus, applyAppointmentRevenue } from '@/lib/revenue/cycle'
 
 // Google Calendar é a fonte de verdade: se a consulta tem um evento vinculado
 // (gcal_event_id), a mudança precisa ser aceita lá antes de gravar no
@@ -85,28 +85,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Ciclo de receita: encerrar/cancelar/no-show a consulta move a entrada de
-  // receita vinculada. Client admin — revenue_entries é RLS exclusiva de
-  // owner e quem edita a agenda pode ser admin/member. O id já foi validado
-  // contra o workspace da sessão acima.
-  if (typeof body.status === 'string' && body.status !== current.status) {
-    await syncRevenueEntryToAppointmentStatus(createAdminClient(), id, body.status)
-  }
-
-  // Ciclo de receita: "agendei agora, coloco o valor depois" — se a consulta
-  // ganhou um preço/procedimento numa edição e ainda não tem entrada, cria a
-  // previsão. createBookingRevenueEntry é idempotente e no-op sem módulo.
-  if (data && data.status !== 'cancelado' && data.price != null && Number(data.price) > 0) {
-    await createBookingRevenueEntry(createAdminClient(), {
-      workspaceId: session.workspaceId,
-      accountId: session.accountId,
-      appointmentId: data.id,
-      patientId: data.patient_id ?? null,
-      procedureId: data.procedure_id ?? null,
-      procedureName: data.procedure_name ?? null,
-      amount: Number(data.price),
-      scheduledAt: data.scheduled_at,
-      source: 'manual',
+  // Ciclo de receita: cria a previsão (caso a consulta tenha ganhado um
+  // preço/procedimento nesta edição) e move a entrada conforme o novo status —
+  // nesta ordem, senão uma gravação que muda preço e status juntos deixaria a
+  // entrada presa em 'previsto/pending'. Client admin — revenue_entries é RLS
+  // exclusiva de owner e quem edita a agenda pode ser admin/member. O id já foi
+  // validado contra o workspace da sessão acima.
+  if (data) {
+    await applyAppointmentRevenue(createAdminClient(), {
+      booking: {
+        workspaceId: session.workspaceId,
+        accountId: session.accountId,
+        appointmentId: data.id,
+        patientId: data.patient_id ?? null,
+        procedureId: data.procedure_id ?? null,
+        procedureName: data.procedure_name ?? null,
+        amount: data.price != null ? Number(data.price) : null,
+        scheduledAt: data.scheduled_at,
+        source: 'manual',
+      },
+      previousStatus: current.status,
+      nextStatus: data.status,
     })
   }
 

@@ -11,6 +11,7 @@ vi.mock('@/lib/supabase/server', () => ({
 import {
   syncRevenueEntryToAppointmentStatus,
   createBookingRevenueEntry,
+  applyAppointmentRevenue,
   saoPauloDateOnly,
 } from '@/lib/revenue/cycle'
 
@@ -120,6 +121,83 @@ describe('createBookingRevenueEntry', () => {
       due_date: '2025-09-15',
       entry_date: '2025-09-15',
     })
+  })
+})
+
+describe('applyAppointmentRevenue', () => {
+  const booking = {
+    workspaceId: 'w1',
+    accountId: 'acc1',
+    appointmentId: APPT,
+    patientId: 'p1',
+    procedureId: null,
+    procedureName: null,
+    amount: 400,
+    scheduledAt: '2025-09-15T17:00:00.000Z',
+    source: 'manual' as const,
+  }
+
+  const revenueCycleOn = {
+    accounts: { select: { data: { modules: ['revenue_cycle'] } } },
+    revenue_entries: { select: { data: null } },
+  }
+
+  it('cria a entrada e já promove para "realized" quando valor e "realizado" entram na mesma gravação', async () => {
+    const supabase = mock(revenueCycleOn)
+
+    await applyAppointmentRevenue(supabase.client as never, {
+      booking,
+      previousStatus: 'agendado',
+      nextStatus: 'realizado',
+    })
+
+    const insert = supabase.callsTo('revenue_entries', 'insert')[0]
+    const update = supabase.callsTo('revenue_entries', 'update')[0]
+    expect(insert?.payload).toMatchObject({ payment_status: 'pending', amount: 400 })
+    expect(update?.payload).toEqual({ payment_status: 'realized' })
+    // A entrada precisa ser inserida ANTES do sync — que só age em linhas 'pending'.
+    expect(supabase.calls.indexOf(insert!)).toBeLessThan(supabase.calls.indexOf(update!))
+  })
+
+  it('só cria a previsão (sem sincronizar) quando apenas o preço muda e o status fica igual', async () => {
+    const supabase = mock(revenueCycleOn)
+
+    await applyAppointmentRevenue(supabase.client as never, {
+      booking,
+      previousStatus: 'agendado',
+      nextStatus: 'agendado',
+    })
+
+    expect(supabase.callsTo('revenue_entries', 'insert')).toHaveLength(1)
+    expect(supabase.callsTo('revenue_entries', 'update')).toHaveLength(0)
+  })
+
+  it('não cria entrada ao cancelar — apenas move a existente para "cancelled"', async () => {
+    const supabase = mock()
+
+    await applyAppointmentRevenue(supabase.client as never, {
+      booking,
+      previousStatus: 'agendado',
+      nextStatus: 'cancelado',
+    })
+
+    expect(supabase.callsTo('revenue_entries', 'insert')).toHaveLength(0)
+    expect(supabase.callsTo('accounts', 'select')).toHaveLength(0)
+    expect(supabase.callsTo('revenue_entries', 'update')[0]?.payload).toEqual({ payment_status: 'cancelled' })
+  })
+
+  it('sincroniza o status sem tentar criar entrada quando não há preço conhecido', async () => {
+    const supabase = mock()
+
+    await applyAppointmentRevenue(supabase.client as never, {
+      booking: { ...booking, amount: null },
+      previousStatus: 'confirmado',
+      nextStatus: 'realizado',
+    })
+
+    expect(supabase.callsTo('revenue_entries', 'insert')).toHaveLength(0)
+    expect(supabase.callsTo('accounts', 'select')).toHaveLength(0)
+    expect(supabase.callsTo('revenue_entries', 'update')[0]?.payload).toEqual({ payment_status: 'realized' })
   })
 })
 

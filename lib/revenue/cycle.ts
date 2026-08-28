@@ -132,3 +132,34 @@ export async function syncRevenueEntryToAppointmentStatus(
     })
   }
 }
+
+interface AppointmentRevenueInput {
+  /** Dados para criar a entrada PREVISTA, caso ainda não exista. */
+  booking: BookingRevenueInput
+  /** Status da consulta antes desta gravação (null = consulta recém-criada). */
+  previousStatus: AppointmentStatus | null
+  /** Status da consulta depois desta gravação. */
+  nextStatus: AppointmentStatus
+}
+
+// Aplica, na ordem certa, os dois efeitos do ciclo de receita quando uma
+// consulta é criada ou editada:
+//   1. cria a entrada PREVISTA ('pending') se ainda não houver e houver preço;
+//   2. promove ('realized') ou cancela ('cancelled') a entrada conforme o
+//      novo status da consulta.
+//
+// A ordem importa: syncRevenueEntryToAppointmentStatus só age em linhas
+// 'pending', então a criação precisa vir antes — senão uma gravação que mexe em
+// preço e status juntos (ou uma consulta já criada como 'realizado') deixaria a
+// entrada recém-nascida travada em 'previsto/pending', fora dos totais.
+export async function applyAppointmentRevenue(
+  supabase: SupabaseAdmin,
+  { booking, previousStatus, nextStatus }: AppointmentRevenueInput
+): Promise<void> {
+  if (nextStatus !== 'cancelado' && booking.amount != null && booking.amount > 0) {
+    await createBookingRevenueEntry(supabase, booking)
+  }
+  if (previousStatus !== nextStatus) {
+    await syncRevenueEntryToAppointmentStatus(supabase, booking.appointmentId, nextStatus)
+  }
+}
