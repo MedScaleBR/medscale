@@ -4,7 +4,7 @@ import { createEvent, cancelEvent } from '@/lib/google/calendar'
 import { isGoogleConnected } from '@/lib/google/auth'
 import { reconcileCalendar } from '@/lib/google/reconcile'
 import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
-import { createBookingRevenueEntry } from '@/lib/revenue/cycle'
+import { applyAppointmentRevenue } from '@/lib/revenue/cycle'
 
 export async function GET(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
@@ -125,20 +125,25 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
 
-  // Ciclo de receita: entrada PREVISTA ligada ao agendamento. Client admin
-  // (revenue_entries é RLS exclusiva de owner). No-op se o módulo estiver
+  // Ciclo de receita: entrada PREVISTA ligada ao agendamento e, se a consulta
+  // já nasce realizada/no-show, promove/cancela a entrada em seguida. Client
+  // admin (revenue_entries é RLS exclusiva de owner). No-op se o módulo estiver
   // inativo, sem preço conhecido, ou já criada para este appointment.
-  if (data && (body.status ?? 'agendado') !== 'cancelado') {
-    await createBookingRevenueEntry(createAdminClient(), {
-      workspaceId: session.workspaceId,
-      accountId: session.accountId,
-      appointmentId: data.id,
-      patientId: data.patient_id ?? null,
-      procedureId: body.procedure_id ?? null,
-      procedureName,
-      amount: snapshotPrice,
-      scheduledAt: data.scheduled_at,
-      source: 'manual',
+  if (data) {
+    await applyAppointmentRevenue(createAdminClient(), {
+      booking: {
+        workspaceId: session.workspaceId,
+        accountId: session.accountId,
+        appointmentId: data.id,
+        patientId: data.patient_id ?? null,
+        procedureId: body.procedure_id ?? null,
+        procedureName,
+        amount: snapshotPrice,
+        scheduledAt: data.scheduled_at,
+        source: 'manual',
+      },
+      previousStatus: null,
+      nextStatus: data.status,
     })
   }
 
