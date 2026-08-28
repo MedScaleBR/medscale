@@ -25,6 +25,7 @@ import {
   PAYMENT_METHOD_LABELS,
   PAYMENT_STATUS_LABELS,
 } from '@/lib/revenue/cycle'
+import type { LedgerRange } from '@/lib/revenue/cycle'
 import type { RevenueTotals } from '@/lib/revenue/summary'
 import type { RevenuePaymentMethod, RevenuePaymentStatus, RevenueStatus } from '@/types/database'
 
@@ -101,17 +102,19 @@ export function RevenueClient({
   initialEntries,
   totals,
   isOwner,
-  month,
+  range,
   currentMonth,
   statusFilter,
+  scopeLabel,
   healthPlanConsultations,
 }: {
   initialEntries: RevenueLedgerEntry[]
   totals: RevenueTotals | null
   isOwner: boolean
-  month: string
+  range: LedgerRange
   currentMonth: string
   statusFilter: RevenuePaymentStatus[]
+  scopeLabel: string
   healthPlanConsultations: HealthPlanConsultation[]
 }) {
   const router = useRouter()
@@ -136,14 +139,16 @@ export function RevenueClient({
         ? 'cancelled,refunded'
         : statusFilter.join(',')
 
-  const applyFilters = (next: { month?: string | null; status?: string | null }) => {
+  const applyFilters = (next: { range?: string | null; status?: string | null }) => {
     const params = new URLSearchParams()
-    const m = next.month ?? month
+    const r = next.range ?? range
     const s = next.status ?? statusParam
-    if (m !== currentMonth) params.set('month', m)
+    if (r !== 'today') params.set('range', r)
     if (s !== 'all') params.set('status', s)
-    startTransition(() => router.push(`/receita${params.toString() ? `?${params}` : ''}`))
+    startTransition(() => router.push(`/ciclo-receita${params.toString() ? `?${params}` : ''}`))
   }
+
+  const rangeLabel = range === 'today' ? 'Hoje' : range === 'all' ? 'Todos os meses' : monthLabel(range)
 
   const handleCreate = async () => {
     if (!form.amount) return
@@ -193,21 +198,23 @@ export function RevenueClient({
   return (
     <div className="space-y-4">
       {isOwner && totals && (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <Kpi label="Previsto no período" value={formatBRL(totals.projected)} />
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+          <Kpi label={`Previsto ${scopeLabel}`} value={formatBRL(totals.projected)} />
           <Kpi label="Realizado" value={formatBRL(totals.realized)} />
           <Kpi label="Recebido" value={formatBRL(totals.received)} accent="green" />
           <Kpi label="A receber" value={formatBRL(totals.pending)} accent="amber" />
+          <Kpi label="Por plano de saúde" value={String(healthPlanConsultations.length)} />
         </div>
       )}
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex flex-wrap items-center gap-2">
-          <Select value={month} onValueChange={(v) => applyFilters({ month: v })}>
+          <Select value={range} onValueChange={(v) => applyFilters({ range: v })}>
             <SelectTrigger className="h-9 w-[180px]">
-              <SelectValue>{month === 'all' ? 'Todos os meses' : monthLabel(month)}</SelectValue>
+              <SelectValue>{rangeLabel}</SelectValue>
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="today">Hoje</SelectItem>
               <SelectItem value="all">Todos os meses</SelectItem>
               {recentMonths(currentMonth).map((m) => (
                 <SelectItem key={m} value={m}>
@@ -303,7 +310,7 @@ export function RevenueClient({
             <h2 className="text-sm font-medium text-gray-900">
               Consultas por plano de saúde
               <span className="ml-2 text-xs font-normal text-gray-400">
-                {filteredConsultations.length} no período
+                {filteredConsultations.length} {scopeLabel}
               </span>
             </h2>
             {plansPresent.length > 1 && (

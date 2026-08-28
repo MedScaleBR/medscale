@@ -27,9 +27,9 @@ interface NavItem {
 }
 
 // Slug do módulo → rota real do app. Rotas que já existiam antes do modelo
-// multi-tenant mantêm o nome de sempre (/bot, /receita, /trafego) — só as
-// três novas (locations, schedule, waitlist) seguem os nomes sugeridos pelo
-// módulo de multi-tenant, já que não havia rota anterior para preservar.
+// multi-tenant mantêm o nome de sempre (/bot, /trafego) — só as três novas
+// (locations, schedule, waitlist) seguem os nomes sugeridos pelo módulo de
+// multi-tenant, já que não havia rota anterior para preservar.
 export const MODULE_NAV: Record<ModuleSlug, NavItem> = {
   dashboard: { label: 'Meu painel', href: '/dashboard', icon: LayoutDashboard },
   agenda: { label: 'Minha agenda', href: '/agenda', icon: CalendarDays },
@@ -42,14 +42,8 @@ export const MODULE_NAV: Record<ModuleSlug, NavItem> = {
   settings: { label: 'Configuração', href: '/configuracoes', icon: Settings },
   transcriptions: { label: 'Transcrições', href: '/transcricoes', icon: FileAudio },
   finance: { label: 'Financeiro', href: '/finance', icon: Wallet },
+  // Ciclo de receita + histórico de entradas numa tela só (/ciclo-receita).
   revenue_cycle: { label: 'Ciclo de receita', href: '/ciclo-receita', icon: Receipt },
-}
-
-// Links extras que compartilham o gate de visibilidade de um módulo. O ledger
-// histórico (/receita) vive sob o mesmo módulo do ciclo de receita — antes era
-// o módulo "financial", aposentado.
-const SECONDARY_NAV: Partial<Record<ModuleSlug, NavItem[]>> = {
-  revenue_cycle: [{ label: 'Receita', href: '/receita', icon: Wallet }],
 }
 
 // Ordem fixa de exibição, independente da ordem em accountModules/userModules
@@ -107,7 +101,7 @@ export function NavLinks({ userModules, role, className, onNavigate }: NavLinksP
       (role !== 'member' || !ADMIN_MIN_MODULES.includes(slug))
   )
 
-  const items = visibleModules.flatMap((slug) => [MODULE_NAV[slug], ...(SECONDARY_NAV[slug] ?? [])])
+  const items = visibleModules.map((slug) => MODULE_NAV[slug])
 
   return (
     <nav className={className}>

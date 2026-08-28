@@ -16,6 +16,7 @@ import {
   saoPauloDateOnly,
   saoPauloDayRange,
   saoPauloMonthRange,
+  ledgerPeriod,
 } from '@/lib/revenue/cycle'
 
 const APPT = 'a1b2c3d4-0000-0000-0000-000000000001'
@@ -233,6 +234,32 @@ describe('saoPauloDayRange / saoPauloMonthRange', () => {
     expect(saoPauloMonthRange('2026-02').startIso).toBe('2026-02-01T03:00:00.000Z')
     expect(saoPauloMonthRange('2026-02').endIso).toBe('2026-03-01T03:00:00.000Z')
     expect(saoPauloMonthRange('2026-12').endIso).toBe('2027-01-01T03:00:00.000Z')
+  })
+})
+
+describe('ledgerPeriod', () => {
+  it('today: janela de 1 dia (entry_date e scheduled_at)', () => {
+    expect(ledgerPeriod('today', '2026-08-28')).toEqual({
+      entryFrom: '2026-08-28',
+      entryTo: '2026-08-29',
+      schedFromIso: '2026-08-28T03:00:00.000Z',
+      schedToIso: '2026-08-29T03:00:00.000Z',
+      scopeLabel: 'no dia',
+    })
+  })
+
+  it('YYYY-MM: janela do mês, virando o ano em dezembro', () => {
+    expect(ledgerPeriod('2026-08', '2026-08-28')).toMatchObject({
+      entryFrom: '2026-08-01',
+      entryTo: '2026-09-01',
+      schedToIso: '2026-09-01T03:00:00.000Z',
+      scopeLabel: 'no mês',
+    })
+    expect(ledgerPeriod('2026-12', '2026-12-10').entryTo).toBe('2027-01-01')
+  })
+
+  it('all: sem limites', () => {
+    expect(ledgerPeriod('all', '2026-08-28')).toEqual({ scopeLabel: 'no período' })
   })
 })
 

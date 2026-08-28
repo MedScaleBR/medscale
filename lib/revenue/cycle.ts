@@ -19,8 +19,8 @@ export const PAYMENT_METHOD_LABELS: Record<RevenuePaymentMethod, string> = {
   outro: 'Outro',
 }
 
-// Rótulo + cor de cada payment_status — o campo canônico do ciclo. Usado no
-// ledger (/receita) e na fila do dia (/ciclo-receita).
+// Rótulo + cor de cada payment_status — o campo canônico do ciclo, usado na
+// tela /ciclo-receita.
 export const PAYMENT_STATUS_LABELS: Record<RevenuePaymentStatus, { label: string; style: string }> = {
   pending: { label: 'Prevista', style: 'bg-[var(--navy-06)] text-[var(--navy)]' },
   realized: { label: 'Aguardando pagamento', style: 'bg-amber-100 text-amber-700' },
@@ -74,6 +74,50 @@ export function saoPauloMonthRange(month: string): { startIso: string; endIso: s
   return {
     startIso: new Date(`${month}-01T00:00:00-03:00`).toISOString(),
     endIso: new Date(`${nextMonth}-01T00:00:00-03:00`).toISOString(),
+  }
+}
+
+export type LedgerRange = 'today' | 'all' | (string & {}) // 'today' | 'all' | 'YYYY-MM'
+
+// Janela de período da tela de receita (ciclo + histórico numa tela só).
+// Dá os dois recortes: `entry` para colunas date (revenue_entries.entry_date) e
+// `sched` (ISO) para timestamptz (appointments.scheduled_at). Limites são
+// [from, to) — `to` exclusivo. undefined = sem limite (range 'all').
+export function ledgerPeriod(
+  range: LedgerRange,
+  todaySp: string
+): {
+  entryFrom?: string
+  entryTo?: string
+  schedFromIso?: string
+  schedToIso?: string
+  scopeLabel: 'no dia' | 'no mês' | 'no período'
+} {
+  if (range === 'all') return { scopeLabel: 'no período' }
+
+  if (/^\d{4}-\d{2}$/.test(range)) {
+    const [y, m] = range.split('-').map(Number)
+    const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
+    const sched = saoPauloMonthRange(range)
+    return {
+      entryFrom: `${range}-01`,
+      entryTo: `${nextMonth}-01`,
+      schedFromIso: sched.startIso,
+      schedToIso: sched.endIso,
+      scopeLabel: 'no mês',
+    }
+  }
+
+  // 'today' (e fallback para qualquer valor inesperado)
+  const day = saoPauloDayRange(todaySp)
+  const nextDay = new Date(`${todaySp}T00:00:00Z`)
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1)
+  return {
+    entryFrom: todaySp,
+    entryTo: nextDay.toISOString().slice(0, 10),
+    schedFromIso: day.startIso,
+    schedToIso: day.endIso,
+    scopeLabel: 'no dia',
   }
 }
 

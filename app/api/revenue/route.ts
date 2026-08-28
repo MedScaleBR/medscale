@@ -4,10 +4,10 @@ import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
 import { revenueStatusToPaymentStatus } from '@/lib/revenue/cycle'
 import type { RevenuePaymentMethod, RevenueStatus } from '@/types/database'
 
-// Ledger histórico do ciclo de receita (/receita). Owner e admin (recepção) —
-// member não. Client admin porque revenue_entries tem RLS exclusiva de owner;
-// o acesso de admin é liberado aqui, escopado ao workspace da sessão. Mesmo
-// gate de /api/revenue-entries.
+// Lançamento manual avulso na tela de ciclo de receita (/ciclo-receita).
+// Owner e admin (recepção) — member não. Client admin porque revenue_entries
+// tem RLS exclusiva de owner; o acesso de admin é liberado aqui, escopado ao
+// workspace da sessão.
 function guard(session: { role: string }) {
   if (session.role === 'member') {
     return NextResponse.json({ error: 'Restrito a owner e admin' }, { status: 403 })
