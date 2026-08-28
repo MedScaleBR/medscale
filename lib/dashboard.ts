@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 import type { DashboardStats } from '@/lib/types'
+import { summarizeRevenueEntries } from '@/lib/revenue/summary'
 
 // workspaceIds: uma workspace (visão normal) ou várias (visão consolidada,
 // ver WorkspaceTabs no dashboard) — todas já vêm filtradas por RLS/sessão.
@@ -24,7 +25,7 @@ export async function getDashboardStats(
 
     supabase
       .from('revenue_entries')
-      .select('amount, status, payment_status, workspace_id')
+      .select('amount, payment_status, workspace_id')
       .in('workspace_id', workspaceIds)
       .gte('entry_date', today.slice(0, 7) + '-01')
       .lte('entry_date', monthEnd.slice(0, 10)),
@@ -56,25 +57,14 @@ export async function getDashboardStats(
   const totalAppts = appts.count ?? 0
   const botAppts = appts.data?.filter((a) => a.source === 'bot').length ?? 0
 
-  // Ciclo de receita via payment_status, com ponte para lançamentos legados
-  // (payment_status ainda no default 'pending' mas com o status antigo já
-  // 'confirmado'/'cancelado').
-  let projectedRev = 0
-  let realizedRev = 0
-  let receivedRev = 0
-  for (const r of revenue.data ?? []) {
-    const amount = Number(r.amount) || 0
-    const legacyPending = r.payment_status === 'pending'
-    const isPaid = r.payment_status === 'paid' || (legacyPending && r.status === 'confirmado')
-    const isCancelled =
-      r.payment_status === 'cancelled' ||
-      r.payment_status === 'refunded' ||
-      (legacyPending && r.status === 'cancelado')
-    if (isCancelled) continue
-    projectedRev += amount
-    if (isPaid || r.payment_status === 'realized') realizedRev += amount
-    if (isPaid) receivedRev += amount
-  }
+  // Receita do ciclo (previsto / realizado / recebido) só via payment_status —
+  // exatamente a regra de summarizeRevenueEntries usada na tela /ciclo-receita,
+  // pra dashboard e ciclo nunca divergirem. Sem ponte para o `status` legado:
+  // lançamentos antigos da tela /receita que ficaram em payment_status 'pending'
+  // contam como previstos, não como recebidos.
+  const revenueRows = revenue.data ?? []
+  const revTotals = summarizeRevenueEntries(revenueRows)
+
   const noShowRate = totalAppts > 0 ? Math.round(((noshow.count ?? 0) / totalAppts) * 100) : 0
 
   const trafficByChannel = (campaigns.data ?? []).reduce(
@@ -91,26 +81,18 @@ export async function getDashboardStats(
   const byWorkspace = workspaceIds.map((workspaceId) => ({
     workspaceId,
     appointments: appts.data?.filter((a) => a.workspace_id === workspaceId).length ?? 0,
-    revenue:
-      revenue.data
-        ?.filter(
-          (r) =>
-            r.workspace_id === workspaceId &&
-            r.payment_status !== 'cancelled' &&
-            r.payment_status !== 'refunded' &&
-            !(r.payment_status === 'pending' && r.status === 'cancelado')
-        )
-        .reduce((s, r) => s + Number(r.amount), 0) ?? 0,
+    // previsto do workspace = tudo que não foi cancelado/reembolsado
+    revenue: summarizeRevenueEntries(revenueRows.filter((r) => r.workspace_id === workspaceId)).projected,
   }))
 
   return {
     appointments: { total: totalAppts, bot: botAppts, manual: totalAppts - botAppts },
     revenue: {
-      total: projectedRev,
-      confirmed: receivedRev,
-      projected: projectedRev,
-      realized: realizedRev,
-      received: receivedRev,
+      total: revTotals.projected,
+      confirmed: revTotals.received,
+      projected: revTotals.projected,
+      realized: revTotals.realized,
+      received: revTotals.received,
     },
     noShow: { rate: noShowRate, total: noshow.count ?? 0 },
     todayAgenda: todayAppts.data ?? [],
