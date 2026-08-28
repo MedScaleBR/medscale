@@ -1,5 +1,12 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
-import type { Database, AppointmentStatus, RevenuePaymentMethod, RevenueSource } from '@/types/database'
+import type {
+  Database,
+  AppointmentStatus,
+  RevenuePaymentMethod,
+  RevenuePaymentStatus,
+  RevenueSource,
+  RevenueStatus,
+} from '@/types/database'
 
 // Rótulos das formas de pagamento — compartilhados entre a tela, o agente
 // financeiro e o resumo diário.
@@ -10,6 +17,29 @@ export const PAYMENT_METHOD_LABELS: Record<RevenuePaymentMethod, string> = {
   dinheiro: 'Dinheiro',
   transferencia: 'Transferência',
   outro: 'Outro',
+}
+
+// Rótulo + cor de cada payment_status — o campo canônico do ciclo, usado na
+// tela /ciclo-receita.
+export const PAYMENT_STATUS_LABELS: Record<RevenuePaymentStatus, { label: string; style: string }> = {
+  pending: { label: 'Prevista', style: 'bg-[var(--navy-06)] text-[var(--navy)]' },
+  realized: { label: 'Aguardando pagamento', style: 'bg-amber-100 text-amber-700' },
+  paid: { label: 'Paga', style: 'bg-green-100 text-green-700' },
+  cancelled: { label: 'Cancelada', style: 'bg-red-100 text-red-600' },
+  refunded: { label: 'Reembolsada', style: 'bg-red-100 text-red-600' },
+}
+
+// Lançamento manual avulso no ledger ainda usa os 3 estados simples
+// (previsto/confirmado/cancelado); traduz para o payment_status canônico.
+export function revenueStatusToPaymentStatus(status: RevenueStatus): RevenuePaymentStatus {
+  switch (status) {
+    case 'confirmado':
+      return 'paid'
+    case 'cancelado':
+      return 'cancelled'
+    default:
+      return 'pending'
+  }
 }
 
 // Ciclo de receita automático — transições de revenue_entries disparadas por
@@ -26,6 +56,69 @@ type SupabaseAdmin = SupabaseClient<Database>
 // perto da meia-noite BRT o `.slice(0, 10)` do ISO em UTC cairia no dia errado.
 export function saoPauloDateOnly(iso: string): string {
   return new Date(iso).toLocaleDateString('en-CA', { timeZone: 'America/Sao_Paulo' })
+}
+
+// Limites [início, fim) de um dia (YYYY-MM-DD) no fuso de São Paulo, como
+// instantes ISO — para filtrar colunas timestamptz (ex. appointments.scheduled_at)
+// por dia local. BRT é -03:00 fixo desde 2019 (sem horário de verão).
+export function saoPauloDayRange(dateOnly: string): { startIso: string; endIso: string } {
+  const start = new Date(`${dateOnly}T00:00:00-03:00`)
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000)
+  return { startIso: start.toISOString(), endIso: end.toISOString() }
+}
+
+// Idem para um mês (YYYY-MM).
+export function saoPauloMonthRange(month: string): { startIso: string; endIso: string } {
+  const [y, m] = month.split('-').map(Number)
+  const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
+  return {
+    startIso: new Date(`${month}-01T00:00:00-03:00`).toISOString(),
+    endIso: new Date(`${nextMonth}-01T00:00:00-03:00`).toISOString(),
+  }
+}
+
+export type LedgerRange = 'today' | 'all' | (string & {}) // 'today' | 'all' | 'YYYY-MM'
+
+// Janela de período da tela de receita (ciclo + histórico numa tela só).
+// Dá os dois recortes: `entry` para colunas date (revenue_entries.entry_date) e
+// `sched` (ISO) para timestamptz (appointments.scheduled_at). Limites são
+// [from, to) — `to` exclusivo. undefined = sem limite (range 'all').
+export function ledgerPeriod(
+  range: LedgerRange,
+  todaySp: string
+): {
+  entryFrom?: string
+  entryTo?: string
+  schedFromIso?: string
+  schedToIso?: string
+  scopeLabel: 'no dia' | 'no mês' | 'no período'
+} {
+  if (range === 'all') return { scopeLabel: 'no período' }
+
+  if (/^\d{4}-\d{2}$/.test(range)) {
+    const [y, m] = range.split('-').map(Number)
+    const nextMonth = m === 12 ? `${y + 1}-01` : `${y}-${String(m + 1).padStart(2, '0')}`
+    const sched = saoPauloMonthRange(range)
+    return {
+      entryFrom: `${range}-01`,
+      entryTo: `${nextMonth}-01`,
+      schedFromIso: sched.startIso,
+      schedToIso: sched.endIso,
+      scopeLabel: 'no mês',
+    }
+  }
+
+  // 'today' (e fallback para qualquer valor inesperado)
+  const day = saoPauloDayRange(todaySp)
+  const nextDay = new Date(`${todaySp}T00:00:00Z`)
+  nextDay.setUTCDate(nextDay.getUTCDate() + 1)
+  return {
+    entryFrom: todaySp,
+    entryTo: nextDay.toISOString().slice(0, 10),
+    schedFromIso: day.startIso,
+    schedToIso: day.endIso,
+    scopeLabel: 'no dia',
+  }
 }
 
 // A account tem o módulo "revenue_cycle" ativo?
@@ -140,6 +233,13 @@ interface AppointmentRevenueInput {
   previousStatus: AppointmentStatus | null
   /** Status da consulta depois desta gravação. */
   nextStatus: AppointmentStatus
+  /**
+   * Convênio da consulta (bot_config.insurance_plans) ou null/'' = particular.
+   * Consulta por convênio não entra no ciclo de receita: nenhuma entrada é
+   * criada e uma previsão pendente pré-existente (de quando era particular) é
+   * cancelada.
+   */
+  healthPlan?: string | null
 }
 
 // Aplica, na ordem certa, os dois efeitos do ciclo de receita quando uma
@@ -154,8 +254,26 @@ interface AppointmentRevenueInput {
 // entrada recém-nascida travada em 'previsto/pending', fora dos totais.
 export async function applyAppointmentRevenue(
   supabase: SupabaseAdmin,
-  { booking, previousStatus, nextStatus }: AppointmentRevenueInput
+  { booking, previousStatus, nextStatus, healthPlan }: AppointmentRevenueInput
 ): Promise<void> {
+  // Consulta por convênio fica fora do ciclo de receita. Se virou convênio numa
+  // edição, cancela a previsão pendente que existia de quando era particular
+  // (nunca toca uma entrada já 'paid'/'realized').
+  if (healthPlan) {
+    const { error } = await supabase
+      .from('revenue_entries')
+      .update({ payment_status: 'cancelled' })
+      .eq('appointment_id', booking.appointmentId)
+      .eq('payment_status', 'pending')
+    if (error) {
+      console.error('[revenue-cycle] falha ao cancelar previsão de consulta que virou convênio', {
+        appointmentId: booking.appointmentId,
+        error: error.message,
+      })
+    }
+    return
+  }
+
   if (nextStatus !== 'cancelado' && booking.amount != null && booking.amount > 0) {
     await createBookingRevenueEntry(supabase, booking)
   }

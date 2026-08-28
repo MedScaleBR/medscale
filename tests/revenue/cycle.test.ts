@@ -12,7 +12,11 @@ import {
   syncRevenueEntryToAppointmentStatus,
   createBookingRevenueEntry,
   applyAppointmentRevenue,
+  revenueStatusToPaymentStatus,
   saoPauloDateOnly,
+  saoPauloDayRange,
+  saoPauloMonthRange,
+  ledgerPeriod,
 } from '@/lib/revenue/cycle'
 
 const APPT = 'a1b2c3d4-0000-0000-0000-000000000001'
@@ -198,6 +202,72 @@ describe('applyAppointmentRevenue', () => {
     expect(supabase.callsTo('revenue_entries', 'insert')).toHaveLength(0)
     expect(supabase.callsTo('accounts', 'select')).toHaveLength(0)
     expect(supabase.callsTo('revenue_entries', 'update')[0]?.payload).toEqual({ payment_status: 'realized' })
+  })
+
+  it('consulta por convênio: não cria entrada e cancela a previsão pendente', async () => {
+    const supabase = mock()
+
+    await applyAppointmentRevenue(supabase.client as never, {
+      booking: { ...booking, amount: 500 },
+      previousStatus: 'agendado',
+      nextStatus: 'realizado',
+      healthPlan: 'Unimed',
+    })
+
+    expect(supabase.callsTo('revenue_entries', 'insert')).toHaveLength(0)
+    expect(supabase.callsTo('accounts', 'select')).toHaveLength(0)
+    const update = supabase.callsTo('revenue_entries', 'update')[0]
+    expect(update?.payload).toEqual({ payment_status: 'cancelled' })
+    expect(filterValue(update!, 'eq', 'appointment_id')).toBe(APPT)
+    expect(filterValue(update!, 'eq', 'payment_status')).toBe('pending')
+  })
+})
+
+describe('saoPauloDayRange / saoPauloMonthRange', () => {
+  it('dia: [00:00, 24:00) no fuso BRT como instantes UTC', () => {
+    const r = saoPauloDayRange('2026-03-15')
+    expect(r.startIso).toBe('2026-03-15T03:00:00.000Z')
+    expect(r.endIso).toBe('2026-03-16T03:00:00.000Z')
+  })
+
+  it('mês: início e fim (exclusivo), virando o ano em dezembro', () => {
+    expect(saoPauloMonthRange('2026-02').startIso).toBe('2026-02-01T03:00:00.000Z')
+    expect(saoPauloMonthRange('2026-02').endIso).toBe('2026-03-01T03:00:00.000Z')
+    expect(saoPauloMonthRange('2026-12').endIso).toBe('2027-01-01T03:00:00.000Z')
+  })
+})
+
+describe('ledgerPeriod', () => {
+  it('today: janela de 1 dia (entry_date e scheduled_at)', () => {
+    expect(ledgerPeriod('today', '2026-08-28')).toEqual({
+      entryFrom: '2026-08-28',
+      entryTo: '2026-08-29',
+      schedFromIso: '2026-08-28T03:00:00.000Z',
+      schedToIso: '2026-08-29T03:00:00.000Z',
+      scopeLabel: 'no dia',
+    })
+  })
+
+  it('YYYY-MM: janela do mês, virando o ano em dezembro', () => {
+    expect(ledgerPeriod('2026-08', '2026-08-28')).toMatchObject({
+      entryFrom: '2026-08-01',
+      entryTo: '2026-09-01',
+      schedToIso: '2026-09-01T03:00:00.000Z',
+      scopeLabel: 'no mês',
+    })
+    expect(ledgerPeriod('2026-12', '2026-12-10').entryTo).toBe('2027-01-01')
+  })
+
+  it('all: sem limites', () => {
+    expect(ledgerPeriod('all', '2026-08-28')).toEqual({ scopeLabel: 'no período' })
+  })
+})
+
+describe('revenueStatusToPaymentStatus', () => {
+  it('traduz os 3 estados do lançamento avulso para o payment_status canônico', () => {
+    expect(revenueStatusToPaymentStatus('previsto')).toBe('pending')
+    expect(revenueStatusToPaymentStatus('confirmado')).toBe('paid')
+    expect(revenueStatusToPaymentStatus('cancelado')).toBe('cancelled')
   })
 })
 

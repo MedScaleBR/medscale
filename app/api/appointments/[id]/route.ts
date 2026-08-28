@@ -28,9 +28,25 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: fetchError?.message ?? 'Consulta não encontrada' }, { status: 404 })
   }
 
+  // Convênio da consulta (bot_config.insurance_plans). Consulta por convênio
+  // fica fora do ciclo de receita: limpa preço/procedimento na mesma gravação
+  // e não cria entrada. body.health_plan ausente = não mexeu; '' = particular.
+  const healthPlan: string | null =
+    body.health_plan === undefined
+      ? (current.health_plan ?? null)
+      : typeof body.health_plan === 'string' && body.health_plan.trim()
+        ? body.health_plan.trim()
+        : null
+  if (body.health_plan !== undefined) body.health_plan = healthPlan
+  if (healthPlan) {
+    body.price = null
+    body.procedure_id = null
+    body.procedure_name = null
+  }
+
   // Ciclo de receita: se o procedimento mudou, atualiza o snapshot de nome
   // (e o preço, se não veio um explícito no body).
-  if (body.procedure_id !== undefined && body.procedure_id !== current.procedure_id) {
+  if (!healthPlan && body.procedure_id !== undefined && body.procedure_id !== current.procedure_id) {
     if (body.procedure_id) {
       const { data: proc } = await supabase
         .from('procedure_catalog')
@@ -106,6 +122,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       },
       previousStatus: current.status,
       nextStatus: data.status,
+      healthPlan: data.health_plan ?? null,
     })
   }
 

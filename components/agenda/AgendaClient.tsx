@@ -17,11 +17,13 @@ export function AgendaClient({
   initialBusyBlocks,
   showTranscriptions,
   procedures,
+  healthPlans,
 }: {
   initialAppointments: Appointment[]
   initialBusyBlocks: BusyBlock[]
   showTranscriptions?: boolean
   procedures?: CatalogProcedureOption[]
+  healthPlans?: string[]
 }) {
   const [appointments, setAppointments] = useState(initialAppointments)
   const [busyBlocks] = useState(initialBusyBlocks)
@@ -42,6 +44,7 @@ export function AgendaClient({
         notes: values.notes || null,
         price: values.price ? Number(values.price) : null,
         procedure_id: values.procedure_id || null,
+        health_plan: values.health_plan || null,
       }),
     })
     const json = await res.json()
@@ -67,6 +70,7 @@ export function AgendaClient({
         notes: values.notes || null,
         price: values.price ? Number(values.price) : null,
         procedure_id: values.procedure_id || null,
+        health_plan: values.health_plan || null,
       }),
     })
     const json = await res.json()
@@ -99,6 +103,7 @@ export function AgendaClient({
         onDelete={handleDelete}
         showTranscriptions={showTranscriptions}
         procedures={procedures}
+        healthPlans={healthPlans}
       />
     </>
   )

@@ -40,6 +40,8 @@ export interface AppointmentFormValues {
   notes: string
   price: string
   procedure_id: string | null
+  /** Convênio atendido, ou null = particular. */
+  health_plan: string | null
 }
 
 interface AppointmentModalProps {
@@ -50,6 +52,7 @@ interface AppointmentModalProps {
   onDelete?: () => Promise<void>
   showTranscriptions?: boolean
   procedures?: CatalogProcedureOption[]
+  healthPlans?: string[]
 }
 
 const EMPTY: AppointmentFormValues = {
@@ -62,9 +65,11 @@ const EMPTY: AppointmentFormValues = {
   notes: '',
   price: '',
   procedure_id: null,
+  health_plan: null,
 }
 
 const NO_PROCEDURE = '__none__'
+const PARTICULAR = '__particular__'
 
 export function AppointmentModal({
   open,
@@ -74,6 +79,7 @@ export function AppointmentModal({
   onDelete,
   showTranscriptions,
   procedures,
+  healthPlans,
 }: AppointmentModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -86,6 +92,7 @@ export function AppointmentModal({
             onOpenChange={onOpenChange}
             showTranscriptions={showTranscriptions}
             procedures={procedures ?? []}
+            healthPlans={healthPlans ?? []}
           />
         )}
       </DialogContent>
@@ -100,11 +107,23 @@ interface AppointmentFormProps {
   onOpenChange: (open: boolean) => void
   showTranscriptions?: boolean
   procedures: CatalogProcedureOption[]
+  healthPlans: string[]
 }
 
-function AppointmentForm({ initialValues, onSave, onDelete, onOpenChange, showTranscriptions, procedures }: AppointmentFormProps) {
+function AppointmentForm({ initialValues, onSave, onDelete, onOpenChange, showTranscriptions, procedures, healthPlans }: AppointmentFormProps) {
   const [values, setValues] = useState<AppointmentFormValues>({ ...EMPTY, ...initialValues })
   const [saving, setSaving] = useState(false)
+  const isConvenio = values.health_plan != null
+
+  const onHealthPlanChange = (choice: string | null) => {
+    if (!choice || choice === PARTICULAR) {
+      setValues((v) => ({ ...v, health_plan: null }))
+      return
+    }
+    // Consulta por convênio não entra no ciclo de receita — zera valor e
+    // procedimento.
+    setValues((v) => ({ ...v, health_plan: choice, price: '', procedure_id: null }))
+  }
 
   const onProcedureChange = (id: string | null) => {
     if (!id || id === NO_PROCEDURE) {
@@ -203,7 +222,32 @@ function AppointmentForm({ initialValues, onSave, onDelete, onOpenChange, showTr
               </Select>
             </div>
           </div>
-          {procedures.length > 0 && (
+          {healthPlans.length > 0 && (
+            <div>
+              <Label>Atendimento</Label>
+              <Select value={values.health_plan ?? PARTICULAR} onValueChange={onHealthPlanChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Particular">
+                    {(v) => (!v || v === PARTICULAR ? 'Particular' : String(v))}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={PARTICULAR}>Particular</SelectItem>
+                  {healthPlans.map((plan) => (
+                    <SelectItem key={plan} value={plan}>
+                      {plan}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {isConvenio && (
+                <p className="mt-1 text-xs text-gray-400">
+                  Consulta por convênio — não entra no ciclo de receita.
+                </p>
+              )}
+            </div>
+          )}
+          {!isConvenio && procedures.length > 0 && (
             <div>
               <Label>Procedimento</Label>
               <Select value={values.procedure_id ?? NO_PROCEDURE} onValueChange={onProcedureChange}>
@@ -229,17 +273,19 @@ function AppointmentForm({ initialValues, onSave, onDelete, onOpenChange, showTr
               </Select>
             </div>
           )}
-          <div>
-            <Label htmlFor="price">Valor (R$)</Label>
-            <Input
-              id="price"
-              type="number"
-              min={0}
-              placeholder="Opcional — usado no ciclo de receita"
-              value={values.price}
-              onChange={(e) => setValues((v) => ({ ...v, price: e.target.value }))}
-            />
-          </div>
+          {!isConvenio && (
+            <div>
+              <Label htmlFor="price">Valor (R$)</Label>
+              <Input
+                id="price"
+                type="number"
+                min={0}
+                placeholder="Opcional — usado no ciclo de receita"
+                value={values.price}
+                onChange={(e) => setValues((v) => ({ ...v, price: e.target.value }))}
+              />
+            </div>
+          )}
           <div>
             <Label>Status</Label>
             <Select

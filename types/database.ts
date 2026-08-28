@@ -56,7 +56,6 @@ export type ModuleSlug =
   | 'locations'
   | 'schedule'
   | 'waitlist'
-  | 'financial'
   | 'campaigns'
   | 'patients'
   | 'settings'
@@ -287,6 +286,7 @@ export interface Database {
           procedure_id: string | null
           procedure_name: string | null
           price: number | null
+          health_plan: string | null
           gcal_event_id: string | null
           reminder_sent: boolean
           created_at: string
