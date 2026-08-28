@@ -1,4 +1,5 @@
 import { resolveActiveSession } from '@/lib/session/server'
+import { createClient } from '@/lib/supabase/server'
 import { reconcileCalendar } from '@/lib/google/reconcile'
 import { AgendaClient } from '@/components/agenda/AgendaClient'
 
@@ -12,6 +13,20 @@ export default async function AgendaPage() {
 
   const { appointments, busyBlocks } = await reconcileCalendar(session.workspaceId, from, to)
 
+  // Catálogo de procedimentos para o seletor do modal — só quando o ciclo de
+  // receita está ativo.
+  let procedures: { id: string; name: string; default_price: number }[] = []
+  if (session.userModules.includes('revenue_cycle')) {
+    const supabase = await createClient()
+    const { data } = await supabase
+      .from('procedure_catalog')
+      .select('id, name, default_price')
+      .eq('workspace_id', session.workspaceId)
+      .eq('is_active', true)
+      .order('name', { ascending: true })
+    procedures = (data ?? []).map((p) => ({ ...p, default_price: Number(p.default_price) }))
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -22,6 +37,7 @@ export default async function AgendaPage() {
         initialAppointments={appointments}
         initialBusyBlocks={busyBlocks}
         showTranscriptions={session.userModules.includes('transcriptions')}
+        procedures={procedures}
       />
     </div>
   )

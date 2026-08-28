@@ -6,7 +6,7 @@ import { format, parse, startOfWeek, getDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
 import 'react-big-calendar/lib/css/react-big-calendar.css'
 import './calendar-overrides.css'
-import { AppointmentModal, type AppointmentFormValues } from './AppointmentModal'
+import { AppointmentModal, type AppointmentFormValues, type CatalogProcedureOption } from './AppointmentModal'
 import type { Database } from '@/types/database'
 import type { BusyBlock } from '@/lib/google/reconcile'
 
@@ -51,9 +51,10 @@ interface CalendarViewProps {
   onUpdate: (id: string, values: AppointmentFormValues) => Promise<void>
   onDelete: (id: string) => Promise<void>
   showTranscriptions?: boolean
+  procedures?: CatalogProcedureOption[]
 }
 
-export function CalendarView({ appointments, busyBlocks, onCreate, onUpdate, onDelete, showTranscriptions }: CalendarViewProps) {
+export function CalendarView({ appointments, busyBlocks, onCreate, onUpdate, onDelete, showTranscriptions, procedures }: CalendarViewProps) {
   const [view, setView] = useState<View>('week')
   const [date, setDate] = useState(new Date())
   const [modalOpen, setModalOpen] = useState(false)
@@ -88,6 +89,7 @@ export function CalendarView({ appointments, busyBlocks, onCreate, onUpdate, onD
       status: 'agendado',
       notes: '',
       price: '',
+      procedure_id: null,
     })
     setModalOpen(true)
   }, [])
@@ -107,6 +109,7 @@ export function CalendarView({ appointments, busyBlocks, onCreate, onUpdate, onD
       status: a.status,
       notes: a.notes ?? '',
       price: a.price != null ? String(a.price) : '',
+      procedure_id: a.procedure_id ?? null,
     })
     setModalOpen(true)
   }, [])
@@ -181,6 +184,7 @@ export function CalendarView({ appointments, busyBlocks, onCreate, onUpdate, onD
             : undefined
         }
         showTranscriptions={showTranscriptions}
+        procedures={procedures}
       />
     </div>
   )

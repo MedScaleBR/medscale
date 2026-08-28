@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { CalendarView } from './CalendarView'
-import type { AppointmentFormValues } from './AppointmentModal'
+import type { AppointmentFormValues, CatalogProcedureOption } from './AppointmentModal'
 import type { Database } from '@/types/database'
 import type { BusyBlock } from '@/lib/google/reconcile'
 
@@ -16,10 +16,12 @@ export function AgendaClient({
   initialAppointments,
   initialBusyBlocks,
   showTranscriptions,
+  procedures,
 }: {
   initialAppointments: Appointment[]
   initialBusyBlocks: BusyBlock[]
   showTranscriptions?: boolean
+  procedures?: CatalogProcedureOption[]
 }) {
   const [appointments, setAppointments] = useState(initialAppointments)
   const [busyBlocks] = useState(initialBusyBlocks)
@@ -39,6 +41,7 @@ export function AgendaClient({
         status: values.status,
         notes: values.notes || null,
         price: values.price ? Number(values.price) : null,
+        procedure_id: values.procedure_id || null,
       }),
     })
     const json = await res.json()
@@ -63,6 +66,7 @@ export function AgendaClient({
         status: values.status,
         notes: values.notes || null,
         price: values.price ? Number(values.price) : null,
+        procedure_id: values.procedure_id || null,
       }),
     })
     const json = await res.json()
@@ -94,6 +98,7 @@ export function AgendaClient({
         onUpdate={handleUpdate}
         onDelete={handleDelete}
         showTranscriptions={showTranscriptions}
+        procedures={procedures}
       />
     </>
   )

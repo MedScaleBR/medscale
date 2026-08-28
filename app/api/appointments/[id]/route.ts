@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { cancelEvent, updateEvent } from '@/lib/google/calendar'
 import { requireWorkspaceSession } from '@/lib/session/api'
-import { syncRevenueEntryToAppointmentStatus } from '@/lib/revenue/cycle'
+import { syncRevenueEntryToAppointmentStatus, createBookingRevenueEntry } from '@/lib/revenue/cycle'
 
 // Google Calendar é a fonte de verdade: se a consulta tem um evento vinculado
 // (gcal_event_id), a mudança precisa ser aceita lá antes de gravar no
@@ -26,6 +26,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (fetchError || !current) {
     return NextResponse.json({ error: fetchError?.message ?? 'Consulta não encontrada' }, { status: 404 })
+  }
+
+  // Ciclo de receita: se o procedimento mudou, atualiza o snapshot de nome
+  // (e o preço, se não veio um explícito no body).
+  if (body.procedure_id !== undefined && body.procedure_id !== current.procedure_id) {
+    if (body.procedure_id) {
+      const { data: proc } = await supabase
+        .from('procedure_catalog')
+        .select('name, default_price')
+        .eq('id', body.procedure_id)
+        .eq('workspace_id', session.workspaceId)
+        .maybeSingle()
+      body.procedure_name = proc?.name ?? null
+      if (proc && (body.price === undefined || body.price === null)) body.price = Number(proc.default_price)
+    } else {
+      body.procedure_name = null
+    }
   }
 
   if (current.gcal_event_id) {
@@ -74,6 +91,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // contra o workspace da sessão acima.
   if (typeof body.status === 'string' && body.status !== current.status) {
     await syncRevenueEntryToAppointmentStatus(createAdminClient(), id, body.status)
+  }
+
+  // Ciclo de receita: "agendei agora, coloco o valor depois" — se a consulta
+  // ganhou um preço/procedimento numa edição e ainda não tem entrada, cria a
+  // previsão. createBookingRevenueEntry é idempotente e no-op sem módulo.
+  if (data && data.status !== 'cancelado' && data.price != null && Number(data.price) > 0) {
+    await createBookingRevenueEntry(createAdminClient(), {
+      workspaceId: session.workspaceId,
+      accountId: session.accountId,
+      appointmentId: data.id,
+      patientId: data.patient_id ?? null,
+      procedureId: data.procedure_id ?? null,
+      procedureName: data.procedure_name ?? null,
+      amount: Number(data.price),
+      scheduledAt: data.scheduled_at,
+      source: 'manual',
+    })
   }
 
   return NextResponse.json(data)
