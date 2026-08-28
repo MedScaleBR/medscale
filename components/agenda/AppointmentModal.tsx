@@ -22,6 +22,12 @@ import {
 import { AppointmentRecordingEntry } from '@/components/transcriptions/AppointmentRecordingEntry'
 import type { AppointmentType, AppointmentStatus } from '@/types/database'
 
+export interface CatalogProcedureOption {
+  id: string
+  name: string
+  default_price: number
+}
+
 export interface AppointmentFormValues {
   id?: string
   patient_id?: string | null
@@ -33,6 +39,7 @@ export interface AppointmentFormValues {
   status: AppointmentStatus
   notes: string
   price: string
+  procedure_id: string | null
 }
 
 interface AppointmentModalProps {
@@ -42,6 +49,7 @@ interface AppointmentModalProps {
   onSave: (values: AppointmentFormValues) => Promise<void>
   onDelete?: () => Promise<void>
   showTranscriptions?: boolean
+  procedures?: CatalogProcedureOption[]
 }
 
 const EMPTY: AppointmentFormValues = {
@@ -53,7 +61,10 @@ const EMPTY: AppointmentFormValues = {
   status: 'agendado',
   notes: '',
   price: '',
+  procedure_id: null,
 }
+
+const NO_PROCEDURE = '__none__'
 
 export function AppointmentModal({
   open,
@@ -62,6 +73,7 @@ export function AppointmentModal({
   onSave,
   onDelete,
   showTranscriptions,
+  procedures,
 }: AppointmentModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -73,6 +85,7 @@ export function AppointmentModal({
             onDelete={onDelete}
             onOpenChange={onOpenChange}
             showTranscriptions={showTranscriptions}
+            procedures={procedures ?? []}
           />
         )}
       </DialogContent>
@@ -86,11 +99,26 @@ interface AppointmentFormProps {
   onDelete?: () => Promise<void>
   onOpenChange: (open: boolean) => void
   showTranscriptions?: boolean
+  procedures: CatalogProcedureOption[]
 }
 
-function AppointmentForm({ initialValues, onSave, onDelete, onOpenChange, showTranscriptions }: AppointmentFormProps) {
+function AppointmentForm({ initialValues, onSave, onDelete, onOpenChange, showTranscriptions, procedures }: AppointmentFormProps) {
   const [values, setValues] = useState<AppointmentFormValues>({ ...EMPTY, ...initialValues })
   const [saving, setSaving] = useState(false)
+
+  const onProcedureChange = (id: string | null) => {
+    if (!id || id === NO_PROCEDURE) {
+      setValues((v) => ({ ...v, procedure_id: null }))
+      return
+    }
+    const proc = procedures.find((p) => p.id === id)
+    setValues((v) => ({
+      ...v,
+      procedure_id: id,
+      // Preenche o valor com o preço de tabela; o usuário ainda pode ajustar.
+      price: proc ? String(proc.default_price) : v.price,
+    }))
+  }
 
   const handleSave = async () => {
     if (!values.patient_name || !values.patient_phone || !values.scheduled_at) return
@@ -174,6 +202,35 @@ function AppointmentForm({ initialValues, onSave, onDelete, onOpenChange, showTr
                 </SelectContent>
               </Select>
             </div>
+          </div>
+          {procedures.length > 0 && (
+            <div>
+              <Label>Procedimento</Label>
+              <Select value={values.procedure_id ?? NO_PROCEDURE} onValueChange={onProcedureChange}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Sem procedimento" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_PROCEDURE}>Sem procedimento</SelectItem>
+                  {procedures.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>
+                      {p.name} — R${p.default_price.toFixed(0)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <div>
+            <Label htmlFor="price">Valor (R$)</Label>
+            <Input
+              id="price"
+              type="number"
+              min={0}
+              placeholder="Opcional — usado no ciclo de receita"
+              value={values.price}
+              onChange={(e) => setValues((v) => ({ ...v, price: e.target.value }))}
+            />
           </div>
           <div>
             <Label>Status</Label>
