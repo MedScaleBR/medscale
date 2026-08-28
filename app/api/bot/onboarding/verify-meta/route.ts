@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { encryptToken } from '@/lib/crypto'
 import { invalidateBotConfigCache } from '@/lib/bot/config'
 import { requireWorkspaceSession } from '@/lib/session/api'
+import { trackBotWizardCompleted } from '@/lib/analytics/posthog-server'
 
 // Confirma que o Phone Number ID + token colados pelo médico são válidos,
 // consultando a própria Meta Graph API, antes de salvar.
@@ -84,6 +85,12 @@ export async function POST(req: NextRequest) {
   if (botConfigError) return NextResponse.json({ error: botConfigError.message }, { status: 500 })
 
   invalidateBotConfigCache(session.workspaceId)
+
+  await trackBotWizardCompleted(session.userId, {
+    workspace_id: session.workspaceId,
+    account_id: session.accountId,
+    number_source: 'own',
+  })
 
   return NextResponse.json({
     ok: true,

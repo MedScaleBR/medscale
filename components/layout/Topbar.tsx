@@ -1,6 +1,7 @@
 'use client'
 
 import { useRouter } from 'next/navigation'
+import posthog from 'posthog-js'
 import { createClient } from '@/lib/supabase/client'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
@@ -28,6 +29,7 @@ export function Topbar({ userName, userEmail, avatarUrl, session, accounts }: To
 
   const handleLogout = async () => {
     const supabase = createClient()
+    if (posthog.__loaded) posthog.reset()
     await supabase.auth.signOut()
     router.push('/login')
     router.refresh()

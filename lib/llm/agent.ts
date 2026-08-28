@@ -13,6 +13,13 @@ import { buildDynamicSystemPrompt } from '@/lib/bot/prompt-builder'
 import { detectHandoffIntent, executeHandoff, isHandoffAvailableNow, logHandoffUnavailable } from '@/lib/bot/handoff'
 import { parseMarkers } from '@/lib/bot/parse-markers'
 import { createBookingRevenueEntry } from '@/lib/revenue/cycle'
+import {
+  trackMessageReceived,
+  trackBotResponded,
+  trackAppointmentBookedByBot,
+  trackHandoffTriggered,
+  trackUnsupportedMessageReceived,
+} from '@/lib/analytics/posthog-server'
 import type { Database } from '@/types/database'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -170,6 +177,12 @@ export async function handleUnsupportedMessage(params: UnsupportedMessageParams)
     whatsapp_id: whatsappMessageId,
   })
 
+  await trackUnsupportedMessageReceived(accountId, {
+    workspace_id: workspaceId,
+    account_id: accountId,
+    message_type: messageType,
+  })
+
   // Pausado por intervenção manual/handoff — mesma regra do texto: só registra.
   if (conversation.bot_paused) return
 
@@ -221,6 +234,20 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     role: 'user',
     content: message,
     whatsapp_id: whatsappMessageId,
+  })
+
+  // Analytics: toda mensagem de paciente conta, inclusive com o bot pausado
+  // (handoff em andamento). is_first_message = é a primeira mensagem que este
+  // paciente já mandou nesta conversa (a recém-inserida já está no count).
+  const { count: userMsgCount } = await supabase
+    .from('messages')
+    .select('id', { count: 'exact', head: true })
+    .eq('conversation_id', conversation.id)
+    .eq('role', 'user')
+  await trackMessageReceived(accountId, {
+    workspace_id: workspaceId,
+    account_id: accountId,
+    is_first_message: (userMsgCount ?? 1) <= 1,
   })
 
   // Bot pausado (intervenção manual de um humano, ou handoff real em
@@ -437,6 +464,12 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
           source: 'bot',
         })
 
+        await trackAppointmentBookedByBot(accountId, {
+          workspace_id: workspaceId,
+          account_id: accountId,
+          slot_datetime: scheduledAt.toISOString(),
+        })
+
         const { connected, email } = await isGoogleConnected(workspaceId)
         if (connected && email) {
           try {
@@ -561,6 +594,12 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
       trigger_reason: 'bot_uncertain',
       handoff_to: botConfig.handoffNumber ?? 'equipe (sem número configurado)',
     })
+    await trackHandoffTriggered(accountId, {
+      workspace_id: workspaceId,
+      account_id: accountId,
+      trigger_reason: 'bot_uncertain',
+      handoff_available: false,
+    })
 
     if (workspace?.phone_number_id && workspace?.meta_token) {
       await sendWhatsAppMessage({
@@ -594,11 +633,17 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
         phoneNumberId: workspace.phone_number_id,
         token: metaToken,
       })
+      await trackBotResponded(accountId, {
+        workspace_id: workspaceId,
+        account_id: accountId,
+        response_length: finalMessage.length,
+      })
     }
 
     if (realHandoff && botConfig.handoffNumber) {
       await executeHandoff({
         workspaceId,
+        accountId,
         conversationId: conversation.id,
         patientPhone,
         handoffNumber: botConfig.handoffNumber,
@@ -613,6 +658,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     if (canAttemptHandoff && !realHandoff && botConfig.handoffNumber) {
       await logHandoffUnavailable({
         workspaceId,
+        accountId,
         conversationId: conversation.id,
         patientPhone,
         handoffNumber: botConfig.handoffNumber,

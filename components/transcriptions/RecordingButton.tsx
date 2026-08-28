@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { ConsentDialog } from './ConsentDialog'
 import { Mic, Square, Loader2 } from 'lucide-react'
+import { useAnalyticsBase } from '@/lib/session/session-context'
+import { trackRecordingStarted, trackRecordingUploaded } from '@/lib/analytics/posthog'
 
 type RecordingButtonProps = {
   appointmentId?: string
@@ -45,6 +47,7 @@ function formatDuration(seconds: number) {
 
 export function RecordingButton({ appointmentId, patientId, onComplete }: RecordingButtonProps) {
   const router = useRouter()
+  const analyticsBase = useAnalyticsBase()
   const [state, setState] = useState<RecordingState>('idle')
   const [consentOpen, setConsentOpen] = useState(false)
   const [elapsed, setElapsed] = useState(0)
@@ -81,6 +84,7 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
       recorder.start(10_000)
       mediaRecorderRef.current = recorder
       startedAtRef.current = Date.now()
+      trackRecordingStarted(analyticsBase)
       setElapsed(0)
       timerRef.current = setInterval(() => {
         setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000))
@@ -162,6 +166,12 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
         throw new Error(body.error ?? 'Falha ao registrar a transcrição')
       }
       const { id } = await finalizeRes.json()
+
+      trackRecordingUploaded({
+        ...analyticsBase,
+        duration_seconds: durationSeconds,
+        file_size_mb: blob.size / 1_000_000,
+      })
 
       setState('idle')
       onComplete?.(id)

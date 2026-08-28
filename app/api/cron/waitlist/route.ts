@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { sendWaitlistTemplate } from '@/lib/whatsapp/send'
 import { decryptToken } from '@/lib/crypto'
 import { getAvailableSlots } from '@/lib/google/availability'
+import { trackWaitlistPatientNotified } from '@/lib/analytics/posthog-server'
 import { addDays, format } from 'date-fns'
 import { TZDate } from '@date-fns/tz'
 
@@ -25,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   const { data: entries, error } = await supabase
     .from('waitlist')
-    .select('id, workspace_id, patient_name, patient_phone, notified_at')
+    .select('id, workspace_id, account_id, patient_name, patient_phone, notified_at')
     .eq('status', 'waiting')
     .or(`notified_at.is.null,notified_at.lt.${cooldownCutoff}`)
     .order('created_at') // FIFO: quem entrou primeiro, é avisado primeiro
@@ -76,6 +77,10 @@ export async function POST(req: NextRequest) {
       })
 
       await supabase.from('waitlist').update({ notified_at: new Date().toISOString() }).eq('id', entry.id)
+      await trackWaitlistPatientNotified(entry.workspace_id, {
+        workspace_id: entry.workspace_id,
+        account_id: entry.account_id,
+      })
       notified += 1
     } catch (err) {
       errors.push(`${entry.id}: ${String(err)}`)

@@ -1,12 +1,14 @@
 import { TZDate } from '@date-fns/tz'
 import { createAdminClient } from '@/lib/supabase/server'
 import { sendWhatsAppMessage } from '@/lib/whatsapp/send'
+import { trackHandoffTriggered } from '@/lib/analytics/posthog-server'
 import type { HandoffTriggerReason } from '@/types/database'
 
 const TZ = 'America/Sao_Paulo'
 
 interface HandoffParams {
   workspaceId: string
+  accountId: string
   conversationId: string
   patientPhone: string
   handoffNumber: string
@@ -17,7 +19,7 @@ interface HandoffParams {
 }
 
 export async function executeHandoff(params: HandoffParams) {
-  const { workspaceId, conversationId, patientPhone, handoffNumber, handoffMessage, phoneNumberId, metaToken, triggerReason } =
+  const { workspaceId, accountId, conversationId, patientPhone, handoffNumber, handoffMessage, phoneNumberId, metaToken, triggerReason } =
     params
 
   const supabase = createAdminClient()
@@ -43,6 +45,13 @@ export async function executeHandoff(params: HandoffParams) {
     trigger_reason: triggerReason,
     handoff_to: handoffNumber,
   })
+
+  await trackHandoffTriggered(accountId, {
+    workspace_id: workspaceId,
+    account_id: accountId,
+    trigger_reason: triggerReason,
+    handoff_available: true,
+  })
 }
 
 // Registra que um handoff foi pedido fora do horário de atendimento humano —
@@ -51,6 +60,7 @@ export async function executeHandoff(params: HandoffParams) {
 // e o bot segue ajudando o paciente sozinho.
 export async function logHandoffUnavailable(params: {
   workspaceId: string
+  accountId: string
   conversationId: string
   patientPhone: string
   handoffNumber: string
@@ -62,6 +72,13 @@ export async function logHandoffUnavailable(params: {
     patient_phone: params.patientPhone,
     trigger_reason: 'out_of_hours',
     handoff_to: params.handoffNumber,
+  })
+
+  await trackHandoffTriggered(params.accountId, {
+    workspace_id: params.workspaceId,
+    account_id: params.accountId,
+    trigger_reason: 'out_of_hours',
+    handoff_available: false,
   })
 }
 

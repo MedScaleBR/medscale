@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { CalendarView } from './CalendarView'
+import { useAnalyticsBase } from '@/lib/session/session-context'
+import { trackAppointmentCreatedManual, trackAppointmentStatusChanged } from '@/lib/analytics/posthog'
 import type { AppointmentFormValues, CatalogProcedureOption } from './AppointmentModal'
 import type { Database } from '@/types/database'
 import type { BusyBlock } from '@/lib/google/reconcile'
@@ -28,6 +30,7 @@ export function AgendaClient({
   const [appointments, setAppointments] = useState(initialAppointments)
   const [busyBlocks] = useState(initialBusyBlocks)
   const [error, setError] = useState<string | null>(null)
+  const analyticsBase = useAnalyticsBase()
 
   const handleCreate = async (values: AppointmentFormValues) => {
     setError(null)
@@ -53,10 +56,12 @@ export function AgendaClient({
       throw new Error(json.error)
     }
     setAppointments((prev) => [...prev, json])
+    trackAppointmentCreatedManual(analyticsBase)
   }
 
   const handleUpdate = async (id: string, values: AppointmentFormValues) => {
     setError(null)
+    const prevStatus = appointments.find((a) => a.id === id)?.status
     const res = await fetch(`/api/appointments/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -79,6 +84,13 @@ export function AgendaClient({
       throw new Error(json.error)
     }
     setAppointments((prev) => prev.map((a) => (a.id === id ? json : a)))
+    if (prevStatus && json.status && prevStatus !== json.status) {
+      trackAppointmentStatusChanged({
+        ...analyticsBase,
+        from_status: prevStatus,
+        to_status: json.status,
+      })
+    }
   }
 
   const handleDelete = async (id: string) => {

@@ -3,6 +3,8 @@
 import { useMemo, useState } from 'react'
 import { ConversationList, type ConversationListItem } from './ConversationList'
 import { ConversationDetail, type DetailMessage } from './ConversationDetail'
+import { useAnalyticsBase } from '@/lib/session/session-context'
+import { trackBotPausedManually, trackBotResumed } from '@/lib/analytics/posthog'
 import type { ConversationStatus } from '@/types/database'
 
 export interface ConversationWithMessages extends ConversationListItem {
@@ -12,6 +14,7 @@ export interface ConversationWithMessages extends ConversationListItem {
 export function BotInboxClient({ initialConversations }: { initialConversations: ConversationWithMessages[] }) {
   const [conversations, setConversations] = useState(initialConversations)
   const [selectedId, setSelectedId] = useState<string | null>(initialConversations[0]?.id ?? null)
+  const analyticsBase = useAnalyticsBase()
 
   const selected = useMemo(() => conversations.find((c) => c.id === selectedId) ?? null, [conversations, selectedId])
 
@@ -24,6 +27,9 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
     })
     if (res.ok) {
       const saved = await res.json()
+      // Responder manualmente pausa o bot — só conta como pausa manual na
+      // transição (a 1ª resposta humana), não a cada mensagem seguinte.
+      if (!selected.bot_paused) trackBotPausedManually(analyticsBase)
       setConversations((prev) =>
         prev.map((c) =>
           c.id === selected.id
@@ -62,6 +68,7 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
       body: JSON.stringify({ bot_paused: false }),
     })
     if (res.ok) {
+      trackBotResumed(analyticsBase)
       setConversations((prev) => prev.map((c) => (c.id === selected.id ? { ...c, bot_paused: false } : c)))
     }
   }

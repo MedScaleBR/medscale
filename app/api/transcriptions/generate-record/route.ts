@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { generateSOAP } from '@/lib/transcriptions/generate-soap'
+import { trackSoapGenerated, trackTranscriptionError } from '@/lib/analytics/posthog-server'
 
 export const maxDuration = 60
 
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   const { data: transcription } = await supabase
     .from('transcriptions')
-    .select('transcript_text, retry_count')
+    .select('transcript_text, retry_count, workspace_id, account_id, recorded_by')
     .eq('id', transcription_id)
     .single()
 
@@ -40,6 +41,11 @@ export async function POST(req: NextRequest) {
       })
       .eq('id', transcription_id)
 
+    await trackSoapGenerated(transcription.recorded_by, {
+      workspace_id: transcription.workspace_id,
+      account_id: transcription.account_id,
+    })
+
     return NextResponse.json({ ok: true })
   } catch (err) {
     const retryCount = (transcription.retry_count ?? 0) + 1
@@ -60,6 +66,13 @@ export async function POST(req: NextRequest) {
         .from('transcriptions')
         .update({ status: 'error', error_message: String(err) })
         .eq('id', transcription_id)
+
+      await trackTranscriptionError(transcription.recorded_by, {
+        workspace_id: transcription.workspace_id,
+        account_id: transcription.account_id,
+        error_message: String(err),
+        retry_count: retryCount,
+      })
     }
 
     return NextResponse.json({ error: String(err) }, { status: 500 })

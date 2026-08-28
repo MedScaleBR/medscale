@@ -15,6 +15,9 @@ process.env.ANTHROPIC_API_KEY = 'sk-ant-test'
 process.env.OPENAI_API_KEY = 'sk-openai-test'
 process.env.CRON_SECRET = 'cron-secret-test'
 process.env.NEXT_PUBLIC_APP_URL = 'https://app.test'
+// Sem key de PostHog nos testes — os helpers de analytics viram no-op e
+// nenhum evento é emitido.
+delete process.env.NEXT_PUBLIC_POSTHOG_KEY
 
 beforeEach(() => {
   vi.clearAllMocks()

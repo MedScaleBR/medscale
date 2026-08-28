@@ -19,6 +19,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Plus, X } from 'lucide-react'
+import { useAnalyticsBase } from '@/lib/session/session-context'
+import { trackWaitlistPatientAdded } from '@/lib/analytics/posthog'
 import type { Database, WaitlistStatus } from '@/types/database'
 
 type WaitlistEntry = Database['public']['Tables']['waitlist']['Row']
@@ -42,6 +44,7 @@ export function WaitlistClient({ initialEntries }: { initialEntries: WaitlistEnt
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const analyticsBase = useAnalyticsBase()
 
   const handleCreate = async () => {
     if (!form.patient_name || !form.patient_phone) return
@@ -57,6 +60,7 @@ export function WaitlistClient({ initialEntries }: { initialEntries: WaitlistEnt
         setEntries((prev) => [created, ...prev])
         setForm(EMPTY_FORM)
         setOpen(false)
+        trackWaitlistPatientAdded(analyticsBase)
       }
     } finally {
       setSaving(false)

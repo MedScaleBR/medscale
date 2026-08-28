@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { exchangeCodeAndSave } from '@/lib/google/auth'
+import { trackGoogleCalendarConnected } from '@/lib/analytics/posthog-server'
 
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url)
@@ -27,13 +28,17 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${appUrl}/login`)
   }
 
-  const { data: workspace } = await supabase.from('workspaces').select('id').eq('id', state).single()
+  const { data: workspace } = await supabase.from('workspaces').select('id, account_id').eq('id', state).single()
   if (!workspace) {
     return NextResponse.redirect(`${appUrl}/configuracoes?google=error`)
   }
 
   try {
     await exchangeCodeAndSave(code, state, user.id)
+    await trackGoogleCalendarConnected(user.id, {
+      workspace_id: state,
+      account_id: workspace.account_id,
+    })
     return NextResponse.redirect(`${appUrl}/configuracoes?google=connected`)
   } catch (err) {
     console.error('Google OAuth callback error:', err)
