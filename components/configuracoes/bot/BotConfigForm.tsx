@@ -84,6 +84,7 @@ export function BotConfigForm({ initialConfig, initialHandoffHours, doctorPhone,
   const [testNumber, setTestNumber] = useState(doctorPhone)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Workspaces que conectaram antes do App Secret existir ficam com is_active
@@ -125,6 +126,29 @@ export function BotConfigForm({ initialConfig, initialHandoffHours, doctorPhone,
     }
   }
 
+  const handleDisconnect = async () => {
+    if (
+      !confirm(
+        'Desconectar o número do WhatsApp? O bot para de responder os pacientes na hora e as credenciais da Meta são apagadas. ' +
+          'A personalidade, FAQ e horários ficam salvos, mas você terá que refazer a conexão para reativar.'
+      )
+    )
+      return
+    setDisconnecting(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/bot/onboarding/disconnect', { method: 'DELETE' })
+      if (!res.ok) {
+        const data = await res.json().catch(() => null)
+        setError(data?.error ?? 'Não foi possível desconectar.')
+        return
+      }
+      await refreshConfig()
+    } finally {
+      setDisconnecting(false)
+    }
+  }
+
   const handleTestMessage = async () => {
     if (!testNumber) return
     setTesting(true)
@@ -160,6 +184,15 @@ export function BotConfigForm({ initialConfig, initialHandoffHours, doctorPhone,
                 className="text-xs text-gray-400 hover:text-gray-600 hover:underline"
               >
                 Editar conexão
+              </button>
+            )}
+            {!needsOnboarding && config?.is_active && (
+              <button
+                onClick={handleDisconnect}
+                disabled={disconnecting}
+                className="text-xs text-red-400 hover:text-red-600 hover:underline disabled:opacity-50"
+              >
+                {disconnecting ? 'Desconectando...' : 'Desconectar'}
               </button>
             )}
           </div>
