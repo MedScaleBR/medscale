@@ -151,6 +151,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     accountName: account.name,
     token: invite.token,
     inviterName: user.email ?? 'Equipe MedScale',
+    role,
   })
 
   return NextResponse.json({ invite, emailSent: emailResult.sent }, { status: 201 })

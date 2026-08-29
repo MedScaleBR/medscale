@@ -125,6 +125,7 @@ export async function POST(req: NextRequest) {
     accountName: name,
     token: invite.token,
     inviterName: user.email ?? 'Equipe MedScale',
+    role: 'owner',
   })
 
   return NextResponse.json({ account, invite, emailSent: emailResult.sent }, { status: 201 })

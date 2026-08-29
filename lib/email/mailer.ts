@@ -1,10 +1,13 @@
 import nodemailer from 'nodemailer'
+import type { MembershipRole } from '@/types/database'
+import { buildInviteEmail } from '@/lib/email/templates/invite'
 
 interface SendInviteEmailParams {
   to: string
   accountName: string
   token: string
   inviterName: string
+  role?: MembershipRole
 }
 
 let cachedTransporter: ReturnType<typeof nodemailer.createTransport> | null = null
@@ -36,6 +39,7 @@ export async function sendInviteEmail({
   accountName,
   token,
   inviterName,
+  role,
 }: SendInviteEmailParams): Promise<{ sent: boolean; error?: string }> {
   const transporter = getTransporter()
   const from = process.env.SMTP_FROM
@@ -46,19 +50,16 @@ export async function sendInviteEmail({
   }
 
   const inviteUrl = `${process.env.NEXT_PUBLIC_APP_URL}/invite/${token}`
+  const { subject, html, text } = buildInviteEmail({
+    inviterName,
+    accountName,
+    inviteUrl,
+    recipientEmail: to,
+    role,
+  })
 
   try {
-    await transporter.sendMail({
-      from,
-      to,
-      subject: `${inviterName} te convidou para o MedScale`,
-      html: `
-        <p>Olá!</p>
-        <p><strong>${inviterName}</strong> te convidou para fazer parte de <strong>${accountName}</strong> no MedScale.</p>
-        <p><a href="${inviteUrl}">Clique aqui para aceitar o convite</a></p>
-        <p style="color:#888;font-size:12px">Este link expira em 7 dias.</p>
-      `,
-    })
+    await transporter.sendMail({ from, to, subject, html, text })
 
     return { sent: true }
   } catch (err) {
