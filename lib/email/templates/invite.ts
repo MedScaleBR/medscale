@@ -201,7 +201,7 @@ export function buildInviteEmail(params: InviteEmailParams): {
           Você recebeu este e-mail porque alguém da ${account} te convidou para o MedScale. Não esperava por isso? Ignore esta mensagem — sem clicar no link, nenhuma conta é criada.
         </p>
         <p style="margin:14px 0 0 0; font-family:Arial, Helvetica, sans-serif; font-size:12px; line-height:20px; mso-line-height-rule:exactly; color:#8A93AB;">
-         /*  MedScale &middot; Rua dos Pinheiros, 498 &middot; São Paulo/SP &middot; 05422-012<br> */
+          MedScale &middot;  &middot; Brasília/DF &middot;<br>
           Dúvidas? Responda este e-mail ou escreva para <a href="mailto:medscalebr@gmail.com" style="color:#0094AF; text-decoration:underline;">medscale@gmail.com</a>
         </p>
       </td>
