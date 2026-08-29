@@ -42,3 +42,6 @@ next-env.d.ts
 
 # test coverage
 /coverage
+
+# Claude Design export — source for the invite email template, not app code
+Invite email HTML design/
