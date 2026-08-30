@@ -46,6 +46,26 @@ export async function executeHandoff(params: HandoffParams) {
     handoff_to: handoffNumber,
   })
 
+  // 5. Notificar a equipe por Web Push (fire-and-forget — nunca derruba o
+  // handoff). Import dinâmico para não carregar `web-push` em quem nunca
+  // chega aqui.
+  try {
+    const { data: convo } = await supabase
+      .from('conversations')
+      .select('patients(full_name)')
+      .eq('id', conversationId)
+      .single()
+    const patientName = (convo?.patients as unknown as { full_name: string } | null)?.full_name ?? 'Paciente'
+    const { sendHandoffPush } = await import('@/lib/push/send')
+    await sendHandoffPush(workspaceId, {
+      title: '🔔 Atendimento solicitado',
+      body: `${patientName} pediu atendimento humano`,
+      url: `/bot?c=${conversationId}`,
+    })
+  } catch (err) {
+    console.error('[handoff] push notification failed', err)
+  }
+
   await trackHandoffTriggered(accountId, {
     workspace_id: workspaceId,
     account_id: accountId,

@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Mail, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { Mail, X, ChevronDown, ChevronUp, Bell } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MODULE_NAV } from '@/components/layout/NavLinks'
 import type { MembershipRole, MembershipStatus, ModuleSlug } from '@/types/database'
@@ -16,6 +16,7 @@ type Member = {
   role: MembershipRole
   status: MembershipStatus
   moduleOverrides: ModuleSlug[] | null
+  handoffPushEnabled: boolean
   userName: string
   userEmail: string
   isSelf: boolean
@@ -205,6 +206,15 @@ export function TeamClient({
                     <p className="text-xs text-gray-400">{m.userEmail}</p>
                   </div>
                   <div className="flex items-center gap-2">
+                    {m.handoffPushEnabled && (
+                      <Badge
+                        className="flex items-center gap-1 border-none bg-[var(--cyan-10)] text-[var(--cyan-dark)]"
+                        title="Recebe notificações push quando chega um handoff"
+                      >
+                        <Bell className="h-3 w-3" />
+                        handoff
+                      </Badge>
+                    )}
                     <Badge className={cn('border-none', STATUS_STYLE[m.status])}>{m.status}</Badge>
                     {canManage ? (
                       <Select value={m.role} onValueChange={(v) => v && updateRole(m.id, v as MembershipRole)}>
