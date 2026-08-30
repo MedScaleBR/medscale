@@ -3,6 +3,11 @@
 // lib/push/client.ts quando o membro liga as notificações neste dispositivo.
 // Payload esperado do backend (lib/push/send.ts): { title, body, url }.
 
+// Assume o controle assim que uma versão nova é instalada, sem esperar todas
+// as abas fecharem — evita SW antigo (sem handler de push) ficar no comando.
+self.addEventListener('install', () => self.skipWaiting())
+self.addEventListener('activate', (event) => event.waitUntil(self.clients.claim()))
+
 self.addEventListener('push', (event) => {
   let data = {}
   try {
