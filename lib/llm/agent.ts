@@ -254,6 +254,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   // andamento) — só registra a mensagem recebida, sem responder
   // automaticamente, até a equipe reativar pelo painel.
   if (conversation.bot_paused) {
+    console.log(`[handoff] conversa ${conversation.id} está bot_paused — mensagem só registrada, bot não responde`)
     return
   }
 
@@ -543,6 +544,12 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   const canAttemptHandoff =
     handoffCheck.needed && botConfig.handoffNumber && workspace?.phone_number_id && workspace?.meta_token
 
+  console.log(
+    `[handoff] needed=${handoffCheck.needed} reason=${handoffCheck.reason ?? '-'} ` +
+      `hasNumber=${Boolean(botConfig.handoffNumber)} hasPhoneId=${Boolean(workspace?.phone_number_id)} ` +
+      `hasToken=${Boolean(workspace?.meta_token)} canAttempt=${Boolean(canAttemptHandoff)}`
+  )
+
   // 10. Decidir a mensagem final para o paciente e se o handoff acontece de
   // verdade. Se o agendamento/cancelamento que o Claude anunciou não bateu de
   // fato no banco (bookingFailed/cancellationFailed), a resposta do Claude é
@@ -560,6 +567,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
 
   if (canAttemptHandoff) {
     const handoffAvailable = await isHandoffAvailableNow(workspaceId).catch(() => true)
+    console.log(`[handoff] canAttempt=true handoffAvailableNow=${handoffAvailable}`)
     if (handoffAvailable) {
       realHandoff = true
       // A mensagem de transição + número são enviadas separadamente por executeHandoff
@@ -578,6 +586,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   // bloco de texto, ver o console.error acima). Em vez de mandar a mesma
   // coisa de novo, escala pra um humano e pausa o bot.
   if (finalMessage && !realHandoff && finalMessage === lastAssistantContent) {
+    console.log('[handoff] disjuntor de loop acionado (resposta repetida) — escalando para humano')
     const escalationMessage = botConfig.handoffNumber
       ? `Desculpa, não estou conseguindo resolver isso sozinha. Vou te passar para a equipe de ${workspaceName}: ${botConfig.handoffNumber}`
       : 'Desculpa, não estou conseguindo resolver isso sozinha. Já avisei a equipe sobre sua solicitação — alguém vai te chamar em breve.'
@@ -654,6 +663,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     }
 
     if (realHandoff && botConfig.handoffNumber) {
+      console.log('[handoff] executeHandoff() — transferência real')
       await executeHandoff({
         workspaceId,
         accountId,
