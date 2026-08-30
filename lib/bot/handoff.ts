@@ -11,7 +11,9 @@ interface HandoffParams {
   accountId: string
   conversationId: string
   patientPhone: string
-  handoffNumber: string
+  // Opcional: sem número configurado o handoff acontece do mesmo jeito (pausa
+  // o bot, loga, notifica a equipe) — só não manda "Contato: ..." ao paciente.
+  handoffNumber?: string | null
   handoffMessage: string
   phoneNumberId: string
   metaToken: string // já descriptografado pelo chamador
@@ -27,8 +29,10 @@ export async function executeHandoff(params: HandoffParams) {
   // 1. Enviar mensagem de transição para o paciente
   await sendWhatsAppMessage({ to: patientPhone, message: handoffMessage, phoneNumberId, token: metaToken })
 
-  // 2. Enviar o número de contato humano
-  await sendWhatsAppMessage({ to: patientPhone, message: `Contato: ${handoffNumber}`, phoneNumberId, token: metaToken })
+  // 2. Enviar o número de contato humano (só se estiver configurado)
+  if (handoffNumber) {
+    await sendWhatsAppMessage({ to: patientPhone, message: `Contato: ${handoffNumber}`, phoneNumberId, token: metaToken })
+  }
 
   // 3. Marcar conversa como handoff no banco e pausar o bot — ele só volta a
   // responder quando a equipe reativar pelo painel.
@@ -43,7 +47,7 @@ export async function executeHandoff(params: HandoffParams) {
     conversation_id: conversationId,
     patient_phone: patientPhone,
     trigger_reason: triggerReason,
-    handoff_to: handoffNumber,
+    handoff_to: handoffNumber ?? null,
   })
 
   // 5. Notificar a equipe por Web Push (fire-and-forget — nunca derruba o
@@ -83,7 +87,7 @@ export async function logHandoffUnavailable(params: {
   accountId: string
   conversationId: string
   patientPhone: string
-  handoffNumber: string
+  handoffNumber?: string | null
 }) {
   const supabase = createAdminClient()
   await supabase.from('handoff_logs').insert({
@@ -91,7 +95,7 @@ export async function logHandoffUnavailable(params: {
     conversation_id: params.conversationId,
     patient_phone: params.patientPhone,
     trigger_reason: 'out_of_hours',
-    handoff_to: params.handoffNumber,
+    handoff_to: params.handoffNumber ?? null,
   })
 
   await trackHandoffTriggered(params.accountId, {

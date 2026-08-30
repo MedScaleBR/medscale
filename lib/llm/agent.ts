@@ -539,10 +539,14 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
 
   const lastAssistantContent = [...(history ?? [])].reverse().find((m) => m.role === 'assistant')?.content
 
-  // 9. Detectar necessidade de handoff para atendimento humano
+  // 9. Detectar necessidade de handoff para atendimento humano.
+  // O número de contato humano (botConfig.handoffNumber) é OPCIONAL: sem ele o
+  // handoff acontece do mesmo jeito (pausa o bot, loga, notifica a equipe por
+  // push), só não manda "Contato: ..." ao paciente. Precisamos apenas do
+  // phone_number_id + meta_token para conseguir enviar qualquer mensagem.
   const handoffCheck = detectHandoffIntent(cleanedMessage, message)
   const canAttemptHandoff =
-    handoffCheck.needed && botConfig.handoffNumber && workspace?.phone_number_id && workspace?.meta_token
+    handoffCheck.needed && workspace?.phone_number_id && workspace?.meta_token
 
   console.log(
     `[handoff] needed=${handoffCheck.needed} reason=${handoffCheck.reason ?? '-'} ` +
@@ -662,8 +666,8 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
       })
     }
 
-    if (realHandoff && botConfig.handoffNumber) {
-      console.log('[handoff] executeHandoff() — transferência real')
+    if (realHandoff) {
+      console.log(`[handoff] executeHandoff() — transferência real (número ${botConfig.handoffNumber ? 'configurado' : 'ausente'})`)
       await executeHandoff({
         workspaceId,
         accountId,
@@ -678,7 +682,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
       return // conversa transferida de verdade — encerra o processamento
     }
 
-    if (canAttemptHandoff && !realHandoff && botConfig.handoffNumber) {
+    if (canAttemptHandoff && !realHandoff) {
       await logHandoffUnavailable({
         workspaceId,
         accountId,
