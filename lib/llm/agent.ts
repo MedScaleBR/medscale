@@ -610,6 +610,19 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
       })
     }
 
+    // Notificar a equipe por Web Push também neste caminho (disjuntor de loop):
+    // é uma transferência para humano como qualquer outra. Fire-and-forget.
+    try {
+      const { sendHandoffPush } = await import('@/lib/push/send')
+      await sendHandoffPush(workspaceId, {
+        title: '🔔 Atendimento solicitado',
+        body: `${patient?.full_name ?? 'Paciente'} precisa de atendimento humano`,
+        url: `/bot?c=${conversation.id}`,
+      })
+    } catch (err) {
+      console.error('[handoff] push notification failed', err)
+    }
+
     return
   }
 
