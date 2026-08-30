@@ -89,7 +89,7 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
   }
 
   return (
-    <div className="grid h-[calc(100vh-160px)] grid-cols-1 gap-0 overflow-hidden rounded-xl border border-[var(--navy-06)] bg-white shadow-[var(--shadow-sm)] md:grid-cols-[280px_1fr]">
+    <div className="grid h-[calc(100vh-160px)] grid-cols-1 gap-0 overflow-hidden rounded-xl border border-[var(--navy-06)] bg-white shadow-[var(--shadow-sm)] md:grid-cols-[340px_1fr]">
       <div className="min-h-0 overflow-hidden border-r border-[var(--navy-06)]">
         <ConversationList conversations={conversations} selectedId={selectedId} onSelect={setSelectedId} />
       </div>
