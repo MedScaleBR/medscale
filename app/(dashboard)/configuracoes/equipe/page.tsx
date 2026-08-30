@@ -18,7 +18,7 @@ export default async function EquipePage() {
   const [{ data: membershipsRaw }, { data: invitesRaw }] = await Promise.all([
     supabase
       .from('memberships')
-      .select('id, user_id, role, status, module_overrides')
+      .select('id, user_id, role, status, module_overrides, handoff_push_enabled')
       .eq('account_id', session.accountId)
       .order('invited_at'),
     supabase
@@ -45,6 +45,7 @@ export default async function EquipePage() {
       role: m.role,
       status: m.status,
       moduleOverrides: m.module_overrides as ModuleSlug[] | null,
+      handoffPushEnabled: m.handoff_push_enabled,
       userName: profile?.full_name ?? 'Sem nome',
       userEmail: profile?.email ?? '—',
       isSelf: m.user_id === session.userId,

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { ConversationList, type ConversationListItem } from './ConversationList'
 import { ConversationDetail, type DetailMessage } from './ConversationDetail'
 import { useAnalyticsBase } from '@/lib/session/session-context'
@@ -17,6 +17,18 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
   const analyticsBase = useAnalyticsBase()
 
   const selected = useMemo(() => conversations.find((c) => c.id === selectedId) ?? null, [conversations, selectedId])
+
+  // Deep-link vindo da notificação push de handoff (/bot?c=<id>). Sincroniza
+  // uma vez, depois da hidratação — evita useSearchParams (exigiria Suspense
+  // boundary nesta página) e mismatch de hidratação.
+  useEffect(() => {
+    const target = new URLSearchParams(window.location.search).get('c')
+    if (target && conversations.some((c) => c.id === target)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedId(target)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const handleSend = async (message: string) => {
     if (!selected) return

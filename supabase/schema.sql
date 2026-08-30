@@ -21,6 +21,7 @@ drop table if exists
   public.finance_sessions,
   public.finance_entries,
   public.transcriptions,
+  public.push_subscriptions,
   public.handoff_hours,
   public.handoff_logs,
   public.rate_limit_log,
@@ -137,6 +138,9 @@ create table public.memberships (
   accepted_at       timestamptz,
   status            text not null default 'active'
                     check (status in ('pending','active','suspended')),
+  -- Opt-in por membro: quer receber notificação push quando um handoff real
+  -- acontecer numa workspace da account (ver push_subscriptions + lib/push).
+  handoff_push_enabled boolean not null default false,
   unique(account_id, user_id)
 );
 
@@ -607,6 +611,22 @@ create table public.handoff_hours (
   created_at    timestamptz not null default now()
 );
 
+-- Web Push subscriptions (VAPID) — uma por browser/dispositivo de cada usuário,
+-- por workspace. Usadas por lib/push/send.ts para avisar a equipe quando
+-- executeHandoff() roda. Fire-and-forget: subscriptions inválidas (404/410) são
+-- apagadas na hora do envio.
+create table public.push_subscriptions (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid not null references auth.users(id) on delete cascade,
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  endpoint     text not null,
+  p256dh       text not null,
+  auth         text not null,
+  user_agent   text,
+  created_at   timestamptz not null default now(),
+  unique (workspace_id, endpoint)
+);
+
 -- ============================================================
 -- 9. ÍNDICES
 -- ============================================================
@@ -634,6 +654,8 @@ create index idx_webhook_logs_workspace      on public.webhook_logs(workspace_id
 create index idx_rate_limit_workspace_phone  on public.rate_limit_log(workspace_id, phone);
 create index idx_handoff_logs_workspace      on public.handoff_logs(workspace_id, sent_at desc);
 create index idx_handoff_hours_workspace     on public.handoff_hours(workspace_id, day_of_week);
+create index idx_push_subscriptions_workspace on public.push_subscriptions(workspace_id);
+create index idx_push_subscriptions_user      on public.push_subscriptions(user_id);
 create index idx_transcriptions_workspace    on public.transcriptions(workspace_id, created_at desc);
 create index idx_transcriptions_appointment  on public.transcriptions(appointment_id);
 create index idx_transcriptions_patient      on public.transcriptions(patient_id);
@@ -846,6 +868,7 @@ alter table public.webhook_logs           enable row level security;
 alter table public.rate_limit_log         enable row level security;
 alter table public.handoff_logs           enable row level security;
 alter table public.handoff_hours          enable row level security;
+alter table public.push_subscriptions     enable row level security;
 alter table public.transcriptions         enable row level security;
 alter table public.account_notes          enable row level security;
 alter table public.account_tasks          enable row level security;
@@ -957,6 +980,11 @@ create policy "handoff_logs: workspace members" on public.handoff_logs
 
 create policy "handoff_hours: workspace members" on public.handoff_hours
   for all using (workspace_id = any(public.my_workspace_ids()));
+
+-- push_subscriptions: cada usuário só enxerga/gerencia as próprias. O envio
+-- (lib/push/send.ts) roda com service_role e ignora esta policy.
+create policy "push_subscriptions: own" on public.push_subscriptions
+  for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 create policy "transcriptions: workspace members" on public.transcriptions
   for all using (workspace_id = any(public.my_workspace_ids()));

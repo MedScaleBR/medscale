@@ -129,6 +129,7 @@ export interface Database {
           invited_at: string
           accepted_at: string | null
           status: MembershipStatus
+          handoff_push_enabled: boolean
         }
         Insert: Partial<Database['public']['Tables']['memberships']['Row']> & { account_id: string; user_id: string }
         Update: Partial<Database['public']['Tables']['memberships']['Row']>
@@ -809,6 +810,34 @@ export interface Database {
         Relationships: [
           {
             foreignKeyName: 'handoff_hours_workspace_id_fkey'
+            columns: ['workspace_id']
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      push_subscriptions: {
+        Row: {
+          id: string
+          user_id: string
+          workspace_id: string
+          endpoint: string
+          p256dh: string
+          auth: string
+          user_agent: string | null
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['push_subscriptions']['Row']> & {
+          user_id: string
+          workspace_id: string
+          endpoint: string
+          p256dh: string
+          auth: string
+        }
+        Update: Partial<Database['public']['Tables']['push_subscriptions']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'push_subscriptions_workspace_id_fkey'
             columns: ['workspace_id']
             referencedRelation: 'workspaces'
             referencedColumns: ['id']

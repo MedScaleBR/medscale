@@ -13,6 +13,7 @@ import { BotPreview } from './BotPreview'
 import { BotStatusBadge } from './BotStatusBadge'
 import { BotOnboarding } from './BotOnboarding'
 import { HandoffHoursSettings } from './HandoffHoursSettings'
+import { PushToggle } from '@/components/push/PushToggle'
 import { BOT_NAME } from '@/lib/bot/constants'
 import type { Database } from '@/types/database'
 
@@ -48,6 +49,7 @@ interface BotConfigFormProps {
   initialHandoffHours: HandoffHour[]
   doctorPhone: string
   hasMetaAppSecret: boolean
+  initialHandoffPushEnabled: boolean
 }
 
 function toFormState(config: BotConfigRow | null): FormState {
@@ -78,7 +80,13 @@ function toFormState(config: BotConfigRow | null): FormState {
   }
 }
 
-export function BotConfigForm({ initialConfig, initialHandoffHours, doctorPhone, hasMetaAppSecret }: BotConfigFormProps) {
+export function BotConfigForm({
+  initialConfig,
+  initialHandoffHours,
+  doctorPhone,
+  hasMetaAppSecret,
+  initialHandoffPushEnabled,
+}: BotConfigFormProps) {
   const [config, setConfig] = useState(initialConfig)
   const [form, setForm] = useState<FormState>(toFormState(initialConfig))
   const [testNumber, setTestNumber] = useState(doctorPhone)
@@ -505,6 +513,11 @@ export function BotConfigForm({ initialConfig, initialHandoffHours, doctorPhone,
                 <HandoffHoursSettings initialHours={initialHandoffHours} />
               </div>
             </div>
+          </section>
+
+          <section className="mb-6 break-inside-avoid rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
+            <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Notificações de handoff</h3>
+            <PushToggle initialHandoffEnabled={initialHandoffPushEnabled} />
           </section>
         </div>
 
