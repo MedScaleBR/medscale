@@ -6,5 +6,9 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
+  // `sw.js` fica de fora: o navegador revalida o service worker sem garantia
+  // de cookie de sessão e, se o middleware responder com o redirect para
+  // /login, o script do SW volta como HTML e o navegador invalida o registro
+  // — o push para de funcionar silenciosamente.
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|sw.js|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)'],
 }
