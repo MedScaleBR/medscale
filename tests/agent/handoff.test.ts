@@ -179,6 +179,21 @@ describe('executeHandoff — transferência efetiva', () => {
       handoff_to: '+5511999998888',
     })
   })
+
+  it('sem número configurado: transfere do mesmo jeito, só não manda "Contato:"', async () => {
+    const supabase = setup()
+
+    await executeHandoff({ ...params, handoffNumber: null })
+
+    const enviadas = (sendWhatsAppMessage.mock.calls as unknown as Array<[{ message: string }]>).map((c) => c[0].message)
+    expect(enviadas).toEqual(['Vou te transferir para a equipe.'])
+
+    expect(supabase.callsTo('conversations', 'update')[0]?.payload).toMatchObject({ status: 'handoff', bot_paused: true })
+    expect(supabase.callsTo('handoff_logs', 'insert')[0]?.payload).toMatchObject({
+      trigger_reason: 'user_request',
+      handoff_to: null,
+    })
+  })
 })
 
 describe('logHandoffUnavailable — pedido fora do horário humano', () => {
