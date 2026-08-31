@@ -33,6 +33,14 @@
 begin;
 
 -- ============================================================
+-- 0. RLS — remove as policies antigas ANTES de mexer nas colunas de que elas
+--    dependem (workspace_id em bot_config/google_tokens). As novas são
+--    recriadas na seção 6.
+-- ============================================================
+drop policy if exists "bot_config: workspace members"    on public.bot_config;
+drop policy if exists "google_tokens: workspace members"  on public.google_tokens;
+
+-- ============================================================
 -- 1. WORKSPACES — campos que variam por unidade
 -- ============================================================
 alter table public.workspaces
@@ -236,12 +244,13 @@ create unique index if not exists rate_limit_log_account_id_phone_key
 
 -- ============================================================
 -- 6. RLS — bot_config e google_tokens passam a ser por account
+--    (as policies antigas já foram removidas na seção 0)
 -- ============================================================
-drop policy if exists "bot_config: workspace members" on public.bot_config;
+drop policy if exists "bot_config: account members" on public.bot_config;
 create policy "bot_config: account members" on public.bot_config
   for all using (account_id = any(public.my_account_ids()));
 
-drop policy if exists "google_tokens: workspace members" on public.google_tokens;
+drop policy if exists "google_tokens: account members" on public.google_tokens;
 create policy "google_tokens: account members" on public.google_tokens
   for all using (account_id = any(public.my_account_ids()));
 
