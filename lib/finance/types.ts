@@ -5,6 +5,8 @@ export type { FinanceEntryType }
 export type FinanceEntry = {
   id: string
   account_id: string
+  // Unidade do lançamento. null = consolidado / account-wide (padrão para PF).
+  workspace_id: string | null
   recorded_by_phone: string
   type: FinanceEntryType
   description: string | null
@@ -28,9 +30,13 @@ export type FinanceIntent =
       description: string | null
       amount: number
       category: string | null
+      // Trecho do nome da unidade mencionado na mensagem (PJ). O agente
+      // resolve contra as unidades reais da account; null = não mencionou.
+      workspaceHint: string | null
     }
   // `type: null` = PF e PJ juntos; `category: null` = todas; `month: null` = mês atual.
-  | { kind: 'query'; type: FinanceEntryType | null; category: string | null; month: string | null }
+  // `workspace: null` = consolidado (todas as unidades).
+  | { kind: 'query'; type: FinanceEntryType | null; category: string | null; month: string | null; workspace: string | null }
   // Ciclo de receita: o médico avisa que um paciente pagou uma consulta.
   // Sempre passa por confirmação explícita antes de persistir.
   | { kind: 'confirm_payment'; patient: string | null; time: string | null; method: RevenuePaymentMethod | null }

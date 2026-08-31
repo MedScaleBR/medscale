@@ -20,8 +20,11 @@ import {
   buildPaymentConfirmedMessage,
   buildPaymentConfirmCancelledMessage,
   buildPaymentMethodNeededMessage,
+  buildChooseWorkspaceMessage,
+  buildWorkspaceNotMatchedMessage,
   type QueryFilters,
 } from './respond'
+import { normalizeName } from './appointment-payment'
 import {
   findTodayUnpaidByPatient,
   confirmAppointmentPayment,
@@ -39,7 +42,57 @@ interface PendingPaymentConfirm {
   method: RevenuePaymentMethod | null
   match: AppointmentPaymentMatch
 }
+// Lançamento PJ aguardando o owner dizer a unidade, guardado em
+// finance_sessions.pending_entry entre as duas mensagens.
+interface PendingChooseWorkspace {
+  kind: 'choose_workspace'
+  entry: { type: 'pj'; description: string | null; amount: number; category: string | null; raw_message: string }
+}
+
 const PENDING_TTL_MS = 30 * 60 * 1000
+
+interface AccountUnit {
+  id: string
+  name: string
+}
+
+async function listAccountUnits(
+  supabase: ReturnType<typeof createAdminClient>,
+  accountId: string
+): Promise<AccountUnit[]> {
+  const { data } = await supabase
+    .from('workspaces')
+    .select('id, name')
+    .eq('account_id', accountId)
+    .eq('is_active', true)
+    .order('display_order')
+  return data ?? []
+}
+
+// Casa o que o owner digitou (nome parcial ou número da lista) com uma unidade.
+// Com uma única unidade, sempre resolve para ela.
+export function resolveUnit(
+  units: AccountUnit[],
+  hint: string | null
+): { status: 'one'; unit: AccountUnit } | { status: 'none' } | { status: 'ambiguous' } {
+  if (units.length === 1) return { status: 'one', unit: units[0] }
+  if (!hint) return { status: 'none' }
+
+  const trimmed = hint.trim()
+  const asNumber = Number(trimmed)
+  if (Number.isInteger(asNumber) && asNumber >= 1 && asNumber <= units.length) {
+    return { status: 'one', unit: units[asNumber - 1] }
+  }
+
+  const q = normalizeName(trimmed)
+  const hits = units.filter((u) => {
+    const n = normalizeName(u.name)
+    return n.includes(q) || q.includes(n)
+  })
+  if (hits.length === 1) return { status: 'one', unit: hits[0] }
+  if (hits.length > 1) return { status: 'ambiguous' }
+  return { status: 'none' }
+}
 
 const AFFIRMATIVE = /^(s|sim|isso|isso mesmo|exato|é isso|e isso|confirmo|confirma|confirmar|pode confirmar|ok|ta|tá|👍|isso ai|isso aí)\b/i
 const NEGATIVE = /^(n|nao|não|cancela|cancelar|deixa|esquece|errado|não era|nao era|para|pare)\b/i
@@ -127,7 +180,10 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
 
   const revenueCycleActive = account?.modules?.includes('revenue_cycle') ?? false
 
-  // 2.5 Há uma confirmação de pagamento de consulta esperando o "sim" do owner?
+  // 2.5 Há um lançamento PJ esperando o owner dizer a unidade?
+  if (await handlePendingChooseWorkspace(supabase, accountId, senderPhone, messageText, membership.user_id)) return
+
+  // 2.6 Há uma confirmação de pagamento de consulta esperando o "sim" do owner?
   // (ciclo de receita — fluxo de duas mensagens, ver PendingPaymentConfirm)
   if (await handlePendingPaymentConfirm(supabase, accountId, senderPhone, messageText)) return
 
@@ -186,12 +242,24 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
   }
 
   if (intent.kind === 'query') {
+    // Recorte por unidade: "quanto a Moema gastou" filtra; sem menção = consolidado.
+    const units = await listAccountUnits(supabase, accountId)
+    const resolved = intent.workspace ? resolveUnit(units, intent.workspace) : { status: 'none' as const }
+    const unit = resolved.status === 'one' ? resolved.unit : null
+
     const entries = await getEntries(accountId, {
       type: intent.type,
       category: intent.category,
       month: intent.month,
+      workspaceId: unit?.id ?? null,
+      unitLabel: unit?.name ?? null,
     })
-    const response = await buildQueryMessage(entries, intent)
+    const unitNames = Object.fromEntries(units.map((u) => [u.id, u.name]))
+    const response = await buildQueryMessage(
+      entries,
+      { type: intent.type, category: intent.category, month: intent.month, workspaceId: unit?.id ?? null, unitLabel: unit?.name ?? null },
+      unitNames
+    )
     await sendFinanceReply(senderPhone, response)
     return
   }
@@ -203,39 +271,101 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
     category = await categorizeEntry(intent.description, intent.type)
   }
 
-  // 5. Salvar no banco
+  // 4.5 Lançamento PJ pertence a uma unidade. Se a account tem mais de uma e a
+  // mensagem não deixou claro qual, pergunta antes de gravar. PF é sempre
+  // consolidado (workspace_id null).
+  let workspaceId: string | null = null
+  if (intent.type === 'pj') {
+    const units = await listAccountUnits(supabase, accountId)
+    const resolved = resolveUnit(units, intent.workspaceHint)
+    if (resolved.status === 'one') {
+      workspaceId = resolved.unit.id
+    } else {
+      await setPendingFinanceSession(supabase, accountId, senderPhone, {
+        kind: 'choose_workspace',
+        entry: {
+          type: 'pj',
+          description: intent.description,
+          amount: intent.amount,
+          category: category ?? null,
+          raw_message: messageText,
+        },
+      })
+      await sendFinanceReply(senderPhone, buildChooseWorkspaceMessage(units, intent.description, intent.amount))
+      return
+    }
+  }
+
+  // 5. Salvar no banco + confirmar
+  await persistEntryAndConfirm(supabase, {
+    accountId,
+    senderPhone,
+    userId: membership.user_id,
+    type: intent.type,
+    description: intent.description,
+    amount: intent.amount,
+    category: category ?? null,
+    workspaceId,
+    rawMessage: messageText,
+    today,
+  })
+}
+
+// Insere o lançamento e responde com a confirmação + total do mês. Usado tanto
+// no fluxo direto quanto depois de o owner escolher a unidade (PJ).
+async function persistEntryAndConfirm(
+  supabase: ReturnType<typeof createAdminClient>,
+  args: {
+    accountId: string
+    senderPhone: string
+    userId: string
+    type: FinanceEntry['type']
+    description: string | null
+    amount: number
+    category: string | null
+    workspaceId: string | null
+    rawMessage: string
+    today: string
+  }
+): Promise<void> {
   const { data: entry, error } = await supabase
     .from('finance_entries')
     .insert({
-      account_id: accountId,
-      recorded_by_phone: senderPhone,
-      type: intent.type,
-      description: intent.description,
-      amount: intent.amount,
-      category,
-      raw_message: messageText,
-      entry_date: today,
+      account_id: args.accountId,
+      workspace_id: args.workspaceId,
+      recorded_by_phone: args.senderPhone,
+      type: args.type,
+      description: args.description,
+      amount: args.amount,
+      category: args.category,
+      raw_message: args.rawMessage,
+      entry_date: args.today,
     })
     .select('*')
     .single()
 
   if (error || !entry) {
-    await sendFinanceReply(senderPhone, `Erro ao registrar o lançamento. Tente novamente.`)
+    await sendFinanceReply(args.senderPhone, `Erro ao registrar o lançamento. Tente novamente.`)
     return
   }
 
-  await trackFinanceEntryCreatedViaWhatsApp(membership.user_id, {
-    account_id: accountId,
-    category: category ?? null,
+  await trackFinanceEntryCreatedViaWhatsApp(args.userId, {
+    account_id: args.accountId,
+    category: args.category ?? null,
     amount: entry.amount,
   })
 
-  // 6. Calcular total do mês para a confirmação
-  const monthEntries = await getEntries(accountId, { type: intent.type, category: null, month: null })
+  const monthEntries = await getEntries(args.accountId, {
+    type: args.type,
+    category: null,
+    month: null,
+    workspaceId: null,
+    unitLabel: null,
+  })
   const monthTotal = monthEntries.reduce((s, e) => s + e.amount, 0)
 
   const response = await buildConfirmationMessage(entry, monthTotal)
-  await sendFinanceReply(senderPhone, response)
+  await sendFinanceReply(args.senderPhone, response)
 }
 
 // Apaga o lançamento mais recente da account. Existe porque o registro por
@@ -338,6 +468,15 @@ async function setPendingPaymentConfirm(
   senderPhone: string,
   pending: PendingPaymentConfirm
 ): Promise<void> {
+  await setPendingFinanceSession(supabase, accountId, senderPhone, pending)
+}
+
+async function setPendingFinanceSession(
+  supabase: ReturnType<typeof createAdminClient>,
+  accountId: string,
+  senderPhone: string,
+  pending: PendingPaymentConfirm | PendingChooseWorkspace
+): Promise<void> {
   await supabase.from('finance_sessions').upsert(
     {
       phone: senderPhone,
@@ -347,6 +486,64 @@ async function setPendingPaymentConfirm(
     },
     { onConflict: 'phone' }
   )
+}
+
+// Trata a mensagem quando há um lançamento PJ aguardando a escolha da unidade.
+// Retorna true se a mensagem foi consumida aqui.
+async function handlePendingChooseWorkspace(
+  supabase: ReturnType<typeof createAdminClient>,
+  accountId: string,
+  senderPhone: string,
+  messageText: string,
+  userId: string
+): Promise<boolean> {
+  const { data: fsession } = await supabase
+    .from('finance_sessions')
+    .select('pending_entry, last_message_at')
+    .eq('phone', senderPhone)
+    .maybeSingle()
+
+  const pending = fsession?.pending_entry as PendingChooseWorkspace | null | undefined
+  if (!pending || pending.kind !== 'choose_workspace') return false
+
+  // Expirou — limpa e deixa a mensagem seguir o fluxo normal.
+  if (
+    fsession?.last_message_at &&
+    Date.now() - new Date(fsession.last_message_at).getTime() > PENDING_TTL_MS
+  ) {
+    await clearPendingFinanceSession(supabase, senderPhone)
+    return false
+  }
+
+  const text = messageText.trim()
+  if (NEGATIVE.test(text)) {
+    await clearPendingFinanceSession(supabase, senderPhone)
+    await sendFinanceReply(senderPhone, 'Ok, não registrei nada. Me chama de novo quando quiser.')
+    return true
+  }
+
+  const units = await listAccountUnits(supabase, accountId)
+  const resolved = resolveUnit(units, text)
+  if (resolved.status !== 'one') {
+    await sendFinanceReply(senderPhone, buildWorkspaceNotMatchedMessage(units))
+    return true
+  }
+
+  await clearPendingFinanceSession(supabase, senderPhone)
+  const today = new Date().toISOString().split('T')[0]
+  await persistEntryAndConfirm(supabase, {
+    accountId,
+    senderPhone,
+    userId,
+    type: 'pj',
+    description: pending.entry.description,
+    amount: pending.entry.amount,
+    category: pending.entry.category,
+    workspaceId: resolved.unit.id,
+    rawMessage: pending.entry.raw_message,
+    today,
+  })
+  return true
 }
 
 async function clearPendingFinanceSession(
@@ -379,6 +576,7 @@ async function getEntries(accountId: string, filters: QueryFilters): Promise<Fin
 
   if (filters.type) query = query.eq('type', filters.type)
   if (filters.category) query = query.eq('category', filters.category)
+  if (filters.workspaceId) query = query.eq('workspace_id', filters.workspaceId)
 
   const { data } = await query.order('entry_date', { ascending: false })
 

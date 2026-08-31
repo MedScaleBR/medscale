@@ -86,6 +86,12 @@ const INTENT_TOOL = {
         type: ['string', 'null'],
         description: 'Mês da consulta no formato YYYY-MM. null quando é o mês atual.',
       },
+      unidade: {
+        type: ['string', 'null'],
+        description:
+          'Nome (ou trecho do nome) da unidade/clínica mencionada. Em lancamento PJ: a unidade a que o gasto pertence. ' +
+          'Em consulta: a unidade pela qual filtrar. null quando a mensagem não cita nenhuma unidade.',
+      },
     },
     required: [
       'intencao',
@@ -94,6 +100,7 @@ const INTENT_TOOL = {
       'valor',
       'categoria',
       'mes',
+      'unidade',
       'paciente',
       'horario',
       'forma_pagamento',
@@ -111,6 +118,7 @@ type IntentToolInput = {
   valor: number | null
   categoria: string | null
   mes: string | null
+  unidade: string | null
   paciente: string | null
   horario: string | null
   forma_pagamento: PaymentMethodValue | null
@@ -181,6 +189,8 @@ function toIntent(input: IntentToolInput, raw: string): FinanceIntent {
         // linguagem natural. Só vale se for uma categoria real do tipo —
         // senão volta null e o agente categoriza da forma antiga.
         category: validCategory(input.categoria, type),
+        // Só PJ pertence a uma unidade; PF é sempre consolidado.
+        workspaceHint: type === 'pj' ? input.unidade?.trim() || null : null,
       }
     }
 
@@ -190,6 +200,7 @@ function toIntent(input: IntentToolInput, raw: string): FinanceIntent {
         type: input.tipo,
         category: input.categoria,
         month: /^\d{4}-\d{2}$/.test(input.mes ?? '') ? input.mes : null,
+        workspace: input.unidade?.trim() || null,
       }
 
     case 'confirmar_pagamento':
