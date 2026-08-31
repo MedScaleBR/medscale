@@ -38,6 +38,7 @@ import {
   claudeCreate,
   sendWhatsAppMessage,
   PARAMS,
+  UNIT,
   DEFAULT_BOT_CONFIG,
   lastSentMessage,
 } from '../helpers/agent-harness'
@@ -351,6 +352,45 @@ describe('processIncomingMessage — montagem de contexto', () => {
     await processIncomingMessage(PARAMS)
 
     expect(sendWhatsAppMessage).not.toHaveBeenCalled()
+  })
+})
+
+describe('processIncomingMessage — trava de unidade (multi-unidade)', () => {
+  // ids em formato UUID — o marcador UNIDADE_ID exige isso.
+  const UNIT_A = { ...UNIT, id: 'aaaaaaaa-0000-0000-0000-00000000000a', name: 'Unidade A' }
+  const UNIT_B = { ...UNIT, id: 'bbbbbbbb-0000-0000-0000-00000000000b', name: 'Unidade B' }
+
+  beforeEach(() => {
+    resetAgentHarness()
+    state.units = [UNIT_A, UNIT_B]
+    state.freeSlots = { '*': ['08:00', '08:30'] }
+  })
+
+  it('grava a unidade na conversa assim que a Maria emite UNIDADE_ID', async () => {
+    const supabase = mergeSupabaseConfig({})
+    state.claudeResponses = [`Perfeito, vou te atender na Unidade B.\nUNIDADE_ID: ${UNIT_B.id}`]
+
+    await processIncomingMessage(PARAMS)
+
+    const update = supabase
+      .callsTo('conversations', 'update')
+      .find((c) => (c.payload as { workspace_id?: string }).workspace_id !== undefined)
+    expect(update?.payload).toMatchObject({ workspace_id: UNIT_B.id })
+  })
+
+  it('com a conversa já travada numa unidade, só carrega os horários dessa unidade', async () => {
+    const { getFreeSlotsForBot } = await import('../helpers/agent-harness')
+    mergeSupabaseConfig({
+      conversations: { select: { data: { id: 'c1', status: 'open', bot_paused: false, archived_at: null, workspace_id: UNIT_A.id } } },
+    })
+    state.claudeResponses = ['Tenho 08:00 e 08:30.']
+
+    await processIncomingMessage(PARAMS)
+
+    const unitsConsultadas = new Set((getFreeSlotsForBot.mock.calls as unknown as Array<[string]>).map((c) => c[0]))
+    expect([...unitsConsultadas]).toEqual([UNIT_A.id])
+    // O prompt não deve pedir a escolha de unidade de novo.
+    expect(systemPrompt()).toContain('já escolheu a Unidade A')
   })
 })
 

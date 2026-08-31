@@ -131,6 +131,17 @@ describe('buildDynamicSystemPrompt — unidades', () => {
   it('não deve pedir UNIDADE_ID quando há uma única unidade', () => {
     expect(build()).not.toContain('UNIDADE_ID: <id>')
   })
+
+  it('avisa para nunca oferecer horário de outra unidade (multi-unidade)', () => {
+    const prompt = build({}, { units: [{ ...UNIT, id: 'a' }, { ...UNIT, id: 'b', name: 'Outra' }] })
+    expect(prompt).toContain('NUNCA ofereça a um paciente um horário listado sob outra unidade')
+  })
+
+  it('quando a unidade já está travada, não pede a escolha de novo', () => {
+    const prompt = build({}, { units: [{ ...UNIT, name: 'Unidade Moema' }], unitLocked: true })
+    expect(prompt).toContain('já escolheu a Unidade Moema')
+    expect(prompt).not.toContain('Pergunte em qual unidade')
+  })
 })
 
 describe('buildDynamicSystemPrompt — consultas já agendadas', () => {

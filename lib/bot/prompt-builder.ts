@@ -32,6 +32,9 @@ interface BuildPromptInput {
   procedureCatalogByUnit: Record<string, CatalogProcedure[]>
   isFirstMessage: boolean
   upcomingAppointments: UpcomingAppointment[] // consultas futuras já agendadas deste paciente (todas as unidades)
+  // true quando o paciente já escolheu a unidade nesta conversa e `units` já
+  // foi reduzido só a ela — o prompt não deve mais perguntar a unidade.
+  unitLocked?: boolean
 }
 
 function formatSlotsByDay(byDay: Record<string, string[]>): string {
@@ -54,8 +57,10 @@ export function buildDynamicSystemPrompt({
   procedureCatalogByUnit,
   isFirstMessage,
   upcomingAppointments,
+  unitLocked = false,
 }: BuildPromptInput): string {
   const multiUnit = units.length > 1
+  const lockedUnitName = unitLocked && units.length === 1 ? units[0].name : null
 
   // ── Procedimentos ──────────────────────────────────────────────────────────
   const proceduresText = config.procedures.length > 0 ? config.procedures.join(', ') : 'consultas gerais'
@@ -90,7 +95,8 @@ export function buildDynamicSystemPrompt({
 
   // ── Slots disponíveis por unidade ─────────────────────────────────────────
   const slotsSection = multiUnit
-    ? units
+    ? `⚠️ Os horários abaixo são POR UNIDADE. Os que aparecem sob "### <nome>" valem SÓ para aquela unidade. NUNCA ofereça a um paciente um horário listado sob outra unidade — mesmo que exista vaga lá. Se o paciente escolheu a Unidade X, use exclusivamente a lista sob "### X"; se essa lista estiver vazia, diga que não há horário nessa unidade nos próximos dias.\n\n` +
+      units
         .map((u) => `### ${u.name}\n${formatSlotsByDay(freeSlotsByUnit[u.id] ?? {})}`)
         .join('\n\n')
     : formatSlotsByDay(freeSlotsByUnit[units[0]?.id] ?? {})
@@ -146,7 +152,14 @@ PROCEDIMENTO_ID: <id>
 
   // ── Passo de escolha da unidade (só quando há mais de uma) ────────────────
   const unitStep = multiUnit
-    ? `2. Pergunte em qual unidade o paciente quer ser atendido — liste as unidades pelo nome (e bairro/endereço) e espere ele escolher ANTES de oferecer horários. Os horários disponíveis são diferentes por unidade.\n`
+    ? `2. Pergunte em qual unidade o paciente quer ser atendido — liste as unidades pelo nome (e bairro/endereço) e espere ele escolher ANTES de oferecer horários. Os horários disponíveis são diferentes por unidade.
+2a. Assim que o paciente disser a unidade, inclua JÁ NESSA MESMA RESPOSTA uma linha isolada no formato exato:
+UNIDADE_ID: <id>
+(copie o id entre parênteses da unidade escolhida na lista de Unidades acima — nunca invente). Essa linha trava a conversa naquela unidade e é lida por um sistema automático — nunca a mostre ao paciente. A partir daí, ofereça SÓ os horários que aparecem sob "### <nome daquela unidade>".\n`
+    : ''
+
+  const lockedUnitNote = lockedUnitName
+    ? `\n## Unidade desta conversa\nO paciente já escolheu a ${lockedUnitName} nesta conversa. NÃO pergunte a unidade de novo e use exclusivamente os horários listados acima (são só os desta unidade).\n`
     : ''
 
   const unitConfirmLine = multiUnit
@@ -167,7 +180,7 @@ ${priceText}
 ${paymentText ? `Formas de pagamento aceitas: ${paymentText}\n` : ''}
 ## Unidades
 ${unitsSection}
-${multiUnit ? 'Sempre confirme com o paciente em qual unidade ele quer ser atendido antes de oferecer horários.\n' : ''}
+${multiUnit ? 'Sempre confirme com o paciente em qual unidade ele quer ser atendido antes de oferecer horários.\n' : ''}${lockedUnitNote}
 ${extraInfoSections ? `${extraInfoSections}\n` : ''}
 ## Horários disponíveis para agendamento (agenda real do médico)${multiUnit ? ' — por unidade' : ''}
 ${slotsSection}

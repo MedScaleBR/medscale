@@ -216,23 +216,31 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   }
 
   // 1.1 Unidades da account + nome da account (a Maria pergunta a unidade).
-  const [units, { data: account }] = await Promise.all([
+  const [allUnits, { data: account }] = await Promise.all([
     getAccountUnits(accountId),
     supabase.from('accounts').select('name').eq('id', accountId).single(),
   ])
-  if (units.length === 0) {
+  if (allUnits.length === 0) {
     console.warn(`account ${accountId} sem unidades ativas — Maria não tem onde agendar`)
     return
   }
   const accountName = account?.name ?? 'nossa clínica'
-  const unitById = new Map(units.map((u) => [u.id, u]))
-  const multiUnit = units.length > 1
+  const allUnitById = new Map(allUnits.map((u) => [u.id, u]))
 
   // 2. Paciente (por account).
   const patient = await getOrCreatePatient(supabase, accountId, patientPhone)
 
   // 3. Conversa deste paciente (uma por account+telefone).
   const conversation = await getOrCreateConversation(supabase, accountId, patient?.id, patientPhone)
+
+  // 3.1 Trava de unidade: assim que o paciente escolhe a unidade (marcador
+  // UNIDADE_ID numa resposta anterior), conversation.workspace_id fica gravado
+  // e a partir daí SÓ os horários dessa unidade entram no prompt — sem risco
+  // de oferecer horário de outra unidade.
+  const lockedUnitId =
+    conversation.workspace_id && allUnitById.has(conversation.workspace_id) ? conversation.workspace_id : null
+  const units = lockedUnitId ? allUnits.filter((u) => u.id === lockedUnitId) : allUnits
+  const multiUnit = units.length > 1
 
   // 4. Salvar mensagem do paciente
   await supabase.from('messages').insert({
@@ -295,18 +303,20 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     const zoned = new TZDate(new Date(row.scheduled_at), 'America/Sao_Paulo')
     const dateLabel = zoned.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
     const timeLabel = format(zoned, 'HH:mm')
-    const unitName = row.workspace_id ? unitById.get(row.workspace_id)?.name : null
+    const unitName = row.workspace_id ? allUnitById.get(row.workspace_id)?.name : null
     return {
       id: row.id,
       label: `${dateLabel} às ${timeLabel}${multiUnit && unitName ? ` — ${unitName}` : ''}`,
     }
   })
 
-  // 6.6. Catálogo de procedimentos por unidade (ciclo de receita).
+  // 6.6. Catálogo de procedimentos por unidade (ciclo de receita). Carrega de
+  // todas as unidades — o prompt só mostra as de `units`, mas o agendamento
+  // pode resolver uma unidade fora dessa lista se o paciente trocar.
   const { data: catalogRows } = await supabase
     .from('procedure_catalog')
     .select('id, name, default_price, workspace_id')
-    .in('workspace_id', units.map((u) => u.id))
+    .in('workspace_id', allUnits.map((u) => u.id))
     .eq('is_active', true)
     .order('name', { ascending: true })
   const procedureCatalogByUnit: Record<string, { id: string; name: string; price: number }[]> = {}
@@ -336,6 +346,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     procedureCatalogByUnit,
     isFirstMessage,
     upcomingAppointments,
+    unitLocked: Boolean(lockedUnitId),
   })
 
   const claudeMessages = (history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
@@ -371,6 +382,18 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     patient.full_name = patientName
   }
 
+  // 7.5 Trava de unidade: a Maria emite UNIDADE_ID assim que o paciente escolhe
+  // a unidade (mesmo antes de confirmar um horário). Grava na conversa para as
+  // próximas mensagens só carregarem os horários dessa unidade.
+  if (
+    markers.unitId &&
+    allUnitById.has(markers.unitId) &&
+    conversation.workspace_id !== markers.unitId
+  ) {
+    await supabase.from('conversations').update({ workspace_id: markers.unitId }).eq('id', conversation.id)
+    conversation.workspace_id = markers.unitId
+  }
+
   // 8. Executar agendamento/cancelamento confirmados ANTES de montar a resposta.
   let bookingFailed = false
   let unitRequired = false
@@ -381,11 +404,9 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
 
   if (markers.confirmedDate) {
     const bookingUnitId =
-      markers.unitId && unitById.has(markers.unitId)
-        ? markers.unitId
-        : units.length === 1
-          ? units[0].id
-          : null
+      (markers.unitId && allUnitById.has(markers.unitId) ? markers.unitId : null) ??
+      lockedUnitId ??
+      (allUnits.length === 1 ? allUnits[0].id : null)
 
     if (!bookingUnitId) {
       // A Maria confirmou um horário sem dizer a unidade (account com várias) —
@@ -403,7 +424,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
           null
         : null
       const snapshotPrice =
-        resolvedProcedure?.price ?? unitById.get(bookingUnitId)?.consultationPriceFrom ?? null
+        resolvedProcedure?.price ?? allUnitById.get(bookingUnitId)?.consultationPriceFrom ?? null
 
       const stillAvailable = await isSlotAvailable(bookingUnitId, scheduledAt, durationMin).catch(() => true)
 
@@ -464,7 +485,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
                 appointmentType: appt.type,
                 startTime: scheduledAt,
                 durationMin,
-                workspaceName: unitById.get(bookingUnitId)?.name ?? accountName,
+                workspaceName: allUnitById.get(bookingUnitId)?.name ?? accountName,
                 doctorEmail: email,
               })
               if (gcalEvent.id) {
@@ -516,7 +537,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
 
   // 9. Handoff — a unidade de contato/horário é a da conversa (ou a única).
   const handoffUnitId = resolvedUnitId ?? units[0].id
-  const handoffUnit = unitById.get(handoffUnitId)
+  const handoffUnit = allUnitById.get(handoffUnitId)
   const handoffCheck = detectHandoffIntent(cleanedMessage, message)
   const canAttemptHandoff = handoffCheck.needed && phoneNumberId && metaToken
 
