@@ -32,9 +32,9 @@ interface BuildPromptInput {
   procedureCatalogByUnit: Record<string, CatalogProcedure[]>
   isFirstMessage: boolean
   upcomingAppointments: UpcomingAppointment[] // consultas futuras já agendadas deste paciente (todas as unidades)
-  // true quando o paciente já escolheu a unidade nesta conversa e `units` já
-  // foi reduzido só a ela — o prompt não deve mais perguntar a unidade.
-  unitLocked?: boolean
+  // Nome da unidade que o paciente já mencionou nesta conversa — DICA de
+  // prioridade, não trava. A Maria continua vendo todas as unidades.
+  currentUnitName?: string | null
 }
 
 function formatSlotsByDay(byDay: Record<string, string[]>): string {
@@ -57,10 +57,9 @@ export function buildDynamicSystemPrompt({
   procedureCatalogByUnit,
   isFirstMessage,
   upcomingAppointments,
-  unitLocked = false,
+  currentUnitName = null,
 }: BuildPromptInput): string {
   const multiUnit = units.length > 1
-  const lockedUnitName = unitLocked && units.length === 1 ? units[0].name : null
 
   // ── Procedimentos ──────────────────────────────────────────────────────────
   const proceduresText = config.procedures.length > 0 ? config.procedures.join(', ') : 'consultas gerais'
@@ -158,9 +157,10 @@ UNIDADE_ID: <id>
 (copie o id entre parênteses da unidade escolhida na lista de Unidades acima — nunca invente). Essa linha trava a conversa naquela unidade e é lida por um sistema automático — nunca a mostre ao paciente. A partir daí, ofereça SÓ os horários que aparecem sob "### <nome daquela unidade>".\n`
     : ''
 
-  const lockedUnitNote = lockedUnitName
-    ? `\n## Unidade desta conversa\nO paciente já escolheu a ${lockedUnitName} nesta conversa. NÃO pergunte a unidade de novo e use exclusivamente os horários listados acima (são só os desta unidade).\n`
-    : ''
+  const lockedUnitNote =
+    currentUnitName && multiUnit
+      ? `\n## Unidade desta conversa\nO paciente já mencionou a ${currentUnitName} nesta conversa — trate como a unidade escolhida por padrão e não pergunte de novo. MAS se ele pedir outra unidade, perguntar as opções, ou disser que quer trocar, mostre as outras unidades e os horários delas normalmente. NUNCA diga que não existem outras unidades.\n`
+      : ''
 
   const unitConfirmLine = multiUnit
     ? `Inclua também, numa linha isolada, a unidade escolhida:

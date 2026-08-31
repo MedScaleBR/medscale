@@ -225,7 +225,9 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     return
   }
   const accountName = account?.name ?? 'nossa clínica'
-  const allUnitById = new Map(allUnits.map((u) => [u.id, u]))
+  const units = allUnits
+  const allUnitById = new Map(units.map((u) => [u.id, u]))
+  const multiUnit = units.length > 1
 
   // 2. Paciente (por account).
   const patient = await getOrCreatePatient(supabase, accountId, patientPhone)
@@ -233,14 +235,13 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   // 3. Conversa deste paciente (uma por account+telefone).
   const conversation = await getOrCreateConversation(supabase, accountId, patient?.id, patientPhone)
 
-  // 3.1 Trava de unidade: assim que o paciente escolhe a unidade (marcador
-  // UNIDADE_ID numa resposta anterior), conversation.workspace_id fica gravado
-  // e a partir daí SÓ os horários dessa unidade entram no prompt — sem risco
-  // de oferecer horário de outra unidade.
-  const lockedUnitId =
+  // 3.1 Unidade "corrente" da conversa — a que o paciente já mencionou (marcador
+  // UNIDADE_ID numa resposta anterior). É só uma DICA: a Maria continua vendo
+  // todas as unidades e todos os horários, e o paciente pode trocar de unidade
+  // ou pedir as opções a qualquer momento. A garantia dura vem da revalidação
+  // no agendamento (isSlotAvailable na unidade escolhida).
+  const currentUnitId =
     conversation.workspace_id && allUnitById.has(conversation.workspace_id) ? conversation.workspace_id : null
-  const units = lockedUnitId ? allUnits.filter((u) => u.id === lockedUnitId) : allUnits
-  const multiUnit = units.length > 1
 
   // 4. Salvar mensagem do paciente
   await supabase.from('messages').insert({
@@ -346,7 +347,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     procedureCatalogByUnit,
     isFirstMessage,
     upcomingAppointments,
-    unitLocked: Boolean(lockedUnitId),
+    currentUnitName: currentUnitId ? (allUnitById.get(currentUnitId)?.name ?? null) : null,
   })
 
   const claudeMessages = (history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
@@ -382,9 +383,9 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     patient.full_name = patientName
   }
 
-  // 7.5 Trava de unidade: a Maria emite UNIDADE_ID assim que o paciente escolhe
-  // a unidade (mesmo antes de confirmar um horário). Grava na conversa para as
-  // próximas mensagens só carregarem os horários dessa unidade.
+  // 7.5 Unidade corrente: a Maria emite UNIDADE_ID quando o paciente indica a
+  // unidade. Grava na conversa como DICA para as próximas mensagens (a Maria
+  // continua vendo todas as unidades — o paciente pode trocar quando quiser).
   if (
     markers.unitId &&
     allUnitById.has(markers.unitId) &&
@@ -405,8 +406,8 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   if (markers.confirmedDate) {
     const bookingUnitId =
       (markers.unitId && allUnitById.has(markers.unitId) ? markers.unitId : null) ??
-      lockedUnitId ??
-      (allUnits.length === 1 ? allUnits[0].id : null)
+      currentUnitId ??
+      (units.length === 1 ? units[0].id : null)
 
     if (!bookingUnitId) {
       // A Maria confirmou um horário sem dizer a unidade (account com várias) —

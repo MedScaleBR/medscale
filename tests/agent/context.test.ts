@@ -378,7 +378,7 @@ describe('processIncomingMessage — trava de unidade (multi-unidade)', () => {
     expect(update?.payload).toMatchObject({ workspace_id: UNIT_B.id })
   })
 
-  it('com a conversa já travada numa unidade, só carrega os horários dessa unidade', async () => {
+  it('com unidade corrente na conversa: prioriza no prompt mas segue vendo todas as unidades', async () => {
     const { getFreeSlotsForBot } = await import('../helpers/agent-harness')
     mergeSupabaseConfig({
       conversations: { select: { data: { id: 'c1', status: 'open', bot_paused: false, archived_at: null, workspace_id: UNIT_A.id } } },
@@ -387,10 +387,13 @@ describe('processIncomingMessage — trava de unidade (multi-unidade)', () => {
 
     await processIncomingMessage(PARAMS)
 
+    // Continua carregando os horários de TODAS as unidades.
     const unitsConsultadas = new Set((getFreeSlotsForBot.mock.calls as unknown as Array<[string]>).map((c) => c[0]))
-    expect([...unitsConsultadas]).toEqual([UNIT_A.id])
-    // O prompt não deve pedir a escolha de unidade de novo.
-    expect(systemPrompt()).toContain('já escolheu a Unidade A')
+    expect(unitsConsultadas).toEqual(new Set([UNIT_A.id, UNIT_B.id]))
+    // O prompt marca a unidade corrente mas não nega as outras.
+    expect(systemPrompt()).toContain('já mencionou a Unidade A')
+    expect(systemPrompt()).toContain('NUNCA diga que não existem outras unidades')
+    expect(systemPrompt()).toContain('Unidade B')
   })
 })
 
