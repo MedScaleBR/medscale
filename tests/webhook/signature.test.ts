@@ -41,14 +41,15 @@ vi.mock('@/lib/crypto', () => ({
 import { POST, GET } from '@/app/api/whatsapp/webhook/route'
 
 const GLOBAL_SECRET = 'global-app-secret'
-const WORKSPACE_SECRET = 'workspace-own-app-secret'
+const WORKSPACE_SECRET = 'account-own-app-secret'
 const PHONE_NUMBER_ID = 'pn-clinica-1'
 
-const WORKSPACE_ROW = {
-  id: 'w1',
-  name: 'Clínica Teste',
+// Conexão WhatsApp da account (bot_config) — resolvida pelo phone_number_id.
+const BOT_CONN_ROW = {
   account_id: 'acc1',
   meta_app_secret: `enc:${WORKSPACE_SECRET}`,
+  phone_number_id: PHONE_NUMBER_ID,
+  meta_token: 'enc:token-da-conta',
 }
 
 // O HMAC é calculado sobre o BODY BRUTO (a string exata), nunca sobre o
@@ -83,9 +84,8 @@ function makeRequest(rawBody: string, signature?: string) {
 
 function setupSupabase(config: SupabaseMockConfig = {}) {
   g.supabase = createSupabaseMock({
-    workspaces: { select: { data: WORKSPACE_ROW } },
     webhook_logs: { insert: { data: { id: 'log-1' } } },
-    bot_config: { select: { data: null } },
+    bot_config: { select: { data: BOT_CONN_ROW } },
     ...config,
   })
   return g.supabase
@@ -188,27 +188,25 @@ describe('POST /api/whatsapp/webhook — roteamento da mensagem', () => {
   })
 
   it('deve gravar em webhook_logs e descartar silenciosamente quando o phone_number_id não está mapeado', async () => {
-    const supabase = setupSupabase({ workspaces: { select: { data: null } } })
+    const supabase = setupSupabase({ bot_config: { select: { data: null } } })
     const body = textMessagePayload('pn-desconhecido')
     const res = await POST(makeRequest(body, makeSignature(body, GLOBAL_SECRET)) as never)
 
     expect(res.status).toBe(200)
-    await expect(res.json()).resolves.toEqual({ status: 'workspace_not_found' })
+    await expect(res.json()).resolves.toEqual({ status: 'account_not_found' })
     const log = supabase.callsTo('webhook_logs', 'insert')[0]
     expect(log?.payload).toMatchObject({ workspace_id: null })
     await runAfterCallbacks()
     expect(g.processIncomingMessage).not.toHaveBeenCalled()
   })
 
-  it('deve encaminhar a mensagem de texto para processIncomingMessage com os dados da workspace', async () => {
+  it('deve encaminhar a mensagem de texto para processIncomingMessage com a account resolvida', async () => {
     const body = textMessagePayload()
     await POST(makeRequest(body, makeSignature(body, GLOBAL_SECRET)) as never)
     await runAfterCallbacks()
 
     expect(g.processIncomingMessage).toHaveBeenCalledWith({
-      workspaceId: 'w1',
       accountId: 'acc1',
-      workspaceName: 'Clínica Teste',
       patientPhone: '5511988887777',
       message: 'Oi, quero marcar',
       whatsappMessageId: 'wamid.1',
@@ -284,7 +282,9 @@ describe('POST /api/whatsapp/webhook — roteamento da mensagem', () => {
 
 describe('GET /api/whatsapp/webhook — handshake de verificação da Meta', () => {
   beforeEach(() => {
-    setupSupabase()
+    // Sem match de webhook_verify_token por padrão; os testes que precisam
+    // sobrescrevem bot_config.select.
+    setupSupabase({ bot_config: { select: { data: null } } })
     process.env.META_VERIFY_TOKEN = 'verify-token-global'
   })
 

@@ -6,16 +6,13 @@ import { requireWorkspaceSession } from '@/lib/session/api'
 import { trackBotWizardCompleted } from '@/lib/analytics/posthog-server'
 
 // Confirma que o Phone Number ID + token colados pelo médico são válidos,
-// consultando a própria Meta Graph API, antes de salvar.
+// consultando a própria Meta Graph API, antes de salvar. A conexão WhatsApp
+// da Maria é única por account (bot_config).
 export async function POST(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
   if ('error' in result) return result.error
   const { session } = result
 
-  // A policy de RLS de `workspaces` só permite update para admin do account —
-  // sem este gate, um membro comum faria a chamada, o RLS bloquearia as 0
-  // linhas silenciosamente (sem lançar erro), e a rota ainda responderia
-  // ok: true como se tivesse salvo.
   if (session.role === 'member') {
     return NextResponse.json({ error: 'Apenas admins da account podem configurar o WhatsApp.' }, { status: 403 })
   }
@@ -39,10 +36,6 @@ export async function POST(req: NextRequest) {
     const metaMessage: string = body?.error?.message ?? metaRes.statusText
     const metaCode = body?.error?.code
 
-    // Erro clássico de colar o WhatsApp Business Account ID (WABA) no lugar
-    // do Phone Number ID — a tela "API Setup" da Meta mostra os dois lado a
-    // lado e são fáceis de confundir; só o objeto "número de telefone" tem
-    // o campo display_phone_number, o WABA não.
     const looksLikeWrongIdType =
       metaCode === 100 && /nonexisting field/i.test(metaMessage) && /display_phone_number/i.test(metaMessage)
 
@@ -55,36 +48,27 @@ export async function POST(req: NextRequest) {
 
   const metaData = await metaRes.json()
 
-  const { error: workspaceError } = await supabase
-    .from('workspaces')
-    .update({
-      phone_number_id,
-      meta_token: encryptToken(meta_token),
-      meta_app_secret: encryptToken(meta_app_secret),
-      whatsapp_number: metaData.display_phone_number ?? null,
-    })
-    .eq('id', session.workspaceId)
-
-  if (workspaceError) return NextResponse.json({ error: workspaceError.message }, { status: 500 })
-
   const { data: botConfig, error: botConfigError } = await supabase
     .from('bot_config')
     .upsert(
       {
-        workspace_id: session.workspaceId,
         account_id: session.accountId,
+        phone_number_id,
+        meta_token: encryptToken(meta_token),
+        meta_app_secret: encryptToken(meta_app_secret),
+        whatsapp_number: metaData.display_phone_number ?? null,
         number_source: 'own',
         onboarding_step: 'verified',
         is_active: true,
       },
-      { onConflict: 'workspace_id' }
+      { onConflict: 'account_id' }
     )
     .select()
     .single()
 
   if (botConfigError) return NextResponse.json({ error: botConfigError.message }, { status: 500 })
 
-  invalidateBotConfigCache(session.workspaceId)
+  invalidateBotConfigCache(session.accountId)
 
   await trackBotWizardCompleted(session.userId, {
     workspace_id: session.workspaceId,

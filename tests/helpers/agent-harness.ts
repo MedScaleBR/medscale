@@ -1,6 +1,18 @@
 import { vi } from 'vitest'
 import { createSupabaseMock, type SupabaseMockConfig, type SupabaseMock } from './supabase-mock'
-import type { BotConfig } from '@/lib/bot/config'
+import type { BotConfig, UnitContext } from '@/lib/bot/config'
+
+// Unidade única do "caminho feliz" — id 'w1' bate com o antigo workspaceId.
+export const UNIT: UnitContext = {
+  id: 'w1',
+  name: 'Clínica Teste',
+  address: null,
+  businessHours: null,
+  directionsParking: null,
+  contactInfo: null,
+  consultationPriceFrom: null,
+  handoffNumber: '+5511999998888',
+}
 
 // Estado compartilhado entre o arquivo de teste e as factories de vi.mock.
 // As factories fazem `await import()` deste módulo (ver os testes em
@@ -8,6 +20,7 @@ import type { BotConfig } from '@/lib/bot/config'
 export const state = {
   supabase: null as unknown as SupabaseMock,
   botConfig: null as BotConfig | null,
+  units: [UNIT] as UnitContext[],
   /** Respostas do Claude, consumidas em ordem a cada messages.create. */
   claudeResponses: [] as Array<string | { content: unknown[]; stop_reason?: string }>,
   freeSlots: {} as Record<string, string[]>,
@@ -41,11 +54,6 @@ export const DEFAULT_BOT_CONFIG: BotConfig = {
   procedures: [],
   insurancePlans: [],
   acceptsPrivate: true,
-  consultationPriceFrom: null,
-  businessHours: null,
-  address: null,
-  directionsParking: null,
-  contactInfo: null,
   paymentMethods: [],
   pricingInfo: null,
   examPreparation: null,
@@ -54,27 +62,29 @@ export const DEFAULT_BOT_CONFIG: BotConfig = {
   handoffInstructions: null,
   forbiddenActions: null,
   faq: [],
-  handoffNumber: '+5511999998888',
   handoffMessage: 'Vou te transferir para a equipe.',
   welcomeMessage: 'Olá! Bem-vindo à clínica.',
   outOfHoursMessage: 'Nossa equipe responde no próximo horário comercial.',
   isActive: true,
+  phoneNumberId: 'pn-1',
+  metaToken: 'encrypted-token',
 }
 
 export const PATIENT = { id: 'p1', full_name: 'Paciente' }
-export const CONVERSATION = { id: 'c1', status: 'open', bot_paused: false, archived_at: null }
-export const WORKSPACE = { phone_number_id: 'pn-1', meta_token: 'encrypted-token' }
+export const CONVERSATION = { id: 'c1', status: 'open', bot_paused: false, archived_at: null, workspace_id: null }
 
 // Configuração de Supabase do "caminho feliz": paciente e conversa já
-// existem, workspace tem WhatsApp configurado, nada agendado.
+// existem, account tem uma unidade e nada agendado. A conexão WhatsApp e as
+// unidades vêm dos mocks de @/lib/bot/config (getBotConfig / getAccountUnits).
 export function defaultSupabaseConfig(): SupabaseMockConfig {
   return {
+    accounts: { select: { data: { name: 'Clínica Teste' } } },
     patients: { select: { data: { ...PATIENT } }, insert: { data: { ...PATIENT } }, update: { data: null } },
     conversations: { select: { data: { ...CONVERSATION } }, insert: { data: { ...CONVERSATION } }, update: { data: null } },
     // Histórico: só a mensagem que o paciente acabou de mandar (primeira troca).
     messages: { insert: { data: null }, select: { data: [{ role: 'user', content: PARAMS.message }] } },
-    workspaces: { select: { data: { ...WORKSPACE } } },
     appointments: { select: { data: [] }, insert: { data: null }, update: { data: null } },
+    procedure_catalog: { select: { data: [] } },
     handoff_hours: { select: { data: [], count: 0 } },
     handoff_logs: { insert: { data: null } },
   }
@@ -84,6 +94,7 @@ export function defaultSupabaseConfig(): SupabaseMockConfig {
 export function resetAgentHarness(config: SupabaseMockConfig = defaultSupabaseConfig()) {
   state.supabase = createSupabaseMock(config)
   state.botConfig = { ...DEFAULT_BOT_CONFIG }
+  state.units = [{ ...UNIT }]
   state.claudeResponses = []
   state.freeSlots = { '*': ['08:00', '08:30', '09:00'] }
   state.slotAvailable = true
@@ -115,13 +126,15 @@ export function mergeSupabaseConfig(overrides: SupabaseMockConfig) {
 }
 
 export const PARAMS = {
-  workspaceId: 'w1',
   accountId: 'acc1',
-  workspaceName: 'Clínica Teste',
   patientPhone: '5511988887777',
   message: 'Oi, quero marcar uma consulta',
   whatsappMessageId: 'wamid.1',
 }
+
+// Id da unidade única do caminho feliz — usado nas asserts que antes
+// referenciavam PARAMS.workspaceId.
+export const UNIT_ID = UNIT.id
 
 /** Última mensagem que o bot enviou de fato ao paciente pelo WhatsApp. */
 export function lastSentMessage(): string | undefined {

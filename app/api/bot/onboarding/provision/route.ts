@@ -22,21 +22,20 @@ export async function POST(req: NextRequest) {
     .from('bot_config')
     .upsert(
       {
-        workspace_id: session.workspaceId,
         account_id: session.accountId,
         number_source: 'medscale',
         onboarding_step: 'provisioning',
         is_active: false,
         provisioning_request: { display_name, desired_number: desired_number ?? null, document },
       },
-      { onConflict: 'workspace_id' }
+      { onConflict: 'account_id' }
     )
     .select()
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  invalidateBotConfigCache(session.workspaceId)
+  invalidateBotConfigCache(session.accountId)
 
   return NextResponse.json(data, { status: 201 })
 }

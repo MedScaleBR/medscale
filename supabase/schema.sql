@@ -592,19 +592,19 @@ create table public.webhook_logs (
   received_at  timestamptz not null default now()
 );
 
--- Rate limiting do webhook do WhatsApp por (workspace, número). Acesso
--- exclusivo via service role (ver lib/rate-limit/webhook.ts) — RLS habilitado
--- sem policies na seção 13. Sem FK para patients: o número pode ainda não ser
--- de um paciente cadastrado.
+-- Rate limiting do webhook do WhatsApp por (account, número) — o número da
+-- Maria é único por account. Acesso exclusivo via service role (ver
+-- lib/rate-limit/webhook.ts) — RLS habilitado sem policies na seção 13. Sem
+-- FK para patients: o número pode ainda não ser de um paciente cadastrado.
 create table public.rate_limit_log (
   id            bigserial primary key,
-  workspace_id  uuid        references public.workspaces(id) on delete cascade not null,
+  account_id    uuid        references public.accounts(id) on delete cascade not null,
   phone         text        not null,
   window_start  timestamptz not null default now(),  -- início da janela deslizante atual
   message_count int         not null default 1,
   blocked_at    timestamptz,                          -- 1ª vez que o bloqueio foi ativado nesta janela
   notified      boolean     not null default false,   -- se o aviso já foi enviado nesta janela
-  unique (workspace_id, phone)
+  unique (account_id, phone)
 );
 
 -- Log de handoffs (auditoria)
@@ -669,7 +669,7 @@ create index idx_revenue_payment_status      on public.revenue_entries(workspace
 create index idx_procedure_catalog_workspace on public.procedure_catalog(workspace_id, is_active);
 create index idx_ad_campaigns_workspace      on public.ad_campaigns(workspace_id, period_start);
 create index idx_webhook_logs_workspace      on public.webhook_logs(workspace_id, received_at desc);
-create index idx_rate_limit_workspace_phone  on public.rate_limit_log(workspace_id, phone);
+create index idx_rate_limit_account_phone    on public.rate_limit_log(account_id, phone);
 create index idx_handoff_logs_workspace      on public.handoff_logs(workspace_id, sent_at desc);
 create index idx_handoff_hours_workspace     on public.handoff_hours(workspace_id, day_of_week);
 create index idx_push_subscriptions_workspace on public.push_subscriptions(workspace_id);

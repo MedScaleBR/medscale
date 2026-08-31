@@ -221,6 +221,20 @@ create index if not exists idx_finance_entries_workspace
   on public.finance_entries(account_id, workspace_id, entry_date desc);
 
 -- ============================================================
+-- 5b. RATE_LIMIT_LOG — por account (o número da Maria é único por account)
+-- ============================================================
+-- Bucket muda de (workspace_id, phone) para (account_id, phone). Não vale a
+-- pena migrar contadores em voo — só esvaziamos a tabela (a janela é de 60s).
+truncate table public.rate_limit_log;
+alter table public.rate_limit_log drop column if exists workspace_id;
+alter table public.rate_limit_log
+  add column if not exists account_id uuid references public.accounts(id) on delete cascade;
+alter table public.rate_limit_log alter column account_id set not null;
+drop index if exists public.idx_rate_limit_workspace_phone;
+create unique index if not exists rate_limit_log_account_id_phone_key
+  on public.rate_limit_log(account_id, phone);
+
+-- ============================================================
 -- 6. RLS — bot_config e google_tokens passam a ser por account
 -- ============================================================
 drop policy if exists "bot_config: workspace members" on public.bot_config;

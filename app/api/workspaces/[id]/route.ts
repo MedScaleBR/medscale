@@ -21,8 +21,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     await supabase.from('workspaces').update({ is_default: false }).eq('account_id', session.accountId)
   }
 
+  if (body.handoff_number && !/^\+\d{10,15}$/.test(body.handoff_number)) {
+    return NextResponse.json(
+      { error: 'Número de handoff inválido. Use o formato internacional: +5511999999999' },
+      { status: 400 }
+    )
+  }
+
   const update: WorkspaceUpdate = {}
-  for (const field of ['name', 'address', 'city', 'state', 'zip_code', 'is_default', 'is_active'] as const) {
+  for (const field of [
+    'name',
+    'address',
+    'city',
+    'state',
+    'zip_code',
+    'is_default',
+    'is_active',
+    // Campos que a Maria usa por unidade (ver bot_config para o que é por account).
+    'business_hours',
+    'directions_parking',
+    'contact_info',
+    'consultation_price_from',
+    'handoff_number',
+  ] as const) {
     if (field in body) update[field] = body[field]
   }
 

@@ -12,7 +12,7 @@ import { FaqInput, type FaqItem } from './FaqInput'
 import { BotPreview } from './BotPreview'
 import { BotStatusBadge } from './BotStatusBadge'
 import { BotOnboarding } from './BotOnboarding'
-import { HandoffHoursSettings } from './HandoffHoursSettings'
+import { WorkspaceBotFields, type WorkspaceBotRow } from './WorkspaceBotFields'
 import { PushToggle } from '@/components/push/PushToggle'
 import { BOT_NAME } from '@/lib/bot/constants'
 import type { Database } from '@/types/database'
@@ -25,11 +25,6 @@ interface FormState {
   procedures: string[]
   insurance_plans: string[]
   accepts_private: boolean
-  consultation_price_from: number | null
-  business_hours: string
-  address: string
-  directions_parking: string
-  contact_info: string
   payment_methods: string[]
   pricing_info: string
   exam_preparation: string
@@ -38,7 +33,6 @@ interface FormState {
   handoff_instructions: string
   forbidden_actions: string
   faq: FaqItem[]
-  handoff_number: string
   handoff_message: string
   welcome_message: string
   out_of_hours_message: string
@@ -46,7 +40,9 @@ interface FormState {
 
 interface BotConfigFormProps {
   initialConfig: BotConfigRow | null
-  initialHandoffHours: HandoffHour[]
+  workspaces: WorkspaceBotRow[]
+  handoffHoursByWorkspace: Record<string, HandoffHour[]>
+  activeWorkspaceId: string
   doctorPhone: string
   hasMetaAppSecret: boolean
   initialHandoffPushEnabled: boolean
@@ -58,11 +54,6 @@ function toFormState(config: BotConfigRow | null): FormState {
     procedures: config?.procedures ?? [],
     insurance_plans: config?.insurance_plans ?? [],
     accepts_private: config?.accepts_private ?? true,
-    consultation_price_from: config?.consultation_price_from ?? null,
-    business_hours: config?.business_hours ?? 'Segunda a sexta, 08h às 17h. Sábados, 08h às 12h.',
-    address: config?.address ?? '',
-    directions_parking: config?.directions_parking ?? '',
-    contact_info: config?.contact_info ?? '',
     payment_methods: config?.payment_methods ?? [],
     pricing_info: config?.pricing_info ?? '',
     exam_preparation: config?.exam_preparation ?? '',
@@ -71,7 +62,6 @@ function toFormState(config: BotConfigRow | null): FormState {
     handoff_instructions: config?.handoff_instructions ?? '',
     forbidden_actions: config?.forbidden_actions ?? '',
     faq: config?.faq ?? [],
-    handoff_number: config?.handoff_number ?? '',
     handoff_message: config?.handoff_message ?? 'Vou te conectar com nossa equipe agora. Um momento!',
     welcome_message: config?.welcome_message ?? 'Olá! Posso ajudar com agendamentos e informações. Como posso ajudar?',
     out_of_hours_message:
@@ -82,7 +72,9 @@ function toFormState(config: BotConfigRow | null): FormState {
 
 export function BotConfigForm({
   initialConfig,
-  initialHandoffHours,
+  workspaces,
+  handoffHoursByWorkspace,
+  activeWorkspaceId,
   doctorPhone,
   hasMetaAppSecret,
   initialHandoffPushEnabled,
@@ -283,19 +275,6 @@ export function BotConfigForm({
                 <Label htmlFor="accepts_private">Aceita consultas particulares</Label>
               </div>
               <div>
-                <Label htmlFor="price">Valor da consulta particular a partir de (R$)</Label>
-                <Input
-                  id="price"
-                  type="number"
-                  value={form.consultation_price_from ?? ''}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, consultation_price_from: e.target.value ? Number(e.target.value) : null }))
-                  }
-                  placeholder="Deixe vazio para não informar preço"
-                  className="mt-1"
-                />
-              </div>
-              <div>
                 <Label>Formas de pagamento</Label>
                 <p className="mb-2 text-xs text-gray-400">Digite e pressione Enter para adicionar</p>
                 <TagInput
@@ -330,65 +309,6 @@ export function BotConfigForm({
                 />
               </div>
             </div>
-          </section>
-
-          <section className="mb-6 break-inside-avoid rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
-            <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Local e contato</h3>
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="address">Endereço</Label>
-                <Input
-                  id="address"
-                  value={form.address}
-                  onChange={(e) => setForm((f) => ({ ...f, address: e.target.value }))}
-                  placeholder="Ex: Rua Exemplo, 123 - Sala 45, Bairro, Cidade/UF"
-                  className="mt-1"
-                />
-              </div>
-              <div>
-                <Label htmlFor="directions_parking">Como chegar / estacionamento</Label>
-                <Textarea
-                  id="directions_parking"
-                  value={form.directions_parking}
-                  onChange={(e) => setForm((f) => ({ ...f, directions_parking: e.target.value }))}
-                  rows={2}
-                  className="mt-1"
-                  placeholder="Ex: Estacionamento próprio no local. Em frente ao metrô X."
-                />
-              </div>
-              <div>
-                <Label htmlFor="contact_info">Contatos</Label>
-                <Textarea
-                  id="contact_info"
-                  value={form.contact_info}
-                  onChange={(e) => setForm((f) => ({ ...f, contact_info: e.target.value }))}
-                  rows={2}
-                  className="mt-1"
-                  placeholder="Ex: Telefone fixo, e-mail, Instagram"
-                />
-              </div>
-            </div>
-          </section>
-
-          <section className="mb-6 break-inside-avoid rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
-            <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Horários de atendimento</h3>
-            <Label htmlFor="business_hours">Descreva os horários em texto livre</Label>
-            <Textarea
-              id="business_hours"
-              value={form.business_hours}
-              onChange={(e) => setForm((f) => ({ ...f, business_hours: e.target.value }))}
-              rows={2}
-              className="mt-1"
-              placeholder="Ex: Segunda a sexta das 08h às 17h. Sábados das 08h às 12h."
-            />
-            <p className="mt-1.5 text-xs text-gray-400">
-              Texto exibido ao paciente — o bot em si conversa e agenda 24/7, nunca fica fora do ar.
-              Quem controla de fato quais horários existem para agendar é a{' '}
-              <a href="/configuracoes" className="text-[var(--cyan-dark)] hover:underline">
-                disponibilidade cadastrada
-              </a>
-              .
-            </p>
           </section>
 
           <section className="mb-6 break-inside-avoid rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
@@ -456,18 +376,11 @@ export function BotConfigForm({
 
           <section className="mb-6 break-inside-avoid rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
             <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Atendimento humano (handoff)</h3>
+            <p className="mb-4 text-xs text-gray-400">
+              O número de transferência e o horário de atendimento humano são configurados por
+              unidade, na seção &quot;Dados por unidade&quot; abaixo.
+            </p>
             <div className="space-y-4">
-              <div>
-                <Label htmlFor="handoff_number">Número para transferência</Label>
-                <p className="mb-1 text-xs text-gray-400">Formato internacional: +5511999999999</p>
-                <Input
-                  id="handoff_number"
-                  value={form.handoff_number}
-                  onChange={(e) => setForm((f) => ({ ...f, handoff_number: e.target.value }))}
-                  placeholder="+5511999999999"
-                  className="mt-1 font-mono"
-                />
-              </div>
               <div>
                 <Label htmlFor="handoff_message">Mensagem antes de transferir</Label>
                 <Textarea
@@ -497,7 +410,7 @@ export function BotConfigForm({
                 <Label htmlFor="out_of_hours_message">Mensagem quando ninguém está disponível</Label>
                 <p className="mb-1 text-xs text-gray-400">
                   Enviada no lugar da transferência quando o paciente pede humano fora do horário
-                  abaixo — o bot continua a conversa sozinho normalmente.
+                  de atendimento humano da unidade — o bot continua a conversa sozinho normalmente.
                 </p>
                 <Textarea
                   id="out_of_hours_message"
@@ -506,11 +419,6 @@ export function BotConfigForm({
                   rows={2}
                   className="mt-1"
                 />
-              </div>
-
-              <div className="border-t border-[var(--navy-06)] pt-4">
-                <Label className="mb-1 block">Horário de atendimento humano</Label>
-                <HandoffHoursSettings initialHours={initialHandoffHours} />
               </div>
             </div>
           </section>
@@ -527,12 +435,20 @@ export function BotConfigForm({
               specialty: form.specialty,
               procedures: form.procedures,
               insurance_plans: form.insurance_plans,
-              handoff_number: form.handoff_number,
               welcome_message: form.welcome_message,
             }}
           />
         </div>
       </div>
+
+      <section className="rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
+        <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Dados por unidade</h3>
+        <WorkspaceBotFields
+          workspaces={workspaces}
+          handoffHoursByWorkspace={handoffHoursByWorkspace}
+          activeWorkspaceId={activeWorkspaceId}
+        />
+      </section>
 
       {error && <p className="text-sm text-red-500">{error}</p>}
 

@@ -19,6 +19,12 @@ export const PATIENT_NAME_MARKER = /NOME_PACIENTE:\s*(.+)/
 export const PROCEDURE_ID_MARKER =
   /PROCEDIMENTO_ID:\s*([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/
 
+// Unidade escolhida pelo paciente — id copiado da lista de unidades no system
+// prompt. Acompanha o AGENDAMENTO_CONFIRMADO quando a account tem mais de uma
+// unidade. Linha própria, não interfere no CONFIRMATION_MARKER.
+export const UNIT_ID_MARKER =
+  /UNIDADE_ID:\s*([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/
+
 export const HANDOFF_MARKER = '[HANDOFF]'
 
 export interface ParsedMarkers {
@@ -30,6 +36,8 @@ export interface ParsedMarkers {
   cancelledAppointmentId: string | null
   /** Id do procedimento escolhido (catálogo), ou null. */
   procedureId: string | null
+  /** Id da unidade escolhida pelo paciente, ou null. */
+  unitId: string | null
   /** Nome completo informado pelo paciente, já com trim, ou null. */
   patientName: string | null
   /** O Claude sinalizou transferência para atendimento humano. */
@@ -48,6 +56,7 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
   const confirmMatch = rawMessage.match(CONFIRMATION_MARKER)
   const cancelMatch = rawMessage.match(CANCELLATION_MARKER)
   const procedureMatch = rawMessage.match(PROCEDURE_ID_MARKER)
+  const unitMatch = rawMessage.match(UNIT_ID_MARKER)
   const nameMatch = rawMessage.match(PATIENT_NAME_MARKER)
 
   const confirmedSlot = confirmMatch?.[1] ?? null
@@ -59,6 +68,7 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
     .replace(CONFIRMATION_MARKER, '')
     .replace(CANCELLATION_MARKER, '')
     .replace(PROCEDURE_ID_MARKER, '')
+    .replace(UNIT_ID_MARKER, '')
     .replace(PATIENT_NAME_MARKER, '')
     .trim()
 
@@ -67,6 +77,7 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
     confirmedDate: confirmedDate && !Number.isNaN(confirmedDate.getTime()) ? confirmedDate : null,
     cancelledAppointmentId: cancelMatch?.[1] ?? null,
     procedureId: procedureMatch?.[1] ?? null,
+    unitId: unitMatch?.[1] ?? null,
     patientName,
     handoffRequested: cleanedMessage.includes(HANDOFF_MARKER),
     cleanedMessage,

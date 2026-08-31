@@ -21,26 +21,26 @@ export async function POST(req: NextRequest) {
     .from('conversations')
     .select('id, patient_phone, status')
     .eq('id', conversation_id)
-    .eq('workspace_id', session.workspaceId)
+    .eq('account_id', session.accountId)
     .single()
 
   if (!conversation) return NextResponse.json({ error: 'Conversa não encontrada' }, { status: 404 })
 
-  const { data: workspace } = await supabase
-    .from('workspaces')
+  const { data: botConfig } = await supabase
+    .from('bot_config')
     .select('phone_number_id, meta_token')
-    .eq('id', session.workspaceId)
-    .single()
+    .eq('account_id', session.accountId)
+    .maybeSingle()
 
-  if (!workspace?.phone_number_id || !workspace?.meta_token) {
+  if (!botConfig?.phone_number_id || !botConfig?.meta_token) {
     return NextResponse.json({ error: 'WhatsApp não configurado. Acesse Configurações.' }, { status: 400 })
   }
 
   await sendWhatsAppMessage({
     to: conversation.patient_phone,
     message,
-    phoneNumberId: workspace.phone_number_id,
-    token: decryptToken(workspace.meta_token),
+    phoneNumberId: botConfig.phone_number_id,
+    token: decryptToken(botConfig.meta_token),
   })
 
   const { data: saved, error } = await supabase

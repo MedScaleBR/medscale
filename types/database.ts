@@ -750,7 +750,7 @@ export interface Database {
       rate_limit_log: {
         Row: {
           id: number
-          workspace_id: string
+          account_id: string
           phone: string
           window_start: string
           message_count: number
@@ -758,15 +758,15 @@ export interface Database {
           notified: boolean
         }
         Insert: Partial<Database['public']['Tables']['rate_limit_log']['Row']> & {
-          workspace_id: string
+          account_id: string
           phone: string
         }
         Update: Partial<Database['public']['Tables']['rate_limit_log']['Row']>
         Relationships: [
           {
-            foreignKeyName: 'rate_limit_log_workspace_id_fkey'
-            columns: ['workspace_id']
-            referencedRelation: 'workspaces'
+            foreignKeyName: 'rate_limit_log_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
             referencedColumns: ['id']
           },
         ]

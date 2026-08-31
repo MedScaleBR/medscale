@@ -22,15 +22,25 @@ const DAY_LABEL = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 
 // se receber esse mapa — sem ele, mostra o value bruto (ex: "1" em vez de "Segunda").
 const DAY_ITEMS = Object.fromEntries(DAY_LABEL.map((label, i) => [String(i), label]))
 
-export function HandoffHoursSettings({ initialHours }: { initialHours: HandoffHour[] }) {
+export function HandoffHoursSettings({
+  initialHours,
+  workspaceId,
+}: {
+  initialHours: HandoffHour[]
+  // Quando editando uma unidade que não é a ativa na sessão, passa o id — as
+  // rotas de handoff-hours aceitam ?workspace_id= como override.
+  workspaceId?: string
+}) {
   const [hours, setHours] = useState(initialHours)
   const [form, setForm] = useState({ day_of_week: '1', start_time: '08:00', end_time: '17:00' })
   const [saving, setSaving] = useState(false)
 
+  const qs = workspaceId ? `?workspace_id=${workspaceId}` : ''
+
   const addRule = async () => {
     setSaving(true)
     try {
-      const res = await fetch('/api/bot/handoff-hours', {
+      const res = await fetch(`/api/bot/handoff-hours${qs}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -52,7 +62,7 @@ export function HandoffHoursSettings({ initialHours }: { initialHours: HandoffHo
 
   const removeRule = async (id: string) => {
     setHours((prev) => prev.filter((r) => r.id !== id))
-    await fetch(`/api/bot/handoff-hours/${id}`, { method: 'DELETE' })
+    await fetch(`/api/bot/handoff-hours/${id}${qs}`, { method: 'DELETE' })
   }
 
   return (
