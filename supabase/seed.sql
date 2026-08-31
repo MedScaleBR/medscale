@@ -41,29 +41,30 @@ begin
   returning id into v_account_id;
 
   insert into public.workspaces
-    (account_id, name, slug, address, city, state, zip_code, is_active, is_default)
+    (account_id, name, slug, address, city, state, zip_code,
+     business_hours, consultation_price_from, is_active, is_default)
   values
     (v_account_id, 'Unidade Centro', 'unidade-centro',
-     'Rua das Flores, 123', 'São Paulo', 'SP', '01310-100', true, true)
+     'Rua das Flores, 123', 'São Paulo', 'SP', '01310-100',
+     'Seg a Sex, 8h às 18h', 250.00, true, true)
   returning id into v_workspace_id;
 
   insert into public.memberships (account_id, user_id, role, status, accepted_at)
   values (v_account_id, v_user_id, 'owner', 'active', now());
 
-  -- Bot config -----------------------------------------------------------
+  -- Bot config (uma por account) ---------------------------------------
   -- is_active fica false/pending de propósito: sem um meta_token real em
-  -- workspaces (só a conexão de verdade via /api/bot/onboarding/verify-meta
+  -- bot_config (só a conexão de verdade via /api/bot/onboarding/verify-meta
   -- seta os dois juntos), marcar como ativo aqui deixaria essa tela e a de
   -- Configurações divergentes (uma diz "ativo", a outra "não configurado")
   -- e esconderia o wizard de conexão por trás de "bot já ativo".
   insert into public.bot_config
-    (workspace_id, account_id, specialty, procedures, insurance_plans,
-     accepts_private, consultation_price_from, business_hours, is_active,
-     number_source, onboarding_step)
+    (account_id, specialty, procedures, insurance_plans,
+     accepts_private, is_active, number_source, onboarding_step)
   values
-    (v_workspace_id, v_account_id, 'Clínica Geral',
+    (v_account_id, 'Clínica Geral',
      '{Consulta,Retorno,Avaliação}', '{Unimed,Bradesco Saúde,Particular}',
-     true, 250.00, 'Seg a Sex, 8h às 18h', false, 'own', 'pending');
+     true, false, 'own', 'pending');
 
   -- Pacientes --------------------------------------------------------------
   insert into public.patients

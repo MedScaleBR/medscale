@@ -101,17 +101,22 @@ create table public.workspaces (
   city            text,
   state           text,
   zip_code        text,
-  -- WhatsApp desta workspace
-  whatsapp_number text,
-  phone_number_id text,
-  meta_token      text,                               -- criptografado (lib/crypto.ts)
-  -- App Secret do App Meta próprio da workspace (fluxo "número próprio" — só
-  -- preenchido quando number_source = 'own' em bot_config). Necessário porque
-  -- a assinatura HMAC (x-hub-signature-256) de cada mensagem recebida é
-  -- calculada pela Meta com o App Secret do App que possui o número — o App
-  -- único da MedScale (META_APP_SECRET) só assina para números do modelo
-  -- compartilhado. Ver validateMetaSignature em app/api/whatsapp/webhook/route.ts.
-  meta_app_secret text,                               -- criptografado (lib/crypto.ts)
+  -- Campos exibidos pela Maria que variam por unidade. A configuração do bot
+  -- (personalidade, regras, FAQ, convênios, conexão WhatsApp) é única por
+  -- account (bot_config); só estes campos, mais o expediente
+  -- (availability_rules), o horário de handoff (handoff_hours) e o catálogo de
+  -- procedimentos (procedure_catalog), continuam por unidade.
+  business_hours          text,          -- horário de atendimento presencial
+  directions_parking      text,          -- como chegar / estacionamento
+  contact_info            text,          -- outros contatos
+  consultation_price_from numeric(10,2), -- preço "a partir de" desta unidade
+  -- Número de transferência para atendimento humano desta unidade. Opcional —
+  -- nem toda unidade tem; sem ele o handoff acontece mesmo assim (pausa o bot,
+  -- loga, notifica a equipe por push), só não manda "Contato: ..." ao paciente.
+  handoff_number          text,
+  -- Calendário Google desta unidade dentro da conexão única da account
+  -- (google_tokens é por account). NULL = usar o calendário "primary".
+  gcal_calendar_id        text,
   is_active       boolean not null default true,
   is_default      boolean not null default false,     -- workspace padrão do account
   display_order   int not null default 0,
@@ -233,6 +238,9 @@ create table public.account_tasks (
 create table public.finance_entries (
   id                uuid default uuid_generate_v4() primary key,
   account_id        uuid references public.accounts(id) on delete cascade not null,
+  -- Unidade do lançamento. NULL = consolidado / account-wide (padrão para PF).
+  -- Para PJ a Maria financeira pergunta qual unidade antes de gravar.
+  workspace_id      uuid references public.workspaces(id) on delete set null,
   recorded_by_phone text not null,
   type              text not null check (type in ('pf','pj')),
   description       text,
@@ -368,7 +376,10 @@ create table public.transcriptions (
 -- Conversas do bot WhatsApp
 create table public.conversations (
   id              uuid default uuid_generate_v4() primary key,
-  workspace_id    uuid references public.workspaces(id) on delete cascade not null,
+  -- NULL até a Maria confirmar em qual unidade o paciente quer ser atendido —
+  -- a conversa é resolvida por account + telefone (número único). A unidade
+  -- real de cada consulta fica em appointments.workspace_id.
+  workspace_id    uuid references public.workspaces(id) on delete set null,
   account_id      uuid references public.accounts(id)   on delete cascade not null,
   patient_id      uuid references public.patients(id)   on delete set null,
   patient_phone   text not null,
@@ -499,11 +510,13 @@ create table public.ad_campaigns (
   created_at      timestamptz not null default now()
 );
 
--- Configuração do bot (uma por workspace)
+-- Configuração do bot (uma por account — vale para todas as unidades).
+-- Contém a personalidade/regras da Maria e a conexão WhatsApp (número único
+-- por account). Campos que variam por unidade (endereço, horário,
+-- estacionamento, contato, preço, número de handoff) ficam em workspaces.
 create table public.bot_config (
   id                      uuid default uuid_generate_v4() primary key,
-  workspace_id            uuid references public.workspaces(id) on delete cascade not null unique,
-  account_id              uuid references public.accounts(id)   on delete cascade not null,
+  account_id              uuid references public.accounts(id) on delete cascade not null unique,
   -- Nome fixo em todo o produto ("Maria", ver lib/bot/constants.ts) — esta
   -- coluna não é mais lida pelo app, mantida só por compatibilidade de schema.
   bot_name                text not null default 'Maria',
@@ -511,11 +524,6 @@ create table public.bot_config (
   procedures              text[] default '{}',
   insurance_plans         text[] default '{}',
   accepts_private         boolean not null default true,
-  consultation_price_from numeric(10,2),
-  business_hours          text,
-  address                 text,
-  directions_parking      text,
-  contact_info            text,
   payment_methods         text[] default '{}',
   pricing_info            text,
   exam_preparation        text,
@@ -524,7 +532,6 @@ create table public.bot_config (
   handoff_instructions    text,
   forbidden_actions       text,
   faq                     jsonb not null default '[]'::jsonb,
-  handoff_number          text,
   handoff_message         text not null default
     'Vou te conectar com nossa equipe agora. Um momento!',
   welcome_message         text not null default
@@ -534,6 +541,17 @@ create table public.bot_config (
   out_of_hours_message    text not null default
     'No momento nossa equipe não está disponível para atendimento humano — já registrei sua mensagem e vamos retornar assim que possível. Enquanto isso, posso continuar te ajudando por aqui!',
   is_active               boolean not null default false,
+  -- Conexão WhatsApp da account (número único, atende todas as unidades).
+  whatsapp_number         text,
+  phone_number_id         text,
+  meta_token              text,                        -- criptografado (lib/crypto.ts)
+  -- App Secret do App Meta próprio da account (fluxo "número próprio" — só
+  -- preenchido quando number_source = 'own'). Necessário porque a assinatura
+  -- HMAC (x-hub-signature-256) de cada mensagem recebida é calculada pela Meta
+  -- com o App Secret do App que possui o número — o App único da MedScale
+  -- (META_APP_SECRET) só assina para números do modelo compartilhado. Ver
+  -- validateMetaSignature em app/api/whatsapp/webhook/route.ts.
+  meta_app_secret         text,                        -- criptografado (lib/crypto.ts)
   number_source           text not null default 'own'
                           check (number_source in ('own', 'medscale')),
   onboarding_step         text not null default 'pending'
@@ -541,8 +559,8 @@ create table public.bot_config (
       'pending', 'meta_app_created', 'number_added', 'webhook_set',
       'verified', 'provisioning', 'active'
     )),
-  -- Verify token único desta workspace, usado quando ela traz seu próprio
-  -- App Meta (cada App configura seu próprio verify token de webhook).
+  -- Verify token único desta account, usado quando ela traz seu próprio App
+  -- Meta (cada App configura seu próprio verify token de webhook).
   webhook_verify_token    uuid not null default uuid_generate_v4() unique,
   -- Pedido de número provisionado pela MedScale (fluxo 'medscale')
   provisioning_request    jsonb,
@@ -550,15 +568,15 @@ create table public.bot_config (
   updated_at              timestamptz not null default now()
 );
 
--- Tokens Google (por workspace) — criptografados (lib/crypto.ts)
+-- Tokens Google (uma conexão por account) — criptografados (lib/crypto.ts).
+-- O mapeamento unidade → calendário fica em workspaces.gcal_calendar_id.
 create table public.google_tokens (
   id             uuid default uuid_generate_v4() primary key,
-  workspace_id   uuid references public.workspaces(id) on delete cascade not null unique,
+  account_id     uuid references public.accounts(id) on delete cascade not null unique,
   doctor_id      uuid references auth.users(id) on delete cascade not null, -- quem conectou
   access_token   text not null,
   refresh_token  text not null,
   token_expiry   timestamptz not null,
-  calendar_id    text not null default 'primary',
   google_email   text,
   connected_at   timestamptz not null default now(),
   updated_at     timestamptz not null default now()
@@ -666,6 +684,9 @@ create index idx_account_tasks_account       on public.account_tasks(account_id,
 create index idx_account_tasks_assignee      on public.account_tasks(assigned_to, status, due_date);
 create index idx_finance_entries_account     on public.finance_entries(account_id, entry_date desc);
 create index idx_finance_entries_type        on public.finance_entries(account_id, type);
+create index idx_finance_entries_workspace   on public.finance_entries(account_id, workspace_id, entry_date desc);
+-- Lookup do webhook do WhatsApp: phone_number_id recebido -> account/bot_config.
+create index idx_bot_config_phone_number_id  on public.bot_config(phone_number_id) where phone_number_id is not null;
 
 -- ============================================================
 -- 10. TRIGGERS updated_at
@@ -966,11 +987,11 @@ create policy "revenue_settings: owner only" on public.revenue_settings
 create policy "ad_campaigns: workspace members" on public.ad_campaigns
   for all using (workspace_id = any(public.my_workspace_ids()));
 
-create policy "bot_config: workspace members" on public.bot_config
-  for all using (workspace_id = any(public.my_workspace_ids()));
+create policy "bot_config: account members" on public.bot_config
+  for all using (account_id = any(public.my_account_ids()));
 
-create policy "google_tokens: workspace members" on public.google_tokens
-  for all using (workspace_id = any(public.my_workspace_ids()));
+create policy "google_tokens: account members" on public.google_tokens
+  for all using (account_id = any(public.my_account_ids()));
 
 create policy "webhook_logs: workspace members" on public.webhook_logs
   for all using (workspace_id = any(public.my_workspace_ids()));
