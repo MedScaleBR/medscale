@@ -9,6 +9,7 @@ export interface BusyBlock {
   start: string // ISO
   end: string // ISO
   summary: string
+  workspaceId: string // unidade a que o bloqueio pertence (agenda consolidada)
 }
 
 export interface ReconcileResult {
@@ -54,7 +55,16 @@ function parsePatientFromEvent(summary?: string | null, description?: string | n
 // token revogado) também degrada pro Supabase — nunca trava a leitura.
 export async function reconcileCalendar(workspaceId: string, from: Date, to: Date): Promise<ReconcileResult> {
   const supabase = createAdminClient()
-  const { connected } = await isGoogleConnected(workspaceId)
+
+  // A conexão Google é por account; resolvemos a account da unidade uma vez.
+  const { data: workspace } = await supabase
+    .from('workspaces')
+    .select('account_id')
+    .eq('id', workspaceId)
+    .single()
+  const accountId = workspace?.account_id ?? null
+
+  const { connected } = accountId ? await isGoogleConnected(accountId) : { connected: false }
 
   const fetchSupabaseRows = async () => {
     const { data } = await supabase
@@ -112,8 +122,7 @@ export async function reconcileCalendar(workspaceId: string, from: Date, to: Dat
         if (updated) resultById.set(updated.id, updated)
       }
     } else if (!cancelledOnGoogle && eventStart && eventEnd) {
-      const { data: workspace } = await supabase.from('workspaces').select('account_id').eq('id', workspaceId).single()
-      if (!workspace) continue
+      if (!accountId) continue
 
       const { patientName, patientPhone } = parsePatientFromEvent(event.summary, event.description)
       const durationMin = Math.max(1, Math.round((eventEnd.getTime() - eventStart.getTime()) / 60_000))
@@ -123,7 +132,7 @@ export async function reconcileCalendar(workspaceId: string, from: Date, to: Dat
         .upsert(
           {
             workspace_id: workspaceId,
-            account_id: workspace.account_id,
+            account_id: accountId,
             patient_name: patientName,
             patient_phone: patientPhone,
             scheduled_at: eventStart.toISOString(),
@@ -159,7 +168,40 @@ export async function reconcileCalendar(workspaceId: string, from: Date, to: Dat
 
   const busyBlocks: BusyBlock[] = busyEvents
     .filter((e) => e.start?.dateTime && e.end?.dateTime)
-    .map((e) => ({ start: e.start!.dateTime!, end: e.end!.dateTime!, summary: e.summary ?? '(sem título)' }))
+    .map((e) => ({
+      start: e.start!.dateTime!,
+      end: e.end!.dateTime!,
+      summary: e.summary ?? '(sem título)',
+      workspaceId,
+    }))
 
   return { appointments: [...resultById.values()], busyBlocks, googleConnected: true }
+}
+
+// Agenda consolidada: reconcilia o calendário de cada unidade ativa da account
+// e junta tudo. Cada appointment já carrega workspace_id; cada busyBlock recebe
+// o workspaceId da unidade de origem — a UI colore/filtra por unidade.
+export async function reconcileAccountCalendars(accountId: string, from: Date, to: Date): Promise<ReconcileResult> {
+  const supabase = createAdminClient()
+  const { data: workspaces } = await supabase
+    .from('workspaces')
+    .select('id')
+    .eq('account_id', accountId)
+    .eq('is_active', true)
+    .order('display_order')
+
+  const results = await Promise.all(
+    (workspaces ?? []).map((w) =>
+      reconcileCalendar(w.id, from, to).catch((err) => {
+        console.error(`reconcileAccountCalendars: workspace ${w.id} falhou`, err)
+        return { appointments: [], busyBlocks: [], googleConnected: false } satisfies ReconcileResult
+      })
+    )
+  )
+
+  return {
+    appointments: results.flatMap((r) => r.appointments),
+    busyBlocks: results.flatMap((r) => r.busyBlocks),
+    googleConnected: results.some((r) => r.googleConnected),
+  }
 }

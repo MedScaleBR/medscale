@@ -6,7 +6,7 @@ vi.mock('@/lib/supabase/server', async () => {
 })
 vi.mock('@/lib/bot/config', async () => {
   const h = await import('../helpers/agent-harness')
-  return { getBotConfig: async () => h.state.botConfig, invalidateBotConfigCache: () => {} }
+  return { getBotConfig: async () => h.state.botConfig, getAccountUnits: async () => h.state.units, invalidateBotConfigCache: () => {} }
 })
 vi.mock('@/lib/whatsapp/send', async () => {
   const h = await import('../helpers/agent-harness')
@@ -180,11 +180,13 @@ describe('processIncomingMessage — montagem de contexto', () => {
     await processIncomingMessage(PARAMS)
 
     const insert = supabase.callsTo('conversations', 'insert')[0]
+    // workspace_id fica NULL na criação — só é definido quando a Maria confirma
+    // a unidade (a account tem um número único).
     expect(insert?.payload).toMatchObject({
-      workspace_id: PARAMS.workspaceId,
       account_id: PARAMS.accountId,
       patient_phone: PARAMS.patientPhone,
     })
+    expect(insert?.payload).not.toHaveProperty('workspace_id')
   })
 
   it('deve incluir a instrução de boas-vindas no prompt quando é a primeira mensagem', async () => {
@@ -341,8 +343,9 @@ describe('processIncomingMessage — montagem de contexto', () => {
     expect(lastSentMessage()).toContain('não estou conseguindo resolver isso sozinha')
   })
 
-  it('não deve enviar nada pelo WhatsApp quando a workspace não tem número configurado', async () => {
-    mergeSupabaseConfig({ workspaces: { select: { data: { phone_number_id: null, meta_token: null } } } })
+  it('não deve enviar nada pelo WhatsApp quando a account não tem número configurado', async () => {
+    mergeSupabaseConfig({})
+    state.botConfig = { ...DEFAULT_BOT_CONFIG, phoneNumberId: null, metaToken: null }
     state.claudeResponses = ['Olá!']
 
     await processIncomingMessage(PARAMS)
@@ -353,7 +356,6 @@ describe('processIncomingMessage — montagem de contexto', () => {
 
 describe('handleUnsupportedMessage — mídia que a Maria não entende', () => {
   const unsupportedParams = {
-    workspaceId: PARAMS.workspaceId,
     accountId: PARAMS.accountId,
     patientPhone: PARAMS.patientPhone,
     messageType: 'audio',
@@ -406,8 +408,9 @@ describe('handleUnsupportedMessage — mídia que a Maria não entende', () => {
     expect(sendWhatsAppMessage).not.toHaveBeenCalled()
   })
 
-  it('não deve enviar resposta quando a workspace não tem WhatsApp configurado', async () => {
-    mergeSupabaseConfig({ workspaces: { select: { data: { phone_number_id: null, meta_token: null } } } })
+  it('não deve enviar resposta quando a account não tem WhatsApp configurado', async () => {
+    mergeSupabaseConfig({})
+    state.botConfig = { ...DEFAULT_BOT_CONFIG, phoneNumberId: null, metaToken: null }
 
     await handleUnsupportedMessage(unsupportedParams)
 

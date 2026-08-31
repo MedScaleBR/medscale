@@ -9,7 +9,7 @@ vi.mock('@/lib/supabase/server', async () => {
 })
 vi.mock('@/lib/bot/config', async () => {
   const h = await import('../helpers/agent-harness')
-  return { getBotConfig: async () => h.state.botConfig, invalidateBotConfigCache: () => {} }
+  return { getBotConfig: async () => h.state.botConfig, getAccountUnits: async () => h.state.units, invalidateBotConfigCache: () => {} }
 })
 vi.mock('@/lib/whatsapp/send', async () => {
   const h = await import('../helpers/agent-harness')

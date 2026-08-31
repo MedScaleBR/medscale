@@ -13,30 +13,24 @@ export async function POST(req: NextRequest) {
   const { to } = await req.json() // número de destino do teste
   if (!to) return NextResponse.json({ error: 'Informe o número de destino (to).' }, { status: 400 })
 
-  const { data: workspace } = await supabase
-    .from('workspaces')
-    .select('phone_number_id, meta_token, name')
-    .eq('id', session.workspaceId)
-    .single()
+  const { data: config } = await supabase
+    .from('bot_config')
+    .select('welcome_message, phone_number_id, meta_token')
+    .eq('account_id', session.accountId)
+    .maybeSingle()
 
-  if (!workspace?.phone_number_id || !workspace?.meta_token) {
+  if (!config?.phone_number_id || !config?.meta_token) {
     return NextResponse.json({ error: 'Número WhatsApp não configurado em Configurações.' }, { status: 400 })
   }
 
-  const { data: config } = await supabase
-    .from('bot_config')
-    .select('welcome_message')
-    .eq('workspace_id', session.workspaceId)
-    .maybeSingle()
-
-  const testMessage = config?.welcome_message ?? `Olá! Sou o assistente de ${workspace.name}. Esta é uma mensagem de teste do MedScale.`
+  const testMessage = config?.welcome_message ?? 'Olá! Esta é uma mensagem de teste do MedScale.'
 
   try {
     await sendWhatsAppMessage({
       to,
       message: testMessage,
-      phoneNumberId: workspace.phone_number_id,
-      token: decryptToken(workspace.meta_token),
+      phoneNumberId: config.phone_number_id,
+      token: decryptToken(config.meta_token),
     })
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 502 })

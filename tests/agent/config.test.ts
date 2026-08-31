@@ -15,11 +15,6 @@ const ROW = {
   procedures: ['consulta', 'infiltração'],
   insurance_plans: ['Unimed'],
   accepts_private: true,
-  consultation_price_from: '350.00',
-  business_hours: 'Seg a sex, 8h às 17h',
-  address: 'Rua Teste, 100',
-  directions_parking: 'Estacionamento no local',
-  contact_info: 'contato@clinica.com',
   payment_methods: ['pix', 'cartão'],
   pricing_info: null,
   exam_preparation: null,
@@ -28,11 +23,12 @@ const ROW = {
   handoff_instructions: null,
   forbidden_actions: null,
   faq: [{ question: 'Aceita convênio?', answer: 'Sim, Unimed.' }],
-  handoff_number: '+5511999998888',
   handoff_message: 'Vou te transferir.',
   welcome_message: 'Olá!',
   out_of_hours_message: 'Respondemos amanhã.',
   is_active: true,
+  phone_number_id: 'pn-1',
+  meta_token: 'enc:token-1',
 }
 
 function setup(config: SupabaseMockConfig = {}) {
@@ -40,11 +36,11 @@ function setup(config: SupabaseMockConfig = {}) {
   return g.supabase
 }
 
-// Cada teste usa uma workspace diferente porque o cache é global ao processo.
+// Cada teste usa uma account diferente porque o cache é global ao processo.
 let counter = 0
 function nextWorkspace() {
   counter += 1
-  return `w-cache-${counter}`
+  return `acc-cache-${counter}`
 }
 
 describe('getBotConfig — leitura e cache da configuração do bot', () => {
@@ -64,17 +60,12 @@ describe('getBotConfig — leitura e cache da configuração do bot', () => {
       procedures: ['consulta', 'infiltração'],
       insurancePlans: ['Unimed'],
       acceptsPrivate: true,
-      consultationPriceFrom: 350,
-      handoffNumber: '+5511999998888',
       welcomeMessage: 'Olá!',
       outOfHoursMessage: 'Respondemos amanhã.',
       isActive: true,
+      phoneNumberId: 'pn-1',
+      metaToken: 'enc:token-1',
     })
-  })
-
-  it('deve converter o preço de string para número', async () => {
-    const config = await getBotConfig(nextWorkspace())
-    expect(typeof config?.consultationPriceFrom).toBe('number')
   })
 
   it('deve usar arrays vazios quando as colunas de lista vêm null', async () => {
@@ -88,18 +79,12 @@ describe('getBotConfig — leitura e cache da configuração do bot', () => {
     expect(config).toMatchObject({ procedures: [], insurancePlans: [], paymentMethods: [], faq: [] })
   })
 
-  it('deve devolver null quando não existe configuração para a workspace', async () => {
+  it('deve devolver null quando não existe configuração para a account', async () => {
     setup({ bot_config: { select: { data: null, error: { message: 'no rows' } } } })
     expect(await getBotConfig(nextWorkspace())).toBeNull()
   })
 
-  it('deve devolver null quando o preço não está configurado', async () => {
-    setup({ bot_config: { select: { data: { ...ROW, consultation_price_from: null } } } })
-    const config = await getBotConfig(nextWorkspace())
-    expect(config?.consultationPriceFrom).toBeNull()
-  })
-
-  it('deve consultar o banco uma única vez em chamadas seguidas da mesma workspace', async () => {
+  it('deve consultar o banco uma única vez em chamadas seguidas da mesma account', async () => {
     const supabase = setup()
     const workspace = nextWorkspace()
 

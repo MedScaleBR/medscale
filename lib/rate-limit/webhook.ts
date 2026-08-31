@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server'
 
-// Rate limiting do webhook do WhatsApp por (workspace, número de telefone).
+// Rate limiting do webhook do WhatsApp por (account, número de telefone).
 // Janela deslizante de RATE_LIMIT_WINDOW_SECONDS; acima de
 // RATE_LIMIT_MAX_MESSAGES por janela a mensagem é bloqueada antes de qualquer
 // processamento (Claude, Graph API). Store no Postgres via Supabase — a Vercel
@@ -20,7 +20,7 @@ export type RateLimitResult =
   | { allowed: false; shouldNotify: boolean }
 
 /**
- * Checa e incrementa o rate limit para um número dentro de uma workspace.
+ * Checa e incrementa o rate limit para um número dentro de uma account.
  *
  * Retorna:
  * - `{ allowed: true }` — dentro do limite, pode processar normalmente.
@@ -29,8 +29,8 @@ export type RateLimitResult =
  * - `{ allowed: false, shouldNotify: false }` — já bloqueado e já avisado
  *   nesta janela: descartar em silêncio.
  *
- * Isolamento por tenant: o bucket é (workspace_id, phone), então um número
- * abusivo numa clínica não afeta o atendimento de outra.
+ * Isolamento por tenant: o bucket é (account_id, phone), então um número
+ * abusivo numa account não afeta o atendimento de outra.
  *
  * A checagem é SELECT + UPSERT/UPDATE, não uma operação atômica única. Sob
  * mensagens concorrentes do mesmo número duas invocações podem ler o mesmo
@@ -38,7 +38,7 @@ export type RateLimitResult =
  * para um rate limiter cujo objetivo é conter volume desproporcional, não
  * impor um teto exato.
  */
-export async function checkRateLimit(workspaceId: string, phone: string): Promise<RateLimitResult> {
+export async function checkRateLimit(accountId: string, phone: string): Promise<RateLimitResult> {
   const supabase = createAdminClient()
   const now = new Date()
   const windowCutoff = new Date(now.getTime() - RATE_LIMIT_WINDOW_SECONDS * 1000)
@@ -46,7 +46,7 @@ export async function checkRateLimit(workspaceId: string, phone: string): Promis
   const { data: existing } = await supabase
     .from('rate_limit_log')
     .select('window_start, message_count, notified, blocked_at')
-    .eq('workspace_id', workspaceId)
+    .eq('account_id', accountId)
     .eq('phone', phone)
     .maybeSingle()
 
@@ -56,14 +56,14 @@ export async function checkRateLimit(workspaceId: string, phone: string): Promis
     // Janela expirada (ou primeiro contato): reinicia a janela com count = 1.
     await supabase.from('rate_limit_log').upsert(
       {
-        workspace_id: workspaceId,
+        account_id: accountId,
         phone,
         window_start: now.toISOString(),
         message_count: 1,
         blocked_at: null,
         notified: false,
       },
-      { onConflict: 'workspace_id,phone' }
+      { onConflict: 'account_id,phone' }
     )
     return { allowed: true }
   }
@@ -74,7 +74,7 @@ export async function checkRateLimit(workspaceId: string, phone: string): Promis
     await supabase
       .from('rate_limit_log')
       .update({ message_count: newCount })
-      .eq('workspace_id', workspaceId)
+      .eq('account_id', accountId)
       .eq('phone', phone)
     return { allowed: true }
   }
@@ -90,7 +90,7 @@ export async function checkRateLimit(workspaceId: string, phone: string): Promis
         blocked_at: existing.blocked_at ?? now.toISOString(),
         notified: true,
       })
-      .eq('workspace_id', workspaceId)
+      .eq('account_id', accountId)
       .eq('phone', phone)
     return { allowed: false, shouldNotify: true }
   }
@@ -99,7 +99,7 @@ export async function checkRateLimit(workspaceId: string, phone: string): Promis
   await supabase
     .from('rate_limit_log')
     .update({ message_count: newCount })
-    .eq('workspace_id', workspaceId)
+    .eq('account_id', accountId)
     .eq('phone', phone)
 
   return { allowed: false, shouldNotify: false }

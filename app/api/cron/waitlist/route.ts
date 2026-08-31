@@ -37,19 +37,23 @@ export async function POST(req: NextRequest) {
   }
 
   const workspaceIds = [...new Set(entries.map((e) => e.workspace_id))]
-  const { data: workspaces } = await supabase
-    .from('workspaces')
-    .select('id, name, phone_number_id, meta_token')
-    .in('id', workspaceIds)
+  const accountIds = [...new Set(entries.map((e) => e.account_id))]
+
+  const [{ data: workspaces }, { data: botConfigs }] = await Promise.all([
+    supabase.from('workspaces').select('id, name').in('id', workspaceIds),
+    supabase.from('bot_config').select('account_id, phone_number_id, meta_token').in('account_id', accountIds),
+  ])
 
   const workspaceById = new Map((workspaces ?? []).map((w) => [w.id, w]))
+  const connByAccount = new Map((botConfigs ?? []).map((c) => [c.account_id, c]))
 
   let notified = 0
   const errors: string[] = []
 
   for (const entry of entries) {
     const workspace = workspaceById.get(entry.workspace_id)
-    if (!workspace?.phone_number_id || !workspace?.meta_token) continue
+    const conn = connByAccount.get(entry.account_id)
+    if (!workspace || !conn?.phone_number_id || !conn?.meta_token) continue
 
     try {
       const slotsFound: string[] = []
@@ -69,8 +73,8 @@ export async function POST(req: NextRequest) {
 
       await sendWaitlistTemplate({
         to: entry.patient_phone,
-        phoneNumberId: workspace.phone_number_id,
-        token: decryptToken(workspace.meta_token),
+        phoneNumberId: conn.phone_number_id,
+        token: decryptToken(conn.meta_token),
         patientName: entry.patient_name,
         workspaceName: workspace.name,
         slots: slotsFound.join(' | '),

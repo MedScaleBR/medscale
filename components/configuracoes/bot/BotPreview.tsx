@@ -6,7 +6,7 @@ export interface BotPreviewConfig {
   specialty: string
   procedures: string[]
   insurance_plans: string[]
-  handoff_number: string
+  handoff_number?: string
   welcome_message: string
 }
 

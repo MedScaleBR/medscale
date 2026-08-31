@@ -96,10 +96,16 @@ export interface Database {
           city: string | null
           state: string | null
           zip_code: string | null
-          whatsapp_number: string | null
-          phone_number_id: string | null
-          meta_token: string | null
-          meta_app_secret: string | null
+          // Campos exibidos pela Maria que variam por unidade (a config do bot
+          // é única por account — ver bot_config).
+          business_hours: string | null
+          directions_parking: string | null
+          contact_info: string | null
+          consultation_price_from: number | null
+          handoff_number: string | null
+          // Calendário Google desta unidade dentro da conexão única da account
+          // (google_tokens é por account). null = calendário "primary".
+          gcal_calendar_id: string | null
           is_active: boolean
           is_default: boolean
           display_order: number
@@ -372,7 +378,10 @@ export interface Database {
       conversations: {
         Row: {
           id: string
-          workspace_id: string
+          // null até a Maria confirmar a unidade — a conversa é resolvida por
+          // account + telefone (número único). A unidade real de cada consulta
+          // fica em appointments.workspace_id.
+          workspace_id: string | null
           account_id: string
           patient_id: string | null
           patient_phone: string
@@ -385,7 +394,6 @@ export interface Database {
           summary: string | null
         }
         Insert: Partial<Database['public']['Tables']['conversations']['Row']> & {
-          workspace_id: string
           account_id: string
           patient_phone: string
         }
@@ -646,18 +654,14 @@ export interface Database {
       bot_config: {
         Row: {
           id: string
-          workspace_id: string
+          // Uma linha por account (número WhatsApp único, vale para todas as
+          // unidades). Campos que variam por unidade ficam em workspaces.
           account_id: string
           bot_name: string
           specialty: string | null
           procedures: string[]
           insurance_plans: string[]
           accepts_private: boolean
-          consultation_price_from: number | null
-          business_hours: string | null
-          address: string | null
-          directions_parking: string | null
-          contact_info: string | null
           payment_methods: string[]
           pricing_info: string | null
           exam_preparation: string | null
@@ -666,11 +670,14 @@ export interface Database {
           handoff_instructions: string | null
           forbidden_actions: string | null
           faq: { question: string; answer: string }[]
-          handoff_number: string | null
           handoff_message: string
           welcome_message: string
           out_of_hours_message: string
           is_active: boolean
+          whatsapp_number: string | null
+          phone_number_id: string | null
+          meta_token: string | null
+          meta_app_secret: string | null
           number_source: NumberSource
           onboarding_step: OnboardingStep
           webhook_verify_token: string
@@ -678,13 +685,13 @@ export interface Database {
           created_at: string
           updated_at: string
         }
-        Insert: Partial<Database['public']['Tables']['bot_config']['Row']> & { workspace_id: string; account_id: string }
+        Insert: Partial<Database['public']['Tables']['bot_config']['Row']> & { account_id: string }
         Update: Partial<Database['public']['Tables']['bot_config']['Row']>
         Relationships: [
           {
-            foreignKeyName: 'bot_config_workspace_id_fkey'
-            columns: ['workspace_id']
-            referencedRelation: 'workspaces'
+            foreignKeyName: 'bot_config_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
             referencedColumns: ['id']
           },
         ]
@@ -692,18 +699,19 @@ export interface Database {
       google_tokens: {
         Row: {
           id: string
-          workspace_id: string
+          // Uma conexão Google por account. O mapeamento unidade → calendário
+          // fica em workspaces.gcal_calendar_id.
+          account_id: string
           doctor_id: string
           access_token: string
           refresh_token: string
           token_expiry: string
-          calendar_id: string
           google_email: string | null
           connected_at: string
           updated_at: string
         }
         Insert: Partial<Database['public']['Tables']['google_tokens']['Row']> & {
-          workspace_id: string
+          account_id: string
           doctor_id: string
           access_token: string
           refresh_token: string
@@ -712,9 +720,9 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['google_tokens']['Row']>
         Relationships: [
           {
-            foreignKeyName: 'google_tokens_workspace_id_fkey'
-            columns: ['workspace_id']
-            referencedRelation: 'workspaces'
+            foreignKeyName: 'google_tokens_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
             referencedColumns: ['id']
           },
         ]
@@ -742,7 +750,7 @@ export interface Database {
       rate_limit_log: {
         Row: {
           id: number
-          workspace_id: string
+          account_id: string
           phone: string
           window_start: string
           message_count: number
@@ -750,15 +758,15 @@ export interface Database {
           notified: boolean
         }
         Insert: Partial<Database['public']['Tables']['rate_limit_log']['Row']> & {
-          workspace_id: string
+          account_id: string
           phone: string
         }
         Update: Partial<Database['public']['Tables']['rate_limit_log']['Row']>
         Relationships: [
           {
-            foreignKeyName: 'rate_limit_log_workspace_id_fkey'
-            columns: ['workspace_id']
-            referencedRelation: 'workspaces'
+            foreignKeyName: 'rate_limit_log_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
             referencedColumns: ['id']
           },
         ]
@@ -848,6 +856,9 @@ export interface Database {
         Row: {
           id: string
           account_id: string
+          // Unidade do lançamento. null = consolidado / account-wide (padrão
+          // para PF). Para PJ a Maria financeira pergunta a unidade antes de gravar.
+          workspace_id: string | null
           recorded_by_phone: string
           type: FinanceEntryType
           description: string | null
@@ -870,6 +881,12 @@ export interface Database {
             foreignKeyName: 'finance_entries_account_id_fkey'
             columns: ['account_id']
             referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'finance_entries_workspace_id_fkey'
+            columns: ['workspace_id']
+            referencedRelation: 'workspaces'
             referencedColumns: ['id']
           },
         ]

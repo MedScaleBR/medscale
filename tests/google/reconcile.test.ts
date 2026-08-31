@@ -92,7 +92,7 @@ describe('reconcileCalendar — sincronização inversa Google → Supabase', ()
     expect(supabase.callsTo('appointments', 'update')).toHaveLength(0)
     // Continua aparecendo como bloqueio de agenda, sem virar consulta.
     expect(result.busyBlocks).toEqual([
-      { start: '2025-09-15T12:00:00-03:00', end: '2025-09-15T13:00:00-03:00', summary: 'Almoço com a família' },
+      { start: '2025-09-15T12:00:00-03:00', end: '2025-09-15T13:00:00-03:00', summary: 'Almoço com a família', workspaceId: 'w1' },
     ])
   })
 

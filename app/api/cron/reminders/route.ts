@@ -5,7 +5,8 @@ import { decryptToken } from '@/lib/crypto'
 
 // Disparado pelo Supabase pg_cron (ver supabase/cron.sql) uma vez por hora, no
 // ponto. Envia lembrete de consulta a pacientes com consulta entre 23h e 25h no
-// futuro e ainda sem lembrete enviado.
+// futuro e ainda sem lembrete enviado. O número WhatsApp é único por account
+// (bot_config); o endereço vem da unidade da consulta (workspaces).
 export async function POST(req: NextRequest) {
   const authHeader = req.headers.get('authorization')
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -19,7 +20,7 @@ export async function POST(req: NextRequest) {
 
   const { data: appointments, error } = await supabase
     .from('appointments')
-    .select('id, workspace_id, patient_name, patient_phone, scheduled_at')
+    .select('id, workspace_id, account_id, patient_name, patient_phone, scheduled_at')
     .gte('scheduled_at', windowStart)
     .lte('scheduled_at', windowEnd)
     .eq('reminder_sent', false)
@@ -31,54 +32,43 @@ export async function POST(req: NextRequest) {
   }
 
   const workspaceIds = [...new Set(appointments.map((a) => a.workspace_id))]
-  const { data: workspaces } = await supabase
-    .from('workspaces')
-    .select('id, name, phone_number_id, meta_token, address, city, state, zip_code')
-    .in('id', workspaceIds)
+  const accountIds = [...new Set(appointments.map((a) => a.account_id))]
+
+  const [{ data: workspaces }, { data: botConfigs }] = await Promise.all([
+    supabase
+      .from('workspaces')
+      .select('id, name, address, city, state, zip_code')
+      .in('id', workspaceIds),
+    supabase
+      .from('bot_config')
+      .select('account_id, phone_number_id, meta_token')
+      .in('account_id', accountIds),
+  ])
 
   const workspaceById = new Map((workspaces ?? []).map((w) => [w.id, w]))
-
-  // Endereço livre cadastrado no contexto do bot (tela Contexto) — usado como
-  // fallback quando a unidade não tem logradouro estruturado em Locais.
-  const { data: botConfigs } = await supabase
-    .from('bot_config')
-    .select('workspace_id, address')
-    .in('workspace_id', workspaceIds)
-
-  const botAddressByWorkspace = new Map(
-    (botConfigs ?? []).map((c) => [c.workspace_id, c.address]),
-  )
+  const connByAccount = new Map((botConfigs ?? []).map((c) => [c.account_id, c]))
 
   let sent = 0
   const errors: string[] = []
 
   for (const appt of appointments) {
     const workspace = workspaceById.get(appt.workspace_id)
-    if (!workspace?.phone_number_id || !workspace?.meta_token) continue
+    const conn = connByAccount.get(appt.account_id)
+    if (!workspace || !conn?.phone_number_id || !conn?.meta_token) continue
 
     const scheduledAt = new Date(appt.scheduled_at)
-    const structuredAddress = [
-      workspace.address,
-      workspace.city,
-      workspace.state,
-      workspace.zip_code,
-    ]
+    const structuredAddress = [workspace.address, workspace.city, workspace.state, workspace.zip_code]
       .filter(Boolean)
       .join(', ')
 
-    // Preferência: endereço de Locais com logradouro > endereço livre do
-    // contexto do bot > cidade/UF > nome da unidade (a Meta rejeita param vazio).
-    const address =
-      (workspace.address && structuredAddress) ||
-      botAddressByWorkspace.get(workspace.id) ||
-      structuredAddress ||
-      workspace.name
+    // Endereço da unidade > cidade/UF > nome da unidade (a Meta rejeita param vazio).
+    const address = structuredAddress || workspace.name
 
     try {
       await sendReminderTemplate({
         to: appt.patient_phone,
-        phoneNumberId: workspace.phone_number_id,
-        token: decryptToken(workspace.meta_token),
+        phoneNumberId: conn.phone_number_id,
+        token: decryptToken(conn.meta_token),
         patientName: appt.patient_name,
         appointmentDate: scheduledAt.toLocaleDateString('pt-BR', {
           timeZone: 'America/Sao_Paulo',

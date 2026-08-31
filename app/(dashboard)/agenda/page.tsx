@@ -1,6 +1,6 @@
 import { resolveActiveSession } from '@/lib/session/server'
 import { createClient } from '@/lib/supabase/server'
-import { reconcileCalendar } from '@/lib/google/reconcile'
+import { reconcileAccountCalendars } from '@/lib/google/reconcile'
 import { AgendaClient } from '@/components/agenda/AgendaClient'
 
 export default async function AgendaPage() {
@@ -11,29 +11,45 @@ export default async function AgendaPage() {
   const from = new Date(now.getFullYear(), now.getMonth() - 1, 1)
   const to = new Date(now.getFullYear(), now.getMonth() + 2, 0)
 
-  const { appointments, busyBlocks } = await reconcileCalendar(session.workspaceId, from, to)
+  // Agenda consolidada: todas as unidades da account de uma vez (cada consulta
+  // e cada bloqueio carrega o workspace_id — a UI colore e filtra por unidade).
+  const { appointments, busyBlocks } = await reconcileAccountCalendars(session.accountId, from, to)
 
   const supabase = await createClient()
 
-  // Catálogo de procedimentos para o seletor do modal — só quando o ciclo de
-  // receita está ativo.
-  let procedures: { id: string; name: string; default_price: number }[] = []
+  const { data: workspaceRows } = await supabase
+    .from('workspaces')
+    .select('id, name')
+    .eq('account_id', session.accountId)
+    .eq('is_active', true)
+    .order('display_order')
+  const workspaces = workspaceRows ?? []
+
+  // Catálogo de procedimentos para o seletor do modal — por unidade (o preço
+  // pode variar entre unidades). Só quando o ciclo de receita está ativo.
+  const proceduresByWorkspace: Record<string, { id: string; name: string; default_price: number }[]> = {}
   if (session.userModules.includes('revenue_cycle')) {
     const { data } = await supabase
       .from('procedure_catalog')
-      .select('id, name, default_price')
-      .eq('workspace_id', session.workspaceId)
+      .select('id, name, default_price, workspace_id')
+      .in('workspace_id', workspaces.map((w) => w.id))
       .eq('is_active', true)
       .order('name', { ascending: true })
-    procedures = (data ?? []).map((p) => ({ ...p, default_price: Number(p.default_price) }))
+    for (const p of data ?? []) {
+      ;(proceduresByWorkspace[p.workspace_id] ??= []).push({
+        id: p.id,
+        name: p.name,
+        default_price: Number(p.default_price),
+      })
+    }
   }
 
-  // Convênios atendidos (para o seletor "Atendimento" do modal). Fonte: a mesma
-  // lista que a Maria informa aos pacientes (bot_config.insurance_plans).
+  // Convênios atendidos (seletor "Atendimento" do modal). Config da Maria é
+  // única por account (bot_config.insurance_plans).
   const { data: botConfig } = await supabase
     .from('bot_config')
     .select('insurance_plans')
-    .eq('workspace_id', session.workspaceId)
+    .eq('account_id', session.accountId)
     .maybeSingle()
   const healthPlans = botConfig?.insurance_plans ?? []
 
@@ -46,8 +62,10 @@ export default async function AgendaPage() {
       <AgendaClient
         initialAppointments={appointments}
         initialBusyBlocks={busyBlocks}
+        workspaces={workspaces}
+        activeWorkspaceId={session.workspaceId}
         showTranscriptions={session.userModules.includes('transcriptions')}
-        procedures={procedures}
+        proceduresByWorkspace={proceduresByWorkspace}
         healthPlans={healthPlans}
       />
     </div>

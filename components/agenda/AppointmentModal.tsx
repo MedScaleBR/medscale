@@ -30,6 +30,8 @@ export interface CatalogProcedureOption {
 
 export interface AppointmentFormValues {
   id?: string
+  /** Unidade da consulta (define o calendário Google e o catálogo de preços). */
+  workspace_id?: string
   patient_id?: string | null
   patient_name: string
   patient_phone: string
@@ -44,10 +46,16 @@ export interface AppointmentFormValues {
   health_plan: string | null
 }
 
+export interface ModalWorkspaceOption {
+  id: string
+  name: string
+}
+
 interface AppointmentModalProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   initialValues?: Partial<AppointmentFormValues>
+  workspaces?: ModalWorkspaceOption[]
   onSave: (values: AppointmentFormValues) => Promise<void>
   onDelete?: () => Promise<void>
   showTranscriptions?: boolean
@@ -75,6 +83,7 @@ export function AppointmentModal({
   open,
   onOpenChange,
   initialValues,
+  workspaces,
   onSave,
   onDelete,
   showTranscriptions,
@@ -87,6 +96,7 @@ export function AppointmentModal({
         {open && (
           <AppointmentForm
             initialValues={initialValues}
+            workspaces={workspaces ?? []}
             onSave={onSave}
             onDelete={onDelete}
             onOpenChange={onOpenChange}
@@ -102,6 +112,7 @@ export function AppointmentModal({
 
 interface AppointmentFormProps {
   initialValues?: Partial<AppointmentFormValues>
+  workspaces: ModalWorkspaceOption[]
   onSave: (values: AppointmentFormValues) => Promise<void>
   onDelete?: () => Promise<void>
   onOpenChange: (open: boolean) => void
@@ -110,10 +121,11 @@ interface AppointmentFormProps {
   healthPlans: string[]
 }
 
-function AppointmentForm({ initialValues, onSave, onDelete, onOpenChange, showTranscriptions, procedures, healthPlans }: AppointmentFormProps) {
+function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenChange, showTranscriptions, procedures, healthPlans }: AppointmentFormProps) {
   const [values, setValues] = useState<AppointmentFormValues>({ ...EMPTY, ...initialValues })
   const [saving, setSaving] = useState(false)
   const isConvenio = values.health_plan != null
+  const showUnitPicker = workspaces.length > 1
 
   const onHealthPlanChange = (choice: string | null) => {
     if (!choice || choice === PARTICULAR) {
@@ -171,6 +183,36 @@ function AppointmentForm({ initialValues, onSave, onDelete, onOpenChange, showTr
       )}
 
       <div className="space-y-3">
+          {showUnitPicker && (
+            <div>
+              <Label>Unidade</Label>
+              <Select
+                value={values.workspace_id ?? ''}
+                onValueChange={(id) =>
+                  id && setValues((v) => ({ ...v, workspace_id: id, procedure_id: null, price: '' }))
+                }
+                disabled={Boolean(values.id)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Selecione a unidade">
+                    {(id) => workspaces.find((w) => w.id === id)?.name ?? 'Selecione a unidade'}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {workspaces.map((w) => (
+                    <SelectItem key={w.id} value={w.id}>
+                      {w.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {values.id && (
+                <p className="mt-1 text-xs text-gray-400">
+                  A unidade de uma consulta já criada não pode ser alterada aqui.
+                </p>
+              )}
+            </div>
+          )}
           <div>
             <Label htmlFor="patient_name">Nome do paciente</Label>
             <Input

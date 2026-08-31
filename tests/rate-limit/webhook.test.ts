@@ -33,7 +33,7 @@ describe('checkRateLimit', () => {
     expect(result).toEqual({ allowed: true })
     const upsert = supabase.callsTo('rate_limit_log', 'upsert')[0]
     expect(upsert?.payload).toMatchObject({
-      workspace_id: WORKSPACE,
+      account_id: WORKSPACE,
       phone: PHONE,
       message_count: 1,
       notified: false,
@@ -102,18 +102,18 @@ describe('checkRateLimit', () => {
     expect(supabase.callsTo('rate_limit_log', 'update')).toHaveLength(0)
   })
 
-  it('consulta o bucket por (workspace_id, phone) — isolamento por tenant', async () => {
+  it('consulta o bucket por (account_id, phone) — isolamento por tenant', async () => {
     const supabase = setup(null)
 
     await checkRateLimit(WORKSPACE, PHONE)
 
     const select = supabase.callsTo('rate_limit_log', 'select')[0]
-    expect(filterValue(select!, 'eq', 'workspace_id')).toBe(WORKSPACE)
+    expect(filterValue(select!, 'eq', 'account_id')).toBe(WORKSPACE)
     expect(filterValue(select!, 'eq', 'phone')).toBe(PHONE)
   })
 
-  it('trata workspaces diferentes como buckets independentes', async () => {
-    setup(null) // mesmo telefone, workspace diferente e ainda sem registro
+  it('trata accounts diferentes como buckets independentes', async () => {
+    setup(null) // mesmo telefone, account diferente e ainda sem registro
 
     const result = await checkRateLimit('ws-2', PHONE)
 

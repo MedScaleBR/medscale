@@ -27,6 +27,8 @@ export function parseCommand(raw: string): FinanceIntent {
       type: resumoMatch[1].toLowerCase() as FinanceEntryType,
       category: null,
       month: null,
+      // Atalho é sempre consolidado; para filtrar por unidade use linguagem natural.
+      workspace: null,
     }
   }
 
@@ -48,6 +50,8 @@ export function parseCommand(raw: string): FinanceIntent {
           amount,
           // Atalho não deduz categoria — quem categoriza é o agente.
           category: null,
+          // Atalho não menciona unidade; PJ multi-unidade cai na pergunta.
+          workspaceHint: null,
         }
       }
     }

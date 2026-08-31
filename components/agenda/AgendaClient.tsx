@@ -10,6 +10,11 @@ import type { BusyBlock } from '@/lib/google/reconcile'
 
 type Appointment = Database['public']['Tables']['appointments']['Row']
 
+export interface WorkspaceOption {
+  id: string
+  name: string
+}
+
 function toIso(datetimeLocal: string) {
   return new Date(datetimeLocal).toISOString()
 }
@@ -17,14 +22,18 @@ function toIso(datetimeLocal: string) {
 export function AgendaClient({
   initialAppointments,
   initialBusyBlocks,
+  workspaces,
+  activeWorkspaceId,
   showTranscriptions,
-  procedures,
+  proceduresByWorkspace,
   healthPlans,
 }: {
   initialAppointments: Appointment[]
   initialBusyBlocks: BusyBlock[]
+  workspaces: WorkspaceOption[]
+  activeWorkspaceId: string
   showTranscriptions?: boolean
-  procedures?: CatalogProcedureOption[]
+  proceduresByWorkspace?: Record<string, CatalogProcedureOption[]>
   healthPlans?: string[]
 }) {
   const [appointments, setAppointments] = useState(initialAppointments)
@@ -38,6 +47,7 @@ export function AgendaClient({
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        workspace_id: values.workspace_id ?? activeWorkspaceId,
         patient_name: values.patient_name,
         patient_phone: values.patient_phone,
         scheduled_at: toIso(values.scheduled_at),
@@ -110,11 +120,13 @@ export function AgendaClient({
       <CalendarView
         appointments={appointments}
         busyBlocks={busyBlocks}
+        workspaces={workspaces}
+        activeWorkspaceId={activeWorkspaceId}
         onCreate={handleCreate}
         onUpdate={handleUpdate}
         onDelete={handleDelete}
         showTranscriptions={showTranscriptions}
-        procedures={procedures}
+        proceduresByWorkspace={proceduresByWorkspace}
         healthPlans={healthPlans}
       />
     </>

@@ -11,7 +11,7 @@ import { sendWhatsAppMessage } from '@/lib/whatsapp/send'
 // Valida a assinatura HMAC enviada pela Meta para garantir que o payload
 // realmente veio da Meta e não foi forjado. `secret` é o App Secret do App
 // Meta que assinou a mensagem — o App único da MedScale (META_APP_SECRET)
-// para o fluxo compartilhado, ou o App Secret próprio da workspace no fluxo
+// para o fluxo compartilhado, ou o App Secret próprio da account no fluxo
 // "número próprio" (cada App só assina com o seu próprio secret).
 function validateMetaSignature(payload: string, signature: string, secret: string | null | undefined): boolean {
   if (!signature || !secret) return false
@@ -39,47 +39,43 @@ export async function POST(req: NextRequest) {
   const value = changes?.value
   const phoneNumberId: string | undefined = value?.metadata?.phone_number_id
 
-  // O número financeiro não é de nenhuma workspace (é o número único da
-  // MedScale, por account) — não adianta procurar workspace pra ele.
+  // O número financeiro não é de nenhuma account (é o número único da MedScale
+  // para o agente financeiro) — não adianta procurar bot_config pra ele.
   const isFinanceNumber = Boolean(phoneNumberId && phoneNumberId === process.env.FINANCE_PHONE_NUMBER_ID)
 
-  // Encontrar a workspace pelo phone_number_id — precisamos disso já aqui
-  // (antes de aceitar/rejeitar a assinatura) porque, no fluxo "número
-  // próprio", a assinatura só é validável com o App Secret daquela workspace.
-  const { data: workspace } =
+  // Encontrar a account pelo phone_number_id (a conexão WhatsApp da Maria vive
+  // em bot_config, uma por account). Precisamos disso já aqui (antes de
+  // aceitar/rejeitar a assinatura) porque, no fluxo "número próprio", a
+  // assinatura só é validável com o App Secret daquela account.
+  const { data: botConn } =
     phoneNumberId && !isFinanceNumber
       ? await supabase
-          .from('workspaces')
-          .select('id, name, account_id, meta_app_secret, phone_number_id, meta_token')
+          .from('bot_config')
+          .select('account_id, meta_app_secret, phone_number_id, meta_token')
           .eq('phone_number_id', phoneNumberId)
-          .single()
+          .maybeSingle()
       : { data: null }
 
-  const workspaceSecret = workspace?.meta_app_secret ? decryptToken(workspace.meta_app_secret) : null
+  const accountSecret = botConn?.meta_app_secret ? decryptToken(botConn.meta_app_secret) : null
 
   // O número financeiro pode estar num App Meta diferente do App único da
-  // MedScale (ex: adicionado na mesma WABA de um número do fluxo "número
-  // próprio", que é assinada pelo App daquela clínica). Como ele não tem
-  // workspace, o secret dele não sai do banco — vem de env var própria,
-  // caindo em META_APP_SECRET quando não configurada (caso em que o número
-  // financeiro está mesmo no App único da MedScale).
+  // MedScale. Como ele não tem account, o secret vem de env var própria,
+  // caindo em META_APP_SECRET quando não configurada.
   const financeSecret = isFinanceNumber
     ? (process.env.FINANCE_META_APP_SECRET ?? process.env.META_APP_SECRET)
     : null
 
   const validSignature =
     validateMetaSignature(rawBody, signature, process.env.META_APP_SECRET) ||
-    validateMetaSignature(rawBody, signature, workspaceSecret) ||
+    validateMetaSignature(rawBody, signature, accountSecret) ||
     validateMetaSignature(rawBody, signature, financeSecret)
 
   if (!validSignature) {
-    // Nunca logar os secrets em si — só o suficiente pra diferenciar "env
-    // var não configurada" de "valor errado" (ver o GET mais abaixo).
     console.warn('[whatsapp webhook] signature validation failed', {
       phoneNumberId: phoneNumberId ?? null,
       isFinanceNumber,
-      workspaceId: workspace?.id ?? null,
-      hasWorkspaceSecret: Boolean(workspaceSecret),
+      accountId: botConn?.account_id ?? null,
+      hasAccountSecret: Boolean(accountSecret),
       hasGlobalSecret: Boolean(process.env.META_APP_SECRET),
       hasFinanceSecret: Boolean(process.env.FINANCE_META_APP_SECRET),
       hasSignatureHeader: Boolean(signature),
@@ -95,11 +91,8 @@ export async function POST(req: NextRequest) {
   const from = message.from // telefone do paciente (ou do owner, no fluxo financeiro)
   const text = message.type === 'text' ? message.text.body : null
 
-  // Mensagem chegou no número financeiro dedicado da MedScale — fora do
-  // modelo de workspace (o owner registra PF/PJ consolidado por account),
-  // então é tratada antes da resolução de workspace abaixo. Mesmo App Meta
-  // e mesmo META_APP_SECRET do fluxo compartilhado, só o phone_number_id
-  // e o token de envio (FINANCE_META_TOKEN) são diferentes.
+  // Mensagem no número financeiro dedicado da MedScale — fora do modelo de
+  // account/bot, tratada antes da resolução abaixo.
   if (phoneNumberId && phoneNumberId === process.env.FINANCE_PHONE_NUMBER_ID) {
     if (message.type !== 'text') {
       after(() =>
@@ -116,38 +109,31 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ status: 'ok' })
   }
 
-  // Log do webhook para debugging — associado à workspace quando identificável.
-  // Guardamos o id da linha para poder gravar o erro nela especificamente
-  // depois (ver abaixo) — atualizar "a linha mais recente da workspace" era
-  // uma corrida: outra mensagem podia chegar antes do catch rodar e o erro
-  // acabava gravado na linha errada.
+  // Log do webhook para debugging. workspace_id fica null: a unidade só é
+  // conhecida depois que a Maria pergunta ao paciente.
   const { data: webhookLog } = await supabase
     .from('webhook_logs')
-    .insert({ workspace_id: workspace?.id ?? null, payload: body })
+    .insert({ workspace_id: null, payload: body })
     .select('id')
     .single()
 
-  if (!workspace) {
-    return NextResponse.json({ status: 'workspace_not_found' })
+  if (!botConn) {
+    return NextResponse.json({ status: 'account_not_found' })
   }
 
-  // A Meta exige resposta em <20s — o processamento roda após a resposta HTTP
-  // ser enviada, via `after()` (equivalente a waitUntil no Vercel).
+  const accountId = botConn.account_id
+
+  // A Meta exige resposta em <20s — o processamento roda após a resposta HTTP.
   after(async () => {
-    // Rate limiting por (workspace, número) ANTES de qualquer processamento —
-    // inclusive antes do getBotConfig() e do check de bot_paused dentro do
-    // agente. Conta todo tipo de mensagem (texto, áudio, imagem): o custo de
-    // processar existe em todos. A mensagem excedente já foi gravada em
-    // webhook_logs acima (rastreabilidade); aqui ela só não é processada.
-    const rateLimit = await checkRateLimit(workspace.id, from)
+    // Rate limiting por (account, número) ANTES de qualquer processamento.
+    const rateLimit = await checkRateLimit(accountId, from)
     if (!rateLimit.allowed) {
-      if (rateLimit.shouldNotify && workspace.phone_number_id && workspace.meta_token) {
-        // Uma única vez por janela de bloqueio (flag `notified` em checkRateLimit).
+      if (rateLimit.shouldNotify && botConn.phone_number_id && botConn.meta_token) {
         await sendWhatsAppMessage({
           to: from,
           message: RATE_LIMIT_NOTICE_MESSAGE,
-          phoneNumberId: workspace.phone_number_id,
-          token: decryptToken(workspace.meta_token),
+          phoneNumberId: botConn.phone_number_id,
+          token: decryptToken(botConn.meta_token),
         }).catch((err) => console.error('[whatsapp webhook] rate limit notice failed', err))
       }
       return
@@ -155,9 +141,7 @@ export async function POST(req: NextRequest) {
 
     if (text) {
       await processIncomingMessage({
-        workspaceId: workspace.id,
-        accountId: workspace.account_id,
-        workspaceName: workspace.name,
+        accountId,
         patientPhone: from,
         message: text,
         whatsappMessageId: message.id,
@@ -172,11 +156,8 @@ export async function POST(req: NextRequest) {
         }
       })
     } else {
-      // Áudio, imagem, documento, figurinha etc. — a Maria não entende o
-      // conteúdo, mas avisa o paciente em vez de ficar em silêncio.
       await handleUnsupportedMessage({
-        workspaceId: workspace.id,
-        accountId: workspace.account_id,
+        accountId,
         patientPhone: from,
         messageType: message.type,
         whatsappMessageId: message.id,
@@ -189,8 +170,7 @@ export async function POST(req: NextRequest) {
 
 // Verificação do webhook pela Meta (handshake inicial de configuração).
 // Aceita tanto o META_VERIFY_TOKEN global (App único da MedScale) quanto um
-// webhook_verify_token específico de uma workspace que traz seu próprio App
-// Meta (fluxo "número próprio" — cada App configura seu próprio verify token).
+// webhook_verify_token específico de uma account que traz seu próprio App Meta.
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url)
   const mode = searchParams.get('hub.mode')
@@ -217,8 +197,6 @@ export async function GET(req: NextRequest) {
     return new NextResponse(challenge, { status: 200 })
   }
 
-  // Não logamos o token em si (evita vazar segredo nos logs) — só o
-  // suficiente para diferenciar "env var não configurada" de "valor errado".
   console.warn('[whatsapp webhook] verify failed: token did not match META_VERIFY_TOKEN nor any bot_config', {
     metaVerifyTokenConfigured: Boolean(process.env.META_VERIFY_TOKEN),
     tokenLength: token.length,

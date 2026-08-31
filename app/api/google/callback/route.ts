@@ -6,7 +6,7 @@ import { trackGoogleCalendarConnected } from '@/lib/analytics/posthog-server'
 export async function GET(req: NextRequest) {
   const { searchParams, origin } = new URL(req.url)
   const code = searchParams.get('code')
-  const state = searchParams.get('state') // workspaceId passado no OAuth state
+  const state = searchParams.get('state') // accountId passado no OAuth state
   const errorMsg = searchParams.get('error')
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? origin
@@ -17,8 +17,7 @@ export async function GET(req: NextRequest) {
 
   // O `state` sozinho não é confiável como identidade — qualquer um pode
   // reescrevê-lo na URL de callback. Exigimos que o usuário esteja logado E
-  // tenha acesso a essa workspace — a policy de RLS de `workspaces` já
-  // resolve isso: se a linha vier vazia, ele não tem acesso.
+  // seja membro ativo dessa account.
   const supabase = await createClient()
   const {
     data: { user },
@@ -28,17 +27,21 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${appUrl}/login`)
   }
 
-  const { data: workspace } = await supabase.from('workspaces').select('id, account_id').eq('id', state).single()
-  if (!workspace) {
+  const { data: membership } = await supabase
+    .from('memberships')
+    .select('account_id')
+    .eq('account_id', state)
+    .eq('user_id', user.id)
+    .eq('status', 'active')
+    .maybeSingle()
+
+  if (!membership) {
     return NextResponse.redirect(`${appUrl}/configuracoes?google=error`)
   }
 
   try {
     await exchangeCodeAndSave(code, state, user.id)
-    await trackGoogleCalendarConnected(user.id, {
-      workspace_id: state,
-      account_id: workspace.account_id,
-    })
+    await trackGoogleCalendarConnected(user.id, { account_id: state })
     return NextResponse.redirect(`${appUrl}/configuracoes?google=connected`)
   } catch (err) {
     console.error('Google OAuth callback error:', err)

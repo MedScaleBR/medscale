@@ -6,7 +6,7 @@ vi.mock('@/lib/supabase/server', async () => {
 })
 vi.mock('@/lib/bot/config', async () => {
   const h = await import('../helpers/agent-harness')
-  return { getBotConfig: async () => h.state.botConfig, invalidateBotConfigCache: () => {} }
+  return { getBotConfig: async () => h.state.botConfig, getAccountUnits: async () => h.state.units, invalidateBotConfigCache: () => {} }
 })
 vi.mock('@/lib/whatsapp/send', async () => {
   const h = await import('../helpers/agent-harness')
@@ -40,6 +40,7 @@ import {
   isSlotAvailable,
   sendWhatsAppMessage,
   PARAMS,
+  UNIT_ID,
   lastSentMessage,
 } from '../helpers/agent-harness'
 import { filterValue } from '../helpers/supabase-mock'
@@ -65,10 +66,10 @@ describe('processIncomingMessage — agendamento pelo bot', () => {
 
     await processIncomingMessage(PARAMS)
 
-    expect(isSlotAvailable).toHaveBeenCalledWith(PARAMS.workspaceId, new Date(SLOT), 30)
+    expect(isSlotAvailable).toHaveBeenCalledWith(UNIT_ID, new Date(SLOT), 30)
     const insert = supabase.callsTo('appointments', 'insert')[0]
     expect(insert?.payload).toEqual({
-      workspace_id: PARAMS.workspaceId,
+      workspace_id: UNIT_ID,
       account_id: PARAMS.accountId,
       patient_id: 'p1',
       patient_name: 'Paciente',
@@ -94,7 +95,8 @@ describe('processIncomingMessage — agendamento pelo bot', () => {
     const update = supabase
       .callsTo('conversations', 'update')
       .find((c) => (c.payload as { appointment_id?: string }).appointment_id !== undefined)
-    expect(update?.payload).toEqual({ appointment_id: 'appt-1' })
+    // A conversa passa a apontar para a consulta E fixa a unidade escolhida.
+    expect(update?.payload).toEqual({ appointment_id: 'appt-1', workspace_id: UNIT_ID })
     expect(filterValue(update!, 'eq', 'id')).toBe('c1')
   })
 
@@ -146,7 +148,7 @@ describe('processIncomingMessage — agendamento pelo bot', () => {
 
     expect(createEvent).toHaveBeenCalledWith(
       expect.objectContaining({
-        workspaceId: PARAMS.workspaceId,
+        workspaceId: UNIT_ID,
         patientName: 'Paciente',
         startTime: new Date(SLOT),
         durationMin: 30,
@@ -206,7 +208,7 @@ describe('processIncomingMessage — agendamento pelo bot', () => {
       appointments: {
         select: [
           { data: [{ id: APPT_UUID, scheduled_at: '2025-09-20T13:00:00.000Z' }] },
-          { data: { id: APPT_UUID, gcal_event_id: 'gcal-9' } },
+          { data: { id: APPT_UUID, gcal_event_id: 'gcal-9', workspace_id: 'w1' } },
         ],
         update: { data: null },
       },
@@ -215,7 +217,7 @@ describe('processIncomingMessage — agendamento pelo bot', () => {
 
     await processIncomingMessage(PARAMS)
 
-    expect(cancelEvent).toHaveBeenCalledWith(PARAMS.workspaceId, 'gcal-9')
+    expect(cancelEvent).toHaveBeenCalledWith(UNIT_ID, 'gcal-9')
   })
 })
 

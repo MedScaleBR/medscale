@@ -7,6 +7,7 @@ export async function GET(req: NextRequest) {
   if ('error' in result) return result.error
   const { session } = result
 
-  const url = getAuthUrl(session.workspaceId)
+  // Conexão única por account (atende todas as unidades).
+  const url = getAuthUrl(session.accountId)
   return NextResponse.redirect(url)
 }

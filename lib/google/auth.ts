@@ -10,8 +10,10 @@ export function getOAuthClient() {
   )
 }
 
-// URL para redirecionar o médico ao consentimento Google
-export function getAuthUrl(workspaceId: string): string {
+// URL para redirecionar o médico ao consentimento Google. A conexão é única
+// por account (atende todas as unidades); cada unidade escolhe depois qual
+// calendário representa ela (workspaces.gcal_calendar_id).
+export function getAuthUrl(accountId: string): string {
   const oauth2 = getOAuthClient()
   return oauth2.generateAuthUrl({
     access_type: 'offline', // obrigatório para obter refresh_token
@@ -21,13 +23,13 @@ export function getAuthUrl(workspaceId: string): string {
       'https://www.googleapis.com/auth/calendar.events',
       'https://www.googleapis.com/auth/userinfo.email',
     ],
-    state: workspaceId, // recuperado no callback
+    state: accountId, // recuperado no callback
   })
 }
 
 // Troca o code por tokens e salva criptografados no banco.
 // connectedByUserId é quem de fato clicou "conectar" — fica em google_tokens.doctor_id.
-export async function exchangeCodeAndSave(code: string, workspaceId: string, connectedByUserId: string) {
+export async function exchangeCodeAndSave(code: string, accountId: string, connectedByUserId: string) {
   const oauth2 = getOAuthClient()
   const { tokens } = await oauth2.getToken(code)
 
@@ -47,29 +49,29 @@ export async function exchangeCodeAndSave(code: string, workspaceId: string, con
   const supabase = createAdminClient()
   const { error } = await supabase.from('google_tokens').upsert(
     {
-      workspace_id: workspaceId,
+      account_id: accountId,
       doctor_id: connectedByUserId,
       access_token: encryptToken(tokens.access_token),
       refresh_token: encryptToken(tokens.refresh_token),
       token_expiry: new Date(tokens.expiry_date).toISOString(),
       google_email: data.email ?? null,
     },
-    { onConflict: 'workspace_id' }
+    { onConflict: 'account_id' }
   )
 
   if (error) throw new Error(error.message)
 }
 
 // Retorna um client OAuth autenticado, renovando o access_token se necessário
-export async function getAuthenticatedClient(workspaceId: string) {
+export async function getAuthenticatedClient(accountId: string) {
   const supabase = createAdminClient()
   const { data: row, error } = await supabase
     .from('google_tokens')
     .select('access_token, refresh_token, token_expiry')
-    .eq('workspace_id', workspaceId)
+    .eq('account_id', accountId)
     .single()
 
-  if (error || !row) throw new Error('Google Calendar não conectado para esta workspace.')
+  if (error || !row) throw new Error('Google Calendar não conectado para esta conta.')
 
   const oauth2 = getOAuthClient()
   oauth2.setCredentials({
@@ -88,18 +90,18 @@ export async function getAuthenticatedClient(workspaceId: string) {
         access_token: encryptToken(newTokens.access_token),
         token_expiry: new Date(newTokens.expiry_date).toISOString(),
       })
-      .eq('workspace_id', workspaceId)
+      .eq('account_id', accountId)
   })
 
   return oauth2
 }
 
-export async function isGoogleConnected(workspaceId: string): Promise<{ connected: boolean; email: string | null }> {
+export async function isGoogleConnected(accountId: string): Promise<{ connected: boolean; email: string | null }> {
   const supabase = createAdminClient()
   const { data } = await supabase
     .from('google_tokens')
     .select('google_email')
-    .eq('workspace_id', workspaceId)
+    .eq('account_id', accountId)
     .maybeSingle()
 
   return { connected: Boolean(data), email: data?.google_email ?? null }

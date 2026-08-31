@@ -61,7 +61,8 @@ export function trackBotWizardCompleted(
   return captureServer({ distinctId, event: 'bot_wizard_completed', properties: props })
 }
 
-export function trackGoogleCalendarConnected(distinctId: string, props: BaseProps) {
+// Conexão Google é por account (uma para todas as unidades) — BaseProps relaxado.
+export function trackGoogleCalendarConnected(distinctId: string, props: { account_id: string }) {
   return captureServer({ distinctId, event: 'google_calendar_connected', properties: props })
 }
 

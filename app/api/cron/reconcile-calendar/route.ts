@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
-import { reconcileCalendar } from '@/lib/google/reconcile'
+import { reconcileAccountCalendars } from '@/lib/google/reconcile'
 
 // Disparado pelo Supabase pg_cron (ver supabase/cron.sql) uma vez por hora, aos
 // 50min — antes do reminders (:00) e do noshow (:30) do ciclo seguinte, pra
@@ -16,7 +16,7 @@ export async function POST(req: NextRequest) {
   }
 
   const supabase = createAdminClient()
-  const { data: tokens, error } = await supabase.from('google_tokens').select('workspace_id')
+  const { data: tokens, error } = await supabase.from('google_tokens').select('account_id')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   if (!tokens || tokens.length === 0) return NextResponse.json({ reconciled: 0 })
 
@@ -27,13 +27,13 @@ export async function POST(req: NextRequest) {
   let reconciled = 0
   const errors: string[] = []
 
-  for (const { workspace_id } of tokens) {
+  for (const { account_id } of tokens) {
     try {
-      await reconcileCalendar(workspace_id, from, to)
+      await reconcileAccountCalendars(account_id, from, to)
       reconciled += 1
     } catch (err) {
-      errors.push(`${workspace_id}: ${String(err)}`)
-      console.error(`reconcile-calendar cron: workspace ${workspace_id} falhou`, err)
+      errors.push(`${account_id}: ${String(err)}`)
+      console.error(`reconcile-calendar cron: account ${account_id} falhou`, err)
     }
   }
 
