@@ -12,7 +12,7 @@ export async function DELETE(req: NextRequest) {
 
   try {
     // Revogar o token na Google antes de deletar do banco
-    const auth = await getAuthenticatedClient(session.workspaceId)
+    const auth = await getAuthenticatedClient(session.accountId)
     const { token } = await auth.getAccessToken()
     if (token) {
       await fetch(`https://oauth2.googleapis.com/revoke?token=${token}`, { method: 'POST' })
@@ -21,8 +21,11 @@ export async function DELETE(req: NextRequest) {
     // Continua mesmo se a revogação falhar (ex.: já desconectado)
   }
 
-  const { error } = await supabase.from('google_tokens').delete().eq('workspace_id', session.workspaceId)
+  const { error } = await supabase.from('google_tokens').delete().eq('account_id', session.accountId)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Zera o mapeamento unidade → calendário: sem conexão, não há calendários.
+  await supabase.from('workspaces').update({ gcal_calendar_id: null }).eq('account_id', session.accountId)
 
   return NextResponse.json({ ok: true })
 }

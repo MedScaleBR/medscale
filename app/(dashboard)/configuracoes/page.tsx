@@ -12,10 +12,20 @@ export default async function ConfiguracoesPage({
   if (!session) return null
 
   const supabase = await createClient()
-  const [{ data: profile }, { data: workspace }, { data: googleToken }] = await Promise.all([
+  const [{ data: profile }, { data: botConfig }, { data: googleToken }, { data: workspaces }] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', session.userId).single(),
-    supabase.from('workspaces').select('whatsapp_number, meta_token').eq('id', session.workspaceId).single(),
-    supabase.from('google_tokens').select('google_email').eq('workspace_id', session.workspaceId).maybeSingle(),
+    supabase
+      .from('bot_config')
+      .select('whatsapp_number, meta_token')
+      .eq('account_id', session.accountId)
+      .maybeSingle(),
+    supabase.from('google_tokens').select('google_email').eq('account_id', session.accountId).maybeSingle(),
+    supabase
+      .from('workspaces')
+      .select('id, name, gcal_calendar_id')
+      .eq('account_id', session.accountId)
+      .eq('is_active', true)
+      .order('display_order'),
   ])
 
   return (
@@ -44,10 +54,15 @@ export default async function ConfiguracoesPage({
           phone: profile?.phone ?? null,
         }}
         workspace={{
-          hasMetaToken: Boolean(workspace?.meta_token),
-          whatsappNumber: workspace?.whatsapp_number ?? null,
+          hasMetaToken: Boolean(botConfig?.meta_token),
+          whatsappNumber: botConfig?.whatsapp_number ?? null,
         }}
         google={{ connected: Boolean(googleToken), email: googleToken?.google_email ?? null }}
+        workspaceCalendars={(workspaces ?? []).map((w) => ({
+          id: w.id,
+          name: w.name,
+          gcalCalendarId: w.gcal_calendar_id,
+        }))}
         isOwner={session.role === 'owner'}
         showRevenueCycle={session.userModules.includes('revenue_cycle')}
       />

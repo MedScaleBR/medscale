@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createEvent, cancelEvent } from '@/lib/google/calendar'
 import { isGoogleConnected } from '@/lib/google/auth'
-import { reconcileCalendar } from '@/lib/google/reconcile'
+import { reconcileAccountCalendars } from '@/lib/google/reconcile'
 import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
 import { applyAppointmentRevenue } from '@/lib/revenue/cycle'
 
@@ -19,7 +19,7 @@ export async function GET(req: NextRequest) {
   const from = fromParam ? new Date(fromParam) : new Date(now.getFullYear(), now.getMonth() - 1, 1)
   const to = toParam ? new Date(toParam) : new Date(now.getFullYear(), now.getMonth() + 2, 0)
 
-  const reconciled = await reconcileCalendar(session.workspaceId, from, to)
+  const reconciled = await reconcileAccountCalendars(session.accountId, from, to)
   return NextResponse.json(reconciled)
 }
 
@@ -39,6 +39,22 @@ export async function POST(req: NextRequest) {
     )
   }
 
+  // Unidade da consulta: o body pode escolher qualquer unidade da account
+  // (agenda consolidada). Sem body.workspace_id, cai na workspace ativa.
+  let targetWorkspaceId = session.workspaceId
+  if (typeof body.workspace_id === 'string' && body.workspace_id && body.workspace_id !== session.workspaceId) {
+    const { data: ws } = await supabase
+      .from('workspaces')
+      .select('id')
+      .eq('id', body.workspace_id)
+      .eq('account_id', session.accountId)
+      .maybeSingle()
+    if (!ws) {
+      return NextResponse.json({ error: 'Unidade inválida para esta conta.' }, { status: 400 })
+    }
+    targetWorkspaceId = ws.id
+  }
+
   // Convênio da consulta (bot_config.insurance_plans). Consulta por convênio
   // fica fora do ciclo de receita: sem preço, sem procedimento, sem entrada.
   const healthPlan: string | null =
@@ -54,7 +70,7 @@ export async function POST(req: NextRequest) {
       .from('procedure_catalog')
       .select('name, default_price')
       .eq('id', procedureId)
-      .eq('workspace_id', session.workspaceId)
+      .eq('workspace_id', targetWorkspaceId)
       .maybeSingle()
     if (proc) {
       procedureName = proc.name
@@ -66,14 +82,14 @@ export async function POST(req: NextRequest) {
   // evento precisa existir lá antes de gravarmos qualquer coisa no Supabase —
   // sem isso, uma falha do Google ficava em silêncio e o /agenda mostrava uma
   // consulta que não existia de verdade na agenda do médico.
-  const { connected, email } = await isGoogleConnected(session.workspaceId)
+  const { connected, email } = await isGoogleConnected(session.accountId)
   let gcalEventId: string | null = null
 
   if (connected && email) {
     try {
-      const { data: workspace } = await supabase.from('workspaces').select('name').eq('id', session.workspaceId).single()
+      const { data: workspace } = await supabase.from('workspaces').select('name').eq('id', targetWorkspaceId).single()
       const gcalEvent = await createEvent({
-        workspaceId: session.workspaceId,
+        workspaceId: targetWorkspaceId,
         patientName: body.patient_name,
         patientEmail: body.patient_email,
         patientPhone: body.patient_phone,
@@ -97,7 +113,7 @@ export async function POST(req: NextRequest) {
   const { data, error } = await supabase
     .from('appointments')
     .insert({
-      workspace_id: session.workspaceId,
+      workspace_id: targetWorkspaceId,
       account_id: session.accountId,
       doctor_id: session.userId,
       patient_id: body.patient_id ?? null,
@@ -124,7 +140,7 @@ export async function POST(req: NextRequest) {
     // nenhum dado de CRM por trás.
     if (gcalEventId) {
       try {
-        await cancelEvent(session.workspaceId, gcalEventId)
+        await cancelEvent(targetWorkspaceId, gcalEventId)
       } catch (cleanupErr) {
         console.error('Google Calendar cleanup failed after Supabase insert error:', cleanupErr)
       }
@@ -140,7 +156,7 @@ export async function POST(req: NextRequest) {
   if (data) {
     await applyAppointmentRevenue(createAdminClient(), {
       booking: {
-        workspaceId: session.workspaceId,
+        workspaceId: targetWorkspaceId,
         accountId: session.accountId,
         appointmentId: data.id,
         patientId: data.patient_id ?? null,

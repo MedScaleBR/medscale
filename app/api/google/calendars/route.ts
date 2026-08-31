@@ -8,7 +8,7 @@ export async function GET(req: NextRequest) {
   const { session } = result
 
   try {
-    const calendars = await listCalendars(session.workspaceId)
+    const calendars = await listCalendars(session.accountId)
     return NextResponse.json(calendars)
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 400 })

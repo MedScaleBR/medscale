@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { GoogleConnectButton } from './GoogleConnectButton'
+import { WorkspaceCalendarMap, type WorkspaceCalendarRow } from './WorkspaceCalendarMap'
 
 interface SettingsClientProps {
   initialProfile: {
@@ -22,11 +23,19 @@ interface SettingsClientProps {
     whatsappNumber: string | null
   }
   google: { connected: boolean; email: string | null }
+  workspaceCalendars: WorkspaceCalendarRow[]
   isOwner: boolean
   showRevenueCycle: boolean
 }
 
-export function SettingsClient({ initialProfile, workspace, google, isOwner, showRevenueCycle }: SettingsClientProps) {
+export function SettingsClient({
+  initialProfile,
+  workspace,
+  google,
+  workspaceCalendars,
+  isOwner,
+  showRevenueCycle,
+}: SettingsClientProps) {
   const [form, setForm] = useState({
     full_name: initialProfile.full_name ?? '',
     specialty: initialProfile.specialty ?? '',
@@ -120,10 +129,18 @@ export function SettingsClient({ initialProfile, workspace, google, isOwner, sho
       <div className="rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
         <h2 className="text-sm font-medium text-gray-900">Google Agenda</h2>
         <p className="mt-0.5 text-xs text-gray-400">
-          Fonte de verdade da disponibilidade real — o bot só oferece horários livres de fato na sua agenda.
+          Uma conexão para toda a conta — fonte de verdade da disponibilidade real. Cada unidade
+          usa um calendário dentro dessa conta.
         </p>
         <Separator className="my-4" />
         <GoogleConnectButton isConnected={google.connected} googleEmail={google.email} />
+
+        {google.connected && workspaceCalendars.length > 0 && (
+          <>
+            <Separator className="my-4" />
+            <WorkspaceCalendarMap workspaces={workspaceCalendars} />
+          </>
+        )}
       </div>
 
       <Link

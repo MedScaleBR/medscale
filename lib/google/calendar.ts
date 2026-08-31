@@ -1,16 +1,37 @@
 import { google, calendar_v3 } from 'googleapis'
+import { createAdminClient } from '@/lib/supabase/server'
 import { getAuthenticatedClient } from './auth'
 
-export async function getCalendarClient(workspaceId: string) {
-  const auth = await getAuthenticatedClient(workspaceId)
-  return google.calendar({ version: 'v3', auth })
+// A conexão Google é única por account (google_tokens.account_id). Cada
+// unidade aponta para um calendário dentro dessa conta via
+// workspaces.gcal_calendar_id — NULL cai no calendário "primary".
+export async function resolveWorkspaceCalendar(
+  workspaceId: string
+): Promise<{ accountId: string; calendarId: string }> {
+  const supabase = createAdminClient()
+  const { data, error } = await supabase
+    .from('workspaces')
+    .select('account_id, gcal_calendar_id')
+    .eq('id', workspaceId)
+    .single()
+
+  if (error || !data) {
+    throw new Error(`Workspace ${workspaceId} não encontrada ao resolver o calendário Google.`)
+  }
+  return { accountId: data.account_id, calendarId: data.gcal_calendar_id ?? 'primary' }
 }
 
-// ── Listar eventos num intervalo ────────────────────────────────────────────
+async function getWorkspaceCalendar(workspaceId: string) {
+  const { accountId, calendarId } = await resolveWorkspaceCalendar(workspaceId)
+  const auth = await getAuthenticatedClient(accountId)
+  return { cal: google.calendar({ version: 'v3', auth }), calendarId }
+}
+
+// ── Listar eventos num intervalo (calendário da unidade) ────────────────────
 export async function listEvents(workspaceId: string, timeMin: Date, timeMax: Date) {
-  const cal = await getCalendarClient(workspaceId)
+  const { cal, calendarId } = await getWorkspaceCalendar(workspaceId)
   const { data } = await cal.events.list({
-    calendarId: 'primary',
+    calendarId,
     timeMin: timeMin.toISOString(),
     timeMax: timeMax.toISOString(),
     singleEvents: true,
@@ -32,7 +53,7 @@ export interface CreateEventParams {
   durationMin: number
   notes?: string
   workspaceName: string
-  doctorEmail: string // e-mail Google de quem conectou o calendário desta workspace
+  doctorEmail: string // e-mail Google de quem conectou o calendário da account
 }
 
 export async function createEvent(params: CreateEventParams): Promise<calendar_v3.Schema$Event> {
@@ -50,7 +71,7 @@ export async function createEvent(params: CreateEventParams): Promise<calendar_v
   } = params
 
   const endTime = new Date(startTime.getTime() + durationMin * 60_000)
-  const cal = await getCalendarClient(workspaceId)
+  const { cal, calendarId } = await getWorkspaceCalendar(workspaceId)
 
   const attendees: calendar_v3.Schema$EventAttendee[] = [
     { email: doctorEmail, displayName: workspaceName, responseStatus: 'accepted' },
@@ -60,7 +81,7 @@ export async function createEvent(params: CreateEventParams): Promise<calendar_v
   }
 
   const { data } = await cal.events.insert({
-    calendarId: 'primary',
+    calendarId,
     sendUpdates: patientEmail ? 'all' : 'none',
     requestBody: {
       summary: `${appointmentType} — ${patientName}`,
@@ -86,6 +107,9 @@ export async function createEvent(params: CreateEventParams): Promise<calendar_v
       extendedProperties: {
         private: {
           medscale: 'true',
+          // Unidade dona do evento — o reconcile usa isso para atribuir o
+          // evento à workspace certa quando duas unidades compartilham calendário.
+          workspace_id: workspaceId,
           patientPhone: patientPhone,
         },
       },
@@ -107,7 +131,7 @@ export async function updateEvent(
   eventId: string,
   updates: UpdateEventParams
 ): Promise<calendar_v3.Schema$Event> {
-  const cal = await getCalendarClient(workspaceId)
+  const { cal, calendarId } = await getWorkspaceCalendar(workspaceId)
 
   const patch: calendar_v3.Schema$Event = {}
 
@@ -120,7 +144,7 @@ export async function updateEvent(
   if (updates.notes) patch.description = updates.notes
 
   const { data } = await cal.events.patch({
-    calendarId: 'primary',
+    calendarId,
     eventId,
     sendUpdates: 'all',
     requestBody: patch,
@@ -131,10 +155,10 @@ export async function updateEvent(
 
 // ── Cancelar evento (marca como cancelled e notifica participantes) ────────
 export async function cancelEvent(workspaceId: string, eventId: string) {
-  const cal = await getCalendarClient(workspaceId)
+  const { cal, calendarId } = await getWorkspaceCalendar(workspaceId)
 
   await cal.events.patch({
-    calendarId: 'primary',
+    calendarId,
     eventId,
     sendUpdates: 'all',
     requestBody: { status: 'cancelled' },
@@ -143,17 +167,19 @@ export async function cancelEvent(workspaceId: string, eventId: string) {
 
 // ── Deletar evento permanentemente ──────────────────────────────────────────
 export async function deleteEvent(workspaceId: string, eventId: string) {
-  const cal = await getCalendarClient(workspaceId)
+  const { cal, calendarId } = await getWorkspaceCalendar(workspaceId)
   await cal.events.delete({
-    calendarId: 'primary',
+    calendarId,
     eventId,
     sendUpdates: 'all',
   })
 }
 
-// ── Listar calendários disponíveis na conta ─────────────────────────────────
-export async function listCalendars(workspaceId: string) {
-  const cal = await getCalendarClient(workspaceId)
+// ── Listar calendários disponíveis na conexão da account ────────────────────
+// Usado pela tela de mapeamento unidade → calendário.
+export async function listCalendars(accountId: string) {
+  const auth = await getAuthenticatedClient(accountId)
+  const cal = google.calendar({ version: 'v3', auth })
   const { data } = await cal.calendarList.list()
   return (data.items ?? []).map((c) => ({
     id: c.id,
@@ -161,4 +187,16 @@ export async function listCalendars(workspaceId: string) {
     primary: c.primary ?? false,
     color: c.backgroundColor,
   }))
+}
+
+// ── Criar um calendário novo na conta Google (uma unidade sem calendário
+//    próprio ainda). Retorna o id para gravar em workspaces.gcal_calendar_id.
+export async function createCalendar(accountId: string, summary: string): Promise<string> {
+  const auth = await getAuthenticatedClient(accountId)
+  const cal = google.calendar({ version: 'v3', auth })
+  const { data } = await cal.calendars.insert({
+    requestBody: { summary, timeZone: 'America/Sao_Paulo' },
+  })
+  if (!data.id) throw new Error('Google não retornou o id do calendário criado.')
+  return data.id
 }

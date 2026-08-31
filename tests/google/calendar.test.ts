@@ -46,7 +46,12 @@ const TOKEN_ROW = {
 }
 
 function setup(config: SupabaseMockConfig = {}) {
-  g.supabase = createSupabaseMock({ google_tokens: { select: { data: TOKEN_ROW }, update: { data: null } }, ...config })
+  g.supabase = createSupabaseMock({
+    google_tokens: { select: { data: TOKEN_ROW }, update: { data: null } },
+    // resolveWorkspaceCalendar: unidade -> account + calendário ('primary' quando null)
+    workspaces: { select: { data: { account_id: 'acc1', gcal_calendar_id: null } } },
+    ...config,
+  })
   g.events = {
     list: vi.fn(async () => ({ data: { items: [] } })),
     insert: vi.fn(async () => ({ data: { id: 'gcal-novo' } })),
@@ -89,9 +94,9 @@ describe('getAuthenticatedClient — credenciais do Google', () => {
     expect(g.oauthClient.on).toHaveBeenCalledWith('tokens', expect.any(Function))
   })
 
-  it('deve lançar quando a workspace não tem o calendário conectado', async () => {
+  it('deve lançar quando a conta não tem o calendário conectado', async () => {
     setup({ google_tokens: { select: { data: null, error: { message: 'no rows' } } } })
-    await expect(getAuthenticatedClient('w1')).rejects.toThrow(/não conectado para esta workspace/)
+    await expect(getAuthenticatedClient('acc1')).rejects.toThrow(/não conectado para esta conta/)
   })
 })
 
@@ -138,7 +143,7 @@ describe('createEvent — evento criado pela MedScale', () => {
 
     const body = (g.events.insert.mock.calls[0] as unknown as [{ requestBody: Record<string, never> }])[0].requestBody
     expect(body.extendedProperties).toEqual({
-      private: { medscale: 'true', patientPhone: '5511988887777' },
+      private: { medscale: 'true', workspace_id: 'w1', patientPhone: '5511988887777' },
     })
   })
 
