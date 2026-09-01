@@ -979,6 +979,85 @@ returns boolean language sql security definer stable as $$
   )
 $$;
 
+-- Provisionamento lazy e idempotente das categorias de uma conta. Chamada no
+-- primeiro carregamento de /finance e no agente do WhatsApp. Roda numa única
+-- transação (função); advisory lock evita corrida entre dois carregamentos.
+-- normalize_category_name (usada aqui) está definida na seção 6, junto do
+-- create table public.finance_categories.
+-- p_tree: { "pf": [{ "name": "...", "children": ["..."] }, ...], "pj": [...] }
+create or replace function public.provision_finance_categories(p_account_id uuid, p_tree jsonb)
+returns void language plpgsql as $$
+declare
+  v_kind        text;
+  v_cat         jsonb;
+  v_sub         text;
+  v_root_id     uuid;
+  v_order       int;
+  v_suborder    int;
+  v_existing    text;
+  v_existing_kd text;
+begin
+  perform pg_advisory_xact_lock(hashtext(p_account_id::text));
+
+  if exists (select 1 from public.finance_categories where account_id = p_account_id) then
+    return; -- já provisionada
+  end if;
+
+  -- 1. árvore curada
+  foreach v_kind in array array['pf','pj'] loop
+    v_order := 0;
+    for v_cat in select jsonb_array_elements(p_tree -> v_kind) loop
+      insert into public.finance_categories (account_id, kind, parent_id, name, sort_order)
+      values (p_account_id, v_kind, null, v_cat ->> 'name', v_order)
+      returning id into v_root_id;
+      v_order := v_order + 1;
+      v_suborder := 0;
+      for v_sub in select jsonb_array_elements_text(coalesce(v_cat -> 'children', '[]'::jsonb)) loop
+        insert into public.finance_categories (account_id, kind, parent_id, name, sort_order)
+        values (p_account_id, v_kind, v_root_id, v_sub, v_suborder);
+        v_suborder := v_suborder + 1;
+      end loop;
+    end loop;
+  end loop;
+
+  -- 2. derivar do histórico: category texto que não casa com nenhuma raiz
+  for v_existing, v_existing_kd in
+    select distinct btrim(fe.category), fe.type
+    from public.finance_entries fe
+    where fe.account_id = p_account_id
+      and fe.category is not null and btrim(fe.category) <> ''
+  loop
+    if not exists (
+      select 1 from public.finance_categories c
+      where c.account_id = p_account_id and c.kind = v_existing_kd and c.parent_id is null
+        and public.normalize_category_name(c.name) = public.normalize_category_name(v_existing)
+    ) then
+      insert into public.finance_categories (account_id, kind, parent_id, name, sort_order)
+      values (
+        p_account_id, v_existing_kd, null, v_existing,
+        coalesce((select max(sort_order) + 1 from public.finance_categories
+                  where account_id = p_account_id and kind = v_existing_kd and parent_id is null), 0)
+      );
+    end if;
+  end loop;
+
+  -- 3. backfill: category texto → category_id da raiz de mesmo kind
+  update public.finance_entries fe
+  set category_id = c.id
+  from public.finance_categories c
+  where fe.account_id = p_account_id
+    and fe.category_id is null
+    and fe.category is not null
+    and c.account_id = p_account_id
+    and c.parent_id is null
+    and c.kind = fe.type
+    and public.normalize_category_name(c.name) = public.normalize_category_name(fe.category);
+end;
+$$;
+
+grant execute on function public.provision_finance_categories(uuid, jsonb) to authenticated, service_role;
+grant execute on function public.normalize_category_name(text) to authenticated, service_role;
+
 -- ============================================================
 -- 12.1 FUNÇÕES — disparo assíncrono do pipeline de transcrição via pg_net.
 -- Mesmo padrão de supabase/cron.sql: net.http_post + CRON_SECRET lido do
