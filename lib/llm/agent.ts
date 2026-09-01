@@ -88,12 +88,19 @@ async function getOrCreatePatient(supabase: SupabaseAdmin, accountId: string, pa
 // Um único registro de conversa por paciente por account (o número da Maria é
 // único por account) — nunca cria uma nova só porque a anterior foi resolvida;
 // reabre a mesma linha (a não ser que o bot esteja pausado por intervenção
-// manual). workspace_id fica NULL até a Maria confirmar a unidade.
+// manual).
+//
+// `defaultWorkspaceId` é a unidade à qual a conversa já pertence antes de a
+// Maria "perguntar": nas contas de uma unidade só ela é conhecida desde a
+// primeira mensagem, então a conversa já nasce visível no /conversa daquela
+// clínica. Nas contas com várias unidades vem NULL — a unidade só é gravada
+// quando a Maria confirma qual (marcador UNIDADE_ID, passo 7.5).
 async function getOrCreateConversation(
   supabase: SupabaseAdmin,
   accountId: string,
   patientId: string | undefined,
-  patientPhone: string
+  patientPhone: string,
+  defaultWorkspaceId: string | null = null
 ) {
   const { data: existing } = await supabase
     .from('conversations')
@@ -107,20 +114,35 @@ async function getOrCreateConversation(
   if (!existing) {
     const { data: newConv } = await supabase
       .from('conversations')
-      .insert({ account_id: accountId, patient_id: patientId, patient_phone: patientPhone })
+      .insert({
+        account_id: accountId,
+        patient_id: patientId,
+        patient_phone: patientPhone,
+        workspace_id: defaultWorkspaceId,
+      })
       .select('id, status, bot_paused, archived_at, workspace_id')
       .single()
     if (!newConv) throw new Error('Failed to create conversation')
     return newConv
   }
 
-  const updates: { status?: 'open'; resolved_at?: null; archived_at?: null } = {}
+  const updates: {
+    status?: 'open'
+    resolved_at?: null
+    archived_at?: null
+    workspace_id?: string
+  } = {}
   if (existing.status === 'resolved' && !existing.bot_paused) {
     updates.status = 'open'
     updates.resolved_at = null
   }
   if (existing.archived_at) {
     updates.archived_at = null
+  }
+  // Conversa antiga que ficou sem unidade (criada antes deste comportamento, ou
+  // numa conta que só agora tem uma unidade) — liga na unidade conhecida.
+  if (!existing.workspace_id && defaultWorkspaceId) {
+    updates.workspace_id = defaultWorkspaceId
   }
   if (Object.keys(updates).length > 0) {
     await supabase.from('conversations').update(updates).eq('id', existing.id)
@@ -155,8 +177,18 @@ export async function handleUnsupportedMessage(params: UnsupportedMessageParams)
   const botConfig = await getBotConfig(accountId)
   if (!botConfig || !botConfig.isActive) return
 
+  // Conta com uma unidade só → a conversa já pertence a ela (ver getOrCreateConversation).
+  const units = await getAccountUnits(accountId)
+  const singleUnitId = units.length === 1 ? units[0].id : null
+
   const patient = await getOrCreatePatient(supabase, accountId, patientPhone)
-  const conversation = await getOrCreateConversation(supabase, accountId, patient?.id, patientPhone)
+  const conversation = await getOrCreateConversation(
+    supabase,
+    accountId,
+    patient?.id,
+    patientPhone,
+    singleUnitId
+  )
 
   const label = UNSUPPORTED_TYPE_LABELS[messageType] ?? 'esse tipo de mensagem'
   await supabase.from('messages').insert({
@@ -232,8 +264,18 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   // 2. Paciente (por account).
   const patient = await getOrCreatePatient(supabase, accountId, patientPhone)
 
-  // 3. Conversa deste paciente (uma por account+telefone).
-  const conversation = await getOrCreateConversation(supabase, accountId, patient?.id, patientPhone)
+  // 3. Conversa deste paciente (uma por account+telefone). Numa conta de uma
+  // unidade só, a conversa já nasce ligada a ela e aparece no /conversa daquela
+  // clínica desde já; com várias, workspace_id fica NULL até a Maria confirmar
+  // a unidade (passo 7.5).
+  const singleUnitId = units.length === 1 ? units[0].id : null
+  const conversation = await getOrCreateConversation(
+    supabase,
+    accountId,
+    patient?.id,
+    patientPhone,
+    singleUnitId
+  )
 
   // 3.1 Unidade "corrente" da conversa — a que o paciente já mencionou (marcador
   // UNIDADE_ID numa resposta anterior). É só uma DICA: a Maria continua vendo
@@ -384,8 +426,9 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   }
 
   // 7.5 Unidade corrente: a Maria emite UNIDADE_ID quando o paciente indica a
-  // unidade. Grava na conversa como DICA para as próximas mensagens (a Maria
-  // continua vendo todas as unidades — o paciente pode trocar quando quiser).
+  // unidade. Grava na conversa (é o que faz o chat aparecer no /conversa
+  // daquela clínica) e serve de DICA para as próximas mensagens — a Maria
+  // continua vendo todas as unidades e o paciente pode trocar quando quiser.
   if (
     markers.unitId &&
     allUnitById.has(markers.unitId) &&
@@ -394,6 +437,11 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     await supabase.from('conversations').update({ workspace_id: markers.unitId }).eq('id', conversation.id)
     conversation.workspace_id = markers.unitId
   }
+
+  // Para quem vai a notificação de handoff: se a unidade já é conhecida (conta
+  // de uma unidade só, ou o paciente já a indicou), só ela é avisada; se ainda
+  // não, avisa todas as unidades da conta para o pedido não ficar sem dono.
+  const handoffNotifyIds = conversation.workspace_id ? [conversation.workspace_id] : units.map((u) => u.id)
 
   // 8. Executar agendamento/cancelamento confirmados ANTES de montar a resposta.
   let bookingFailed = false
@@ -580,9 +628,17 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
       : 'Desculpa, não estou conseguindo resolver isso sozinha. Já avisei a equipe sobre sua solicitação — alguém vai te chamar em breve.'
 
     await supabase.from('messages').insert({ conversation_id: conversation.id, role: 'assistant', content: escalationMessage })
+    // Garante que a conversa fique visível no /conversa da clínica que vai
+    // atender (handoffUnitId é a unidade da conversa, ou a 1ª da conta se o
+    // paciente nem chegou a escolher).
     await supabase
       .from('conversations')
-      .update({ status: 'handoff', bot_paused: true, resolved_at: new Date().toISOString() })
+      .update({
+        status: 'handoff',
+        bot_paused: true,
+        resolved_at: new Date().toISOString(),
+        workspace_id: handoffUnitId,
+      })
       .eq('id', conversation.id)
     await supabase.from('handoff_logs').insert({
       workspace_id: handoffUnitId,
@@ -604,11 +660,15 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
 
     try {
       const { sendHandoffPush } = await import('@/lib/push/send')
-      await sendHandoffPush(handoffUnitId, {
-        title: '🔔 Atendimento solicitado',
-        body: `${patient?.full_name ?? 'Paciente'} precisa de atendimento humano`,
-        url: `/bot?c=${conversation.id}`,
-      })
+      await Promise.all(
+        handoffNotifyIds.map((wid) =>
+          sendHandoffPush(wid, {
+            title: '🔔 Atendimento solicitado',
+            body: `${patient?.full_name ?? 'Paciente'} precisa de atendimento humano`,
+            url: `/bot?c=${conversation.id}`,
+          })
+        )
+      )
     } catch (err) {
       console.error('[handoff] push notification failed', err)
     }
@@ -647,6 +707,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
         phoneNumberId,
         metaToken,
         triggerReason: handoffCheck.reason!,
+        notifyWorkspaceIds: handoffNotifyIds,
       })
       return
     }

@@ -192,7 +192,9 @@ export function CalendarView({
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <Select value={unitFilter} onValueChange={(v) => v && setUnitFilter(v)}>
             <SelectTrigger className="w-56">
-              <SelectValue />
+              <SelectValue>
+                {(value) => (value === ALL ? 'Todas as unidades' : nameByWorkspace[value as string] ?? value)}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               <SelectItem value={ALL}>Todas as unidades</SelectItem>

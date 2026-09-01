@@ -39,6 +39,7 @@ import {
   sendWhatsAppMessage,
   PARAMS,
   UNIT,
+  UNIT_ID,
   DEFAULT_BOT_CONFIG,
   lastSentMessage,
 } from '../helpers/agent-harness'
@@ -169,7 +170,7 @@ describe('processIncomingMessage — montagem de contexto', () => {
     expect(update?.payload).toMatchObject({ archived_at: null })
   })
 
-  it('deve criar a conversa quando o paciente nunca escreveu para esta workspace', async () => {
+  it('cria a conversa já ligada à unidade quando a account tem uma unidade só', async () => {
     const supabase = mergeSupabaseConfig({
       conversations: {
         select: { data: null },
@@ -181,13 +182,29 @@ describe('processIncomingMessage — montagem de contexto', () => {
     await processIncomingMessage(PARAMS)
 
     const insert = supabase.callsTo('conversations', 'insert')[0]
-    // workspace_id fica NULL na criação — só é definido quando a Maria confirma
-    // a unidade (a account tem um número único).
+    // Unidade única = não há o que "perguntar": a conversa já nasce nela e
+    // aparece no /conversa daquela clínica desde a primeira mensagem.
     expect(insert?.payload).toMatchObject({
       account_id: PARAMS.accountId,
       patient_phone: PARAMS.patientPhone,
+      workspace_id: UNIT_ID,
     })
-    expect(insert?.payload).not.toHaveProperty('workspace_id')
+  })
+
+  it('backfilla a unidade numa conversa antiga sem workspace quando a account tem uma unidade só', async () => {
+    const supabase = mergeSupabaseConfig({
+      conversations: {
+        select: { data: { id: 'c1', status: 'open', bot_paused: false, archived_at: null, workspace_id: null } },
+      },
+    })
+    state.claudeResponses = ['Oi!']
+
+    await processIncomingMessage(PARAMS)
+
+    const update = supabase
+      .callsTo('conversations', 'update')
+      .find((c) => (c.payload as { workspace_id?: string }).workspace_id !== undefined)
+    expect(update?.payload).toMatchObject({ workspace_id: UNIT_ID })
   })
 
   it('deve incluir a instrução de boas-vindas no prompt quando é a primeira mensagem', async () => {
