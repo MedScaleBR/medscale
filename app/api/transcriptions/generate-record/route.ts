@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireCronAuth } from '@/lib/cron-auth'
 import { createAdminClient } from '@/lib/supabase/server'
 import { generateSOAP } from '@/lib/transcriptions/generate-soap'
 import { trackSoapGenerated, trackTranscriptionError } from '@/lib/analytics/posthog-server'
@@ -8,10 +9,8 @@ export const maxDuration = 60
 // Disparado via pg_net por trigger_transcription_generate — mesma
 // autenticação Bearer CRON_SECRET das rotas em app/api/cron/*.
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronAuth(req)
+  if (denied) return denied
 
   const { transcription_id } = await req.json()
   const supabase = createAdminClient()

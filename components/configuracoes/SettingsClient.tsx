@@ -25,6 +25,8 @@ interface SettingsClientProps {
   google: { connected: boolean; email: string | null }
   workspaceCalendars: WorkspaceCalendarRow[]
   isOwner: boolean
+  /** owner ou admin — pode configurar a Maria e a conexão do Google Calendar. */
+  canManageIntegrations: boolean
   showRevenueCycle: boolean
 }
 
@@ -34,6 +36,7 @@ export function SettingsClient({
   google,
   workspaceCalendars,
   isOwner,
+  canManageIntegrations,
   showRevenueCycle,
 }: SettingsClientProps) {
   const [form, setForm] = useState({
@@ -104,6 +107,8 @@ export function SettingsClient({
         </div>
       </div>
 
+      {canManageIntegrations && (
+      <>
       <Link
         href="/configuracoes/bot"
         className="flex items-center justify-between rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)] transition-colors hover:border-[var(--cyan)]"
@@ -142,6 +147,8 @@ export function SettingsClient({
           </>
         )}
       </div>
+      </>
+      )}
 
       <Link
         href="/expediente"

@@ -44,6 +44,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .from('revenue_entries')
     .select('id, payment_status')
     .eq('id', id)
+    .eq('account_id', session.accountId)
     .eq('workspace_id', session.workspaceId)
     .maybeSingle()
 
@@ -65,6 +66,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
       paid_at: new Date().toISOString(),
     })
     .eq('id', id)
+    .eq('account_id', session.accountId)
     .eq('workspace_id', session.workspaceId)
     .select()
     .single()

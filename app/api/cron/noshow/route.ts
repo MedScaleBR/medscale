@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireCronAuth } from '@/lib/cron-auth'
 import { createAdminClient } from '@/lib/supabase/server'
 import { syncRevenueEntryToAppointmentStatus } from '@/lib/revenue/cycle'
 
@@ -8,10 +9,8 @@ const GRACE_MINUTES = 30 // considera no-show 30min após o horário agendado
 // após o ponto. Marca como no_show consultas agendadas/confirmadas cujo horário
 // já passou há mais de GRACE_MINUTES sem terem sido concluídas ou canceladas.
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronAuth(req)
+  if (denied) return denied
 
   const supabase = createAdminClient()
   const cutoff = new Date(Date.now() - GRACE_MINUTES * 60 * 1000).toISOString()

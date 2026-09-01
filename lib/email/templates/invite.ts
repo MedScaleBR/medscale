@@ -31,6 +31,19 @@ function escapeHtml(value: string): string {
     .replace(/'/g, '&#39;')
 }
 
+// Remove caracteres de controle (inclui CR/LF) e normaliza espaços em branco,
+// limitando o tamanho. O corpo HTML ainda passa por escapeHtml(); isto protege
+// também o Subject e o preheader, que não são escapados.
+function sanitizeText(value: string, maxLen = 200): string {
+  let out = ''
+  for (const ch of value) {
+    const code = ch.codePointAt(0) ?? 0
+    // descarta C0 (0x00-0x1F), DEL e C1 (0x7F-0x9F) — inclui CR, LF, TAB
+    out += code < 0x20 || (code >= 0x7f && code <= 0x9f) ? ' ' : ch
+  }
+  return out.replace(/\s+/g, ' ').trim().slice(0, maxLen)
+}
+
 /**
  * Monta o e-mail de convite/cadastro a partir do template de marca
  * (`Invite email HTML design/invite-email.html`). Retorna assunto, HTML e uma
@@ -41,7 +54,9 @@ export function buildInviteEmail(params: InviteEmailParams): {
   html: string
   text: string
 } {
-  const { inviterName, accountName, inviteUrl, recipientEmail, role } = params
+  const { inviteUrl, recipientEmail, role } = params
+  const inviterName = sanitizeText(params.inviterName, 120)
+  const accountName = sanitizeText(params.accountName, 120)
   const roleLabel = role ? ROLE_LABEL[role] : 'Acesso à equipe'
 
   const subject = `${inviterName} te convidou para o MedScale`

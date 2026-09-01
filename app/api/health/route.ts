@@ -17,15 +17,20 @@ import { checkDatabase, checkLlm } from '@/lib/health/checks'
 export const dynamic = 'force-dynamic'
 
 export async function GET() {
-  const checks = {
-    database: await checkDatabase(),
-    llm: checkLlm(),
-  }
+  const database = await checkDatabase()
+  const llm = checkLlm()
+  const ok = database.ok && llm.ok
 
-  const ok = Object.values(checks).every((c) => c.ok)
+  if (!ok) console.error('[health] check falhou', { database, llm })
 
+  // Endpoint publico (UptimeRobot) — so o status code e booleans. Nada de
+  // mensagens de erro do banco nem presenca de env vars na resposta.
   return NextResponse.json(
-    { ok, timestamp: new Date().toISOString(), checks },
+    {
+      ok,
+      timestamp: new Date().toISOString(),
+      checks: { database: { ok: database.ok }, llm: { ok: llm.ok } },
+    },
     { status: ok ? 200 : 503 },
   )
 }

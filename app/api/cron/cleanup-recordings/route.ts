@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireCronAuth } from '@/lib/cron-auth'
 import { createAdminClient } from '@/lib/supabase/server'
 
 const RETENTION_DAYS = Number(process.env.RECORDING_RETENTION_DAYS ?? 90)
@@ -7,10 +8,8 @@ const RETENTION_DAYS = Number(process.env.RECORDING_RETENTION_DAYS ?? 90)
 // Apaga do Storage os áudios de transcrições assinadas há mais de
 // RECORDING_RETENTION_DAYS dias — mantém o transcript_text e o prontuário.
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronAuth(req)
+  if (denied) return denied
 
   const supabase = createAdminClient()
   const cutoffDate = new Date()

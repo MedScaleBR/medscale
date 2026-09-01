@@ -58,6 +58,7 @@ drop function if exists public.my_workspace_ids() cascade;
 drop function if exists public.my_account_ids() cascade;
 drop function if exists public.handle_new_user() cascade;
 drop function if exists public.handle_updated_at() cascade;
+drop function if exists public.enforce_workspace_account() cascade;
 drop function if exists public.trigger_transcription_process(uuid, text) cascade;
 drop function if exists public.trigger_transcription_generate(uuid, text) cascade;
 
@@ -740,6 +741,42 @@ create trigger trg_account_tasks_updated_at
   for each row execute procedure public.handle_updated_at();
 
 -- ============================================================
+-- 10.1 TRIGGER: account_id sempre derivado de workspace_id
+-- ============================================================
+-- appointments/conversations/waitlist/ad_campaigns/transcriptions/
+-- revenue_entries/revenue_settings carregam workspace_id E account_id. A
+-- policy de RLS dessas tabelas testa workspace_id; account_id deixa de ser um
+-- valor escolhido pelo cliente ao ser sempre reescrito a partir do workspace
+-- (fecha o vetor de "carimbar account_id de outra conta na própria linha" via
+-- mass assignment na API).
+create or replace function public.enforce_workspace_account()
+returns trigger language plpgsql as $$
+begin
+  if new.workspace_id is not null then
+    select w.account_id into new.account_id
+    from public.workspaces w
+    where w.id = new.workspace_id;
+  end if;
+  return new;
+end;
+$$;
+
+create trigger trg_enforce_ws_account before insert or update on public.appointments
+  for each row execute procedure public.enforce_workspace_account();
+create trigger trg_enforce_ws_account before insert or update on public.conversations
+  for each row execute procedure public.enforce_workspace_account();
+create trigger trg_enforce_ws_account before insert or update on public.waitlist
+  for each row execute procedure public.enforce_workspace_account();
+create trigger trg_enforce_ws_account before insert or update on public.ad_campaigns
+  for each row execute procedure public.enforce_workspace_account();
+create trigger trg_enforce_ws_account before insert or update on public.transcriptions
+  for each row execute procedure public.enforce_workspace_account();
+create trigger trg_enforce_ws_account before insert or update on public.revenue_entries
+  for each row execute procedure public.enforce_workspace_account();
+create trigger trg_enforce_ws_account before insert or update on public.revenue_settings
+  for each row execute procedure public.enforce_workspace_account();
+
+-- ============================================================
 -- 11. TRIGGER: criar profile automaticamente ao cadastrar usuário
 -- ============================================================
 create or replace function public.handle_new_user()
@@ -945,9 +982,19 @@ create policy "profiles: medscale admin full" on public.profiles
 create policy "patients: account members" on public.patients
   for all using (account_id = any(public.my_account_ids()));
 
--- Padrão para as demais tabelas operacionais: workspace_id = um dos meus
+-- Padrão para as demais tabelas operacionais: workspace_id = um dos meus.
+-- Onde a tabela também tem account_id (appointments, waitlist, ad_campaigns,
+-- transcriptions), o WITH CHECK é explícito e inclui account_id — sem ele o
+-- Postgres reutiliza o USING como WITH CHECK e o account_id novo de um UPDATE
+-- não seria validado (a trigger trg_enforce_ws_account já corrige o valor;
+-- isto é a segunda camada).
 create policy "appointments: workspace members" on public.appointments
-  for all using (workspace_id = any(public.my_workspace_ids()));
+  for all
+  using (workspace_id = any(public.my_workspace_ids()))
+  with check (
+    workspace_id = any(public.my_workspace_ids())
+    and account_id = any(public.my_account_ids())
+  );
 
 create policy "conversations: workspace members" on public.conversations
   for all using (workspace_id = any(public.my_workspace_ids()));
@@ -968,7 +1015,12 @@ create policy "availability_exceptions: workspace members" on public.availabilit
   for all using (workspace_id = any(public.my_workspace_ids()));
 
 create policy "waitlist: workspace members" on public.waitlist
-  for all using (workspace_id = any(public.my_workspace_ids()));
+  for all
+  using (workspace_id = any(public.my_workspace_ids()))
+  with check (
+    workspace_id = any(public.my_workspace_ids())
+    and account_id = any(public.my_account_ids())
+  );
 
 -- Catálogo de procedimentos: leitura/escrita por membro da workspace (o bot e
 -- a /agenda leem os preços). O cadastro (create/update) é restrito a owner na
@@ -985,7 +1037,12 @@ create policy "revenue_settings: owner only" on public.revenue_settings
   for all using (public.is_account_owner(account_id));
 
 create policy "ad_campaigns: workspace members" on public.ad_campaigns
-  for all using (workspace_id = any(public.my_workspace_ids()));
+  for all
+  using (workspace_id = any(public.my_workspace_ids()))
+  with check (
+    workspace_id = any(public.my_workspace_ids())
+    and account_id = any(public.my_account_ids())
+  );
 
 create policy "bot_config: account members" on public.bot_config
   for all using (account_id = any(public.my_account_ids()));
@@ -1008,7 +1065,12 @@ create policy "push_subscriptions: own" on public.push_subscriptions
   for all using (user_id = auth.uid()) with check (user_id = auth.uid());
 
 create policy "transcriptions: workspace members" on public.transcriptions
-  for all using (workspace_id = any(public.my_workspace_ids()));
+  for all
+  using (workspace_id = any(public.my_workspace_ids()))
+  with check (
+    workspace_id = any(public.my_workspace_ids())
+    and account_id = any(public.my_account_ids())
+  );
 
 -- account_notes/account_tasks: dado interno de CRM, uso exclusivo dos admins
 -- MedScale — sem policy tenant-facing, nunca exposto a membros de account.

@@ -28,9 +28,29 @@ export async function PATCH(req: NextRequest) {
   const update: ProfileUpdate = {}
 
   const editableFields = ['full_name', 'specialty', 'crm', 'phone', 'avatar_url'] as const
+  const MAX_LEN: Record<(typeof editableFields)[number], number> = {
+    full_name: 120,
+    specialty: 120,
+    crm: 40,
+    phone: 40,
+    avatar_url: 500,
+  }
+
+  // Remove caracteres de controle (CR/LF etc.) e limita o tamanho — estes
+  // campos livres alimentam e-mails (full_name) e o agente financeiro (phone).
+  const clean = (v: unknown, max: number): string | null => {
+    if (typeof v !== 'string') return null
+    let out = ''
+    for (const ch of v) {
+      const code = ch.codePointAt(0) ?? 0
+      out += code < 0x20 || (code >= 0x7f && code <= 0x9f) ? ' ' : ch
+    }
+    out = out.replace(/\s+/g, ' ').trim().slice(0, max)
+    return out || null
+  }
 
   for (const field of editableFields) {
-    if (field in body) update[field] = body[field] || null
+    if (field in body) (update as Record<string, string | null>)[field] = clean(body[field], MAX_LEN[field])
   }
 
   const { data, error } = await supabase.from('profiles').update(update).eq('id', user.id).select().single()
