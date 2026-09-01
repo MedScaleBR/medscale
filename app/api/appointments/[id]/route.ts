@@ -3,6 +3,9 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { cancelEvent, updateEvent } from '@/lib/google/calendar'
 import { requireWorkspaceSession } from '@/lib/session/api'
 import { syncRevenueEntryToAppointmentStatus, applyAppointmentRevenue } from '@/lib/revenue/cycle'
+import type { Database } from '@/types/database'
+
+type AppointmentUpdate = Database['public']['Tables']['appointments']['Update']
 
 // Google Calendar é a fonte de verdade: se a consulta tem um evento vinculado
 // (gcal_event_id), a mudança precisa ser aceita lá antes de gravar no
@@ -16,6 +19,26 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const supabase = await createClient()
   const body = await req.json()
+
+  // Allow-list dos campos gravaveis por esta rota — o corpo cru nunca vai para
+  // .update() (workspace_id/account_id/doctor_id/source/gcal_event_id ficam de
+  // fora). `body` continua sendo lido abaixo só para intenção do cliente.
+  const update: AppointmentUpdate = {}
+  for (const field of [
+    'patient_name',
+    'patient_phone',
+    'scheduled_at',
+    'duration_min',
+    'type',
+    'status',
+    'notes',
+    'price',
+    'procedure_id',
+    'procedure_name',
+    'health_plan',
+  ] as const) {
+    if (field in body) update[field] = body[field]
+  }
 
   const { data: current, error: fetchError } = await supabase
     .from('appointments')
@@ -37,11 +60,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       : typeof body.health_plan === 'string' && body.health_plan.trim()
         ? body.health_plan.trim()
         : null
-  if (body.health_plan !== undefined) body.health_plan = healthPlan
+  if (body.health_plan !== undefined) update.health_plan = healthPlan
   if (healthPlan) {
-    body.price = null
-    body.procedure_id = null
-    body.procedure_name = null
+    update.price = null
+    update.procedure_id = null
+    update.procedure_name = null
   }
 
   // Ciclo de receita: se o procedimento mudou, atualiza o snapshot de nome
@@ -54,10 +77,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         .eq('id', body.procedure_id)
         .eq('workspace_id', session.workspaceId)
         .maybeSingle()
-      body.procedure_name = proc?.name ?? null
-      if (proc && (body.price === undefined || body.price === null)) body.price = Number(proc.default_price)
+      update.procedure_name = proc?.name ?? null
+      if (proc && (body.price === undefined || body.price === null)) update.price = Number(proc.default_price)
     } else {
-      body.procedure_name = null
+      update.procedure_name = null
     }
   }
 
@@ -93,7 +116,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const { data, error } = await supabase
     .from('appointments')
-    .update(body)
+    .update(update)
     .eq('id', id)
     .eq('workspace_id', session.workspaceId)
     .select()

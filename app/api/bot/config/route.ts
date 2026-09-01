@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { invalidateBotConfigCache } from '@/lib/bot/config'
-import { requireWorkspaceSession } from '@/lib/session/api'
+import { requireWorkspaceSession, requireRole } from '@/lib/session/api'
 import type { Database } from '@/types/database'
 
 type BotConfigUpdate = Database['public']['Tables']['bot_config']['Update']
@@ -46,6 +46,12 @@ export async function PATCH(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
   if ('error' in result) return result.error
   const { session } = result
+
+  // Personalidade/regras/preços da Maria valem para toda a conta e alimentam o
+  // atendimento a todos os pacientes — só owner/admin edita (mesmo critério de
+  // /api/bot/onboarding/verify-meta).
+  const roleCheck = requireRole(session, ['owner', 'admin'])
+  if (roleCheck) return roleCheck
 
   const supabase = await createClient()
   const body = await req.json()

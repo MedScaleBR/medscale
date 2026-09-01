@@ -1,4 +1,5 @@
 import Link from 'next/link'
+import { redirect } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
@@ -7,6 +8,10 @@ import { BotConfigForm } from '@/components/configuracoes/bot/BotConfigForm'
 export default async function BotConfigPage() {
   const session = await resolveActiveSession()
   if (!session) return null
+
+  // Configuração da Maria é exclusiva de owner/admin (a API espelha isso —
+  // ver /api/bot/config e /api/bot/onboarding/*).
+  if (session.role !== 'owner' && session.role !== 'admin') redirect('/configuracoes')
 
   const supabase = await createClient()
   const [{ data: botConfig }, { data: profile }, { data: handoffHours }, { data: workspaces }, { data: membership }] =

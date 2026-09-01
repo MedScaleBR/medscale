@@ -34,10 +34,14 @@ export async function GET(req: NextRequest) {
   const denied = guard(session)
   if (denied) return denied
 
+  // Segundo filtro de tenant, independente do workspace: revenue_entries usa
+  // service role aqui (RLS e owner-only), entao nao ha backstop de RLS — os
+  // dois .eq garantem que remover um por engano nao vaza entre contas.
   const supabase = createAdminClient()
   const { data, error } = await supabase
     .from('revenue_entries')
     .select('*')
+    .eq('account_id', session.accountId)
     .eq('workspace_id', session.workspaceId)
     .order('entry_date', { ascending: false })
 

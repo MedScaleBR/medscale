@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireCronAuth } from '@/lib/cron-auth'
 import { createAdminClient } from '@/lib/supabase/server'
 import { saoPauloDateOnly } from '@/lib/revenue/cycle'
 import { summarizeRevenueEntries, buildDailySummaryMessage } from '@/lib/revenue/summary'
@@ -15,10 +16,8 @@ import { sendFinanceReply } from '@/lib/finance/agent'
 // produção, trocar por um template quando o volume justificar.
 
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronAuth(req)
+  if (denied) return denied
 
   const supabase = createAdminClient()
   const now = new Date()

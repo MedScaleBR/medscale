@@ -64,6 +64,7 @@ export default async function ConfiguracoesPage({
           gcalCalendarId: w.gcal_calendar_id,
         }))}
         isOwner={session.role === 'owner'}
+        canManageIntegrations={session.role === 'owner' || session.role === 'admin'}
         showRevenueCycle={session.userModules.includes('revenue_cycle')}
       />
     </div>

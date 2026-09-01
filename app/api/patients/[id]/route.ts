@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession } from '@/lib/session/api'
+import type { Database } from '@/types/database'
+
+type PatientUpdate = Database['public']['Tables']['patients']['Update']
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -32,9 +35,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const supabase = await createClient()
   const body = await req.json()
+
+  // Allow-list: nunca repassar o corpo cru para .update() — colunas como
+  // account_id/created_by não devem ser alteráveis pelo cliente.
+  const update: PatientUpdate = {}
+  for (const field of ['full_name', 'phone', 'email', 'birth_date', 'notes', 'tags'] as const) {
+    if (field in body) update[field] = body[field]
+  }
+  if (Object.keys(update).length === 0) {
+    return NextResponse.json({ error: 'Nada para atualizar' }, { status: 400 })
+  }
+
   const { data, error } = await supabase
     .from('patients')
-    .update(body)
+    .update(update)
     .eq('id', id)
     .eq('account_id', session.accountId)
     .select()

@@ -36,6 +36,7 @@ export async function GET(req: NextRequest) {
       'id, amount, payment_status, payment_method, paid_at, due_date, procedure_name, installments, appointment_id, ' +
         'appointments(scheduled_at, patient_name, status), patients(full_name)'
     )
+    .eq('account_id', session.accountId)
     .eq('workspace_id', session.workspaceId)
     .gte('due_date', from)
     .lte('due_date', to)

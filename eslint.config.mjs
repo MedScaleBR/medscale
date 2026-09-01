@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Relatório HTML gerado por `npm run test:coverage`.
     "coverage/**",
+    // Auditoria de segurança: PDF + venv Python (matplotlib traz JS vendorizado).
+    "docs/**",
   ]),
 ]);
 

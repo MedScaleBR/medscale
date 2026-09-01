@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireCronAuth } from '@/lib/cron-auth'
 import { createAdminClient } from '@/lib/supabase/server'
 import { reconcileAccountCalendars } from '@/lib/google/reconcile'
 
@@ -10,10 +11,8 @@ import { reconcileAccountCalendars } from '@/lib/google/reconcile'
 // lembrete de 24h ou da checagem de no-show agirem sobre dado velho, sem
 // escalar demais as chamadas à Calendar API por workspace por hora.
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronAuth(req)
+  if (denied) return denied
 
   const supabase = createAdminClient()
   const { data: tokens, error } = await supabase.from('google_tokens').select('account_id')

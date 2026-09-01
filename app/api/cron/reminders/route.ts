@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireCronAuth } from '@/lib/cron-auth'
 import { createAdminClient } from '@/lib/supabase/server'
 import { sendReminderTemplate } from '@/lib/whatsapp/send'
 import { decryptToken } from '@/lib/crypto'
@@ -8,10 +9,8 @@ import { decryptToken } from '@/lib/crypto'
 // futuro e ainda sem lembrete enviado. O número WhatsApp é único por account
 // (bot_config); o endereço vem da unidade da consulta (workspaces).
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronAuth(req)
+  if (denied) return denied
 
   const supabase = createAdminClient()
   const now = new Date()

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireCronAuth } from '@/lib/cron-auth'
 import { createAdminClient } from '@/lib/supabase/server'
 import { sendWaitlistTemplate } from '@/lib/whatsapp/send'
 import { decryptToken } from '@/lib/crypto'
@@ -16,10 +17,8 @@ const NOTIFY_COOLDOWN_HOURS = 24 // não reavisa a mesma entrada antes disso
 // lista de espera (FIFO) e notifica via WhatsApp — `notified_at` evita reenviar
 // o aviso a cada execução enquanto a vaga continuar aberta.
 export async function POST(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCronAuth(req)
+  if (denied) return denied
 
   const supabase = createAdminClient()
   const cooldownCutoff = new Date(Date.now() - NOTIFY_COOLDOWN_HOURS * 60 * 60 * 1000).toISOString()
