@@ -33,7 +33,8 @@ export async function getFinanceCategoryTree(
     .order('sort_order', { ascending: true })
   if (!opts.includeArchived) q = q.eq('is_archived', false)
   const { data } = await q
-  return buildTree((data ?? []) as Row[])
+  const rows = ((data ?? []) as Row[]).filter((r) => opts.includeArchived || !r.is_archived)
+  return buildTree(rows)
 }
 
 function buildTree(rows: Row[]): FinanceCategoryTree {

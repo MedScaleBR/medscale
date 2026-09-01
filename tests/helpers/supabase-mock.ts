@@ -71,17 +71,6 @@ export function createSupabaseMock(config: SupabaseMockConfig = {}): SupabaseMoc
       cursors.set(key, index + 1)
       return responder[Math.min(index, responder.length - 1)] ?? EMPTY
     }
-    // Apply filters to plain object responses with array data
-    if (responder && typeof responder === 'object' && 'data' in responder && Array.isArray(responder.data)) {
-      let filtered = [...responder.data]
-      for (const filter of call.filters) {
-        const [method, column, value] = filter as [string, string, unknown]
-        if (method === 'eq' && filtered.length > 0 && typeof filtered[0] === 'object' && filtered[0] !== null) {
-          filtered = filtered.filter((row: any) => row[column] === value)
-        }
-      }
-      return { ...responder, data: filtered }
-    }
     return responder
   }
 
