@@ -48,7 +48,12 @@ Total ${typeLabel} em ${mes}: ${total}`
 
 export interface QueryFilters {
   type: FinanceEntryType | null
+  // Nome da categoria resolvida, usado só no texto da resposta
+  // (describeScope / groupByCategory).
   category: string | null
+  // Filtro real contra finance_entries.category_id / subcategory_id.
+  categoryId: string | null
+  subcategoryId: string | null
   month: string | null
   // Unidade pela qual filtrar; null = consolidado (todas).
   workspaceId: string | null

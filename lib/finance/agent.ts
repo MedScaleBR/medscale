@@ -4,6 +4,8 @@ import { trackFinanceEntryCreatedViaWhatsApp } from '@/lib/analytics/posthog-ser
 import { parseCommand } from './parser'
 import { interpretMessage } from './interpret'
 import { categorizeEntry } from './categorize'
+import { ensureFinanceCategories } from './provision'
+import { getFinanceCategoryTree, resolveCategoryPair } from './categories'
 import {
   buildConfirmationMessage,
   buildQueryMessage,
@@ -46,7 +48,16 @@ interface PendingPaymentConfirm {
 // finance_sessions.pending_entry entre as duas mensagens.
 interface PendingChooseWorkspace {
   kind: 'choose_workspace'
-  entry: { type: 'pj'; description: string | null; amount: number; category: string | null; raw_message: string }
+  entry: {
+    type: 'pj'
+    description: string | null
+    amount: number
+    // `category` (texto) é o snapshot do nome; os ids resolvem a árvore.
+    category: string | null
+    category_id: string | null
+    subcategory_id: string | null
+    raw_message: string
+  }
 }
 
 const PENDING_TTL_MS = 30 * 60 * 1000
@@ -180,6 +191,11 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
 
   const revenueCycleActive = account?.modules?.includes('revenue_cycle') ?? false
 
+  // 2.4 Garante a árvore de categorias provisionada e a carrega uma vez —
+  // interpretação, consulta e categorização usam a mesma árvore.
+  await ensureFinanceCategories(supabase, accountId)
+  const categoryTree = await getFinanceCategoryTree(supabase, accountId)
+
   // 2.5 Há um lançamento PJ esperando o owner dizer a unidade?
   if (await handlePendingChooseWorkspace(supabase, accountId, senderPhone, messageText, membership.user_id)) return
 
@@ -191,7 +207,7 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
   // custo); só o que não for comando vai para o Claude interpretar.
   const today = new Date().toISOString().split('T')[0]
   const shortcut = parseCommand(messageText)
-  const intent = shortcut.kind === 'unknown' ? await interpretMessage(messageText, today) : shortcut
+  const intent = shortcut.kind === 'unknown' ? await interpretMessage(messageText, today, categoryTree) : shortcut
 
   if (intent.kind === 'confirm_payment') {
     if (!revenueCycleActive) {
@@ -247,28 +263,32 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
     const resolved = intent.workspace ? resolveUnit(units, intent.workspace) : { status: 'none' as const }
     const unit = resolved.status === 'one' ? resolved.unit : null
 
-    const entries = await getEntries(accountId, {
+    // Nome -> id contra a árvore da conta. O nome resolvido (pair.categoryName)
+    // fica no filtro para o texto da resposta; os ids fazem o filtro real.
+    const pair = resolveCategoryPair(categoryTree, intent.type, intent.category, intent.subcategory)
+    const filters: QueryFilters = {
       type: intent.type,
-      category: intent.category,
+      category: pair.categoryName,
+      categoryId: pair.categoryId,
+      subcategoryId: pair.subcategoryId,
       month: intent.month,
       workspaceId: unit?.id ?? null,
       unitLabel: unit?.name ?? null,
-    })
+    }
+    const entries = await getEntries(accountId, filters)
     const unitNames = Object.fromEntries(units.map((u) => [u.id, u.name]))
-    const response = await buildQueryMessage(
-      entries,
-      { type: intent.type, category: intent.category, month: intent.month, workspaceId: unit?.id ?? null, unitLabel: unit?.name ?? null },
-      unitNames
-    )
+    const response = await buildQueryMessage(entries, filters, unitNames)
     await sendFinanceReply(senderPhone, response)
     return
   }
 
   // 4. Categorizar. A interpretação por linguagem natural já traz a
   // categoria; só o caminho dos atalhos precisa desta chamada extra.
-  let category = intent.category
-  if (!category && intent.description) {
-    category = await categorizeEntry(intent.description, intent.type)
+  // Sempre resolvemos nome -> id contra a árvore da conta.
+  let pair = resolveCategoryPair(categoryTree, intent.type, intent.category, intent.subcategory)
+  if (!pair.categoryId && intent.description) {
+    const guess = await categorizeEntry(intent.description, intent.type, categoryTree)
+    pair = resolveCategoryPair(categoryTree, intent.type, guess.categoryName, guess.subcategoryName)
   }
 
   // 4.5 Lançamento PJ pertence a uma unidade. Se a account tem mais de uma e a
@@ -287,7 +307,9 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
           type: 'pj',
           description: intent.description,
           amount: intent.amount,
-          category: category ?? null,
+          category: pair.categoryName,
+          category_id: pair.categoryId,
+          subcategory_id: pair.subcategoryId,
           raw_message: messageText,
         },
       })
@@ -304,7 +326,9 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
     type: intent.type,
     description: intent.description,
     amount: intent.amount,
-    category: category ?? null,
+    categoryName: pair.categoryName,
+    categoryId: pair.categoryId,
+    subcategoryId: pair.subcategoryId,
     workspaceId,
     rawMessage: messageText,
     today,
@@ -322,7 +346,10 @@ async function persistEntryAndConfirm(
     type: FinanceEntry['type']
     description: string | null
     amount: number
-    category: string | null
+    // Nome renomeado para não colidir com a coluna `category` do insert.
+    categoryName: string | null
+    categoryId: string | null
+    subcategoryId: string | null
     workspaceId: string | null
     rawMessage: string
     today: string
@@ -337,7 +364,9 @@ async function persistEntryAndConfirm(
       type: args.type,
       description: args.description,
       amount: args.amount,
-      category: args.category,
+      category: args.categoryName,
+      category_id: args.categoryId,
+      subcategory_id: args.subcategoryId,
       raw_message: args.rawMessage,
       entry_date: args.today,
     })
@@ -351,13 +380,15 @@ async function persistEntryAndConfirm(
 
   await trackFinanceEntryCreatedViaWhatsApp(args.userId, {
     account_id: args.accountId,
-    category: args.category ?? null,
+    category: args.categoryName ?? null,
     amount: entry.amount,
   })
 
   const monthEntries = await getEntries(args.accountId, {
     type: args.type,
     category: null,
+    categoryId: null,
+    subcategoryId: null,
     month: null,
     workspaceId: null,
     unitLabel: null,
@@ -538,7 +569,9 @@ async function handlePendingChooseWorkspace(
     type: 'pj',
     description: pending.entry.description,
     amount: pending.entry.amount,
-    category: pending.entry.category,
+    categoryName: pending.entry.category,
+    categoryId: pending.entry.category_id,
+    subcategoryId: pending.entry.subcategory_id,
     workspaceId: resolved.unit.id,
     rawMessage: pending.entry.raw_message,
     today,
@@ -556,8 +589,8 @@ async function clearPendingFinanceSession(
     .eq('phone', senderPhone)
 }
 
-// Lançamentos da account com os filtros da consulta. `type`/`category` nulos
-// significam "todos"; `month` nulo significa o mês atual.
+// Lançamentos da account com os filtros da consulta. `type`/`categoryId`/
+// `subcategoryId` nulos significam "todos"; `month` nulo significa o mês atual.
 async function getEntries(accountId: string, filters: QueryFilters): Promise<FinanceEntry[]> {
   const supabase = createAdminClient()
 
@@ -575,7 +608,8 @@ async function getEntries(accountId: string, filters: QueryFilters): Promise<Fin
     .lte('entry_date', lastDay)
 
   if (filters.type) query = query.eq('type', filters.type)
-  if (filters.category) query = query.eq('category', filters.category)
+  if (filters.categoryId) query = query.eq('category_id', filters.categoryId)
+  if (filters.subcategoryId) query = query.eq('subcategory_id', filters.subcategoryId)
   if (filters.workspaceId) query = query.eq('workspace_id', filters.workspaceId)
 
   const { data } = await query.order('entry_date', { ascending: false })
