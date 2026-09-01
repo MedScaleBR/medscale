@@ -35,7 +35,7 @@ export default async function FinancePage() {
       .eq('account_id', session.accountId)
       .gte('entry_date', cutoff)
       .order('entry_date', { ascending: false }),
-    getFinanceCategoryTree(supabase, session.accountId),
+    getFinanceCategoryTree(supabase, session.accountId, { includeArchived: true }),
     supabase
       .from('workspaces')
       .select('id, name')
