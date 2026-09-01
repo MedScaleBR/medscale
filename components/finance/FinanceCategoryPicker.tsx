@@ -15,9 +15,14 @@ export function FinanceCategoryPicker({
   onChange: (next: { categoryId: string | null; subcategoryId: string | null }) => void
   disabled?: boolean
 }) {
-  const roots = tree[kind].filter((c) => !c.isArchived)
-  const current = roots.find((c) => c.id === categoryId) ?? null
-  const subs = (current?.children ?? []).filter((s) => !s.isArchived)
+  // Arquivadas ficam fora da seleção, exceto a que já está selecionada neste
+  // lançamento — senão o Select mostraria o placeholder e o lançamento
+  // pareceria sem categoria enquanto o estado ainda guarda o id.
+  const current = tree[kind].find((c) => c.id === categoryId) ?? null
+  const roots = tree[kind].filter((c) => !c.isArchived || c.id === categoryId)
+  const subs = (current?.children ?? []).filter((s) => !s.isArchived || s.id === subcategoryId)
+  const label = (n: { name: string; isArchived: boolean }) =>
+    n.isArchived ? `${n.name} (arquivada)` : n.name
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -32,7 +37,7 @@ export function FinanceCategoryPicker({
           <SelectContent>
             <SelectItem value={NONE}>Sem categoria</SelectItem>
             {roots.map((c) => (
-              <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
+              <SelectItem key={c.id} value={c.id}>{label(c)}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -50,7 +55,7 @@ export function FinanceCategoryPicker({
             <SelectContent>
               <SelectItem value={NONE}>Nenhuma</SelectItem>
               {subs.map((s) => (
-                <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                <SelectItem key={s.id} value={s.id}>{label(s)}</SelectItem>
               ))}
             </SelectContent>
           </Select>

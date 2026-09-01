@@ -131,7 +131,7 @@ export function FinanceClient({
         </TabsContent>
 
         <TabsContent value="categories" className="mt-4">
-          <FinanceCategoryManager kind={kind} />
+          <FinanceCategoryManager kind={kind} onChanged={refresh} />
         </TabsContent>
       </Tabs>
 

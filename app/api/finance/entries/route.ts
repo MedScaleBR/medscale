@@ -3,14 +3,16 @@ import type { Database } from '@/types/database'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession, requireModule, requireRole, type ApiSession } from '@/lib/session/api'
 import { ensureFinanceCategories } from '@/lib/finance/provision'
-import { getFinanceCategoryTree } from '@/lib/finance/categories'
+import { getFinanceCategoryTree, rootCategoryName } from '@/lib/finance/categories'
 import { validateEntryInput } from '@/lib/finance/entry-validation'
 import type { FinanceEntryType } from '@/lib/finance/types'
 
 // Lançamento manual do financeiro pela tela. Exclusivo do owner (dado
 // financeiro), módulo 'finance'. O servidor grava os campos-sentinela
-// (`recorded_by_phone: 'web'`, `raw_message: '(lançado na tela)'`) — a coluna
-// texto `category` fica null; o vínculo vai em `category_id`/`subcategory_id`.
+// (`recorded_by_phone: 'web'`, `raw_message: '(lançado na tela)'`). A coluna
+// texto `category` guarda o snapshot do nome da categoria-raiz resolvido da
+// árvore (igual ao agente do WhatsApp) — o vínculo vai em
+// `category_id`/`subcategory_id`; `category` é null quando não há categoria.
 
 type GuardResult =
   | { error: NextResponse; session?: never }
@@ -88,7 +90,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     type: b.type,
     description: b.description ?? null,
     amount: b.amount as number,
-    category: null,
+    category: rootCategoryName(tree, b.categoryId ?? null),
     category_id: b.categoryId ?? null,
     subcategory_id: b.subcategoryId ?? null,
     raw_message: '(lançado na tela)',

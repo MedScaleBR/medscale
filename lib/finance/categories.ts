@@ -57,6 +57,21 @@ function buildTree(rows: Row[]): FinanceCategoryTree {
   return { pf: make('pf'), pj: make('pj') }
 }
 
+// Nome da categoria-raiz de um id (qualquer kind). As rotas web usam isto para
+// gravar o snapshot textual em finance_entries.category, do mesmo jeito que o
+// agente do WhatsApp já faz. null quando o id é null ou não está na árvore.
+export function rootCategoryName(
+  tree: FinanceCategoryTree,
+  categoryId: string | null
+): string | null {
+  if (!categoryId) return null
+  for (const kind of ['pf', 'pj'] as const) {
+    const hit = tree[kind].find((c) => c.id === categoryId)
+    if (hit) return hit.name
+  }
+  return null
+}
+
 export interface ResolvedCategoryPair {
   categoryId: string | null
   categoryName: string | null

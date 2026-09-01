@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
-import { resetAgentHarness, mergeSupabaseConfig, state, PARAMS } from '../helpers/agent-harness'
+import { resetAgentHarness, mergeSupabaseConfig, state, PARAMS, lastSentMessage } from '../helpers/agent-harness'
 import { filterValue, type RecordedCall } from '../helpers/supabase-mock'
 
 // Entradas do agente controladas pelo teste: interpretMessage/categorizeEntry
@@ -114,5 +114,37 @@ describe('processFinancialMessage — categorias', () => {
     expect(sel).toBeDefined()
     expect(filterValue(sel as RecordedCall, 'eq', 'category_id')).toBe('fil')
     expect((sel as RecordedCall).filters.some((f) => f[0] === 'eq' && f[1] === 'category')).toBe(false)
+  })
+
+  it('consulta com categoria fora da árvore responde "não encontrei" e não roda a query ampla', async () => {
+    financeConfig()
+    h.intent = {
+      kind: 'query', type: 'pf', category: 'Criptomoedas', subcategory: null,
+      month: null, workspace: null,
+    }
+    const { processFinancialMessage } = await import('@/lib/finance/agent')
+    await processFinancialMessage(PARAMS.patientPhone, 'quanto gastei em cripto esse mes')
+
+    // Sem o filtro resolvido, rodar getEntries devolveria o total do mês
+    // inteiro como se respondesse — o agente precisa cair fora antes disso.
+    expect(state.supabase.callsTo('finance_entries', 'select')).toHaveLength(0)
+    expect(lastSentMessage()).toContain('Não encontrei a categoria "Criptomoedas"')
+  })
+
+  it('consulta com categoria válida mas subcategoria inexistente ainda consulta a categoria', async () => {
+    financeConfig()
+    h.intent = {
+      kind: 'query', type: 'pf', category: 'Filhos', subcategory: 'Mesada',
+      month: null, workspace: null,
+    }
+    const { processFinancialMessage } = await import('@/lib/finance/agent')
+    await processFinancialMessage(PARAMS.patientPhone, 'quanto gastei com mesada dos filhos esse mes')
+
+    const sel = state.supabase
+      .callsTo('finance_entries', 'select')
+      .find((c: RecordedCall) => c.filters.some((f) => f[0] === 'eq' && f[1] === 'category_id'))
+    expect(sel).toBeDefined()
+    expect(filterValue(sel as RecordedCall, 'eq', 'category_id')).toBe('fil')
+    expect((sel as RecordedCall).filters.some((f) => f[0] === 'eq' && f[1] === 'subcategory_id')).toBe(false)
   })
 })

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { Database } from '@/types/database'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession, requireModule, requireRole, type ApiSession } from '@/lib/session/api'
-import { getFinanceCategoryTree } from '@/lib/finance/categories'
+import { getFinanceCategoryTree, rootCategoryName } from '@/lib/finance/categories'
 import { validateEntryInput } from '@/lib/finance/entry-validation'
 import type { FinanceEntryType } from '@/lib/finance/types'
 
@@ -43,13 +43,21 @@ export async function PATCH(
   if (!existing) return NextResponse.json({ error: 'Lançamento não encontrado' }, { status: 404 })
 
   const type = existing.type as FinanceEntryType
-  const tree = await getFinanceCategoryTree(supabase, g.session.accountId)
+  // Um lançamento existente pode apontar para uma categoria já arquivada — isso
+  // é um valor legal aqui (a rota DELETE inclusive orienta a arquivar). Sem
+  // includeArchived, editar o valor desse lançamento falharia a revalidação.
+  const tree = await getFinanceCategoryTree(supabase, g.session.accountId, { includeArchived: true })
 
   const patch: Database['public']['Tables']['finance_entries']['Update'] = {}
   if (b.entry_date !== undefined) patch.entry_date = String(b.entry_date)
   if (b.description !== undefined) patch.description = b.description ? String(b.description) : null
   if (b.amount !== undefined) patch.amount = Number(b.amount)
-  if (b.category_id !== undefined) patch.category_id = b.category_id ? String(b.category_id) : null
+  if (b.category_id !== undefined) {
+    patch.category_id = b.category_id ? String(b.category_id) : null
+    // `category` (texto) acompanha `category_id` — snapshot do nome da raiz.
+    // Só mexe quando o caller tocou em `category_id`.
+    patch.category = rootCategoryName(tree, patch.category_id as string | null)
+  }
   if (b.subcategory_id !== undefined) patch.subcategory_id = b.subcategory_id ? String(b.subcategory_id) : null
   if (b.workspace_id !== undefined && type === 'pj') {
     const wid = b.workspace_id ? String(b.workspace_id) : null
@@ -66,20 +74,17 @@ export async function PATCH(
   }
 
   // Revalida categoria/subcategoria com os valores finais. Data/valor não
-  // informados no body ganham placeholders seguros — o erro correspondente é
-  // ignorado logo abaixo.
+  // informados no body ganham placeholders seguros que sempre validam, então
+  // um erro aqui é sempre real (categoria/subcategoria inválida, ou data/valor
+  // inválidos que vieram mesmo no patch).
   const err = validateEntryInput(tree, {
     type,
-    entryDate: (patch.entry_date as string) ?? '2026-01-01', // data só falha se veio no patch e é inválida
+    entryDate: (patch.entry_date as string) ?? '2026-01-01',
     amount: patch.amount !== undefined ? (patch.amount as number) : 1,
     categoryId: (patch.category_id as string | null) ?? null,
     subcategoryId: (patch.subcategory_id as string | null) ?? null,
   })
-  if (
-    err &&
-    !(err.code === 'date_invalid' && b.entry_date === undefined) &&
-    !(err.code === 'amount_invalid' && b.amount === undefined)
-  ) {
+  if (err) {
     return NextResponse.json({ error: 'Alteração inválida', code: err.code }, { status: 400 })
   }
 

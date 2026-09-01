@@ -12,6 +12,7 @@ import {
   buildSmalltalkMessage,
   buildUndoMessage,
   buildNothingToUndoMessage,
+  buildCategoryNotFoundMessage,
   buildHelpMessage,
   buildUnknownMessage,
   buildUnregisteredMessage,
@@ -266,6 +267,16 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
     // Nome -> id contra a árvore da conta. O nome resolvido (pair.categoryName)
     // fica no filtro para o texto da resposta; os ids fazem o filtro real.
     const pair = resolveCategoryPair(categoryTree, intent.type, intent.category, intent.subcategory)
+
+    // O modelo extraiu um nome de categoria que não casa com a árvore da conta.
+    // Rodar a consulta sem esse filtro devolveria o total do mês inteiro como
+    // se fosse a resposta — melhor dizer que não achou. Subcategoria ausente
+    // (com a categoria resolvida) não é problema: consulta só pela categoria.
+    if (intent.category && intent.category.trim() !== '' && !pair.categoryId) {
+      await sendFinanceReply(senderPhone, buildCategoryNotFoundMessage(intent.category))
+      return
+    }
+
     const filters: QueryFilters = {
       type: intent.type,
       category: pair.categoryName,

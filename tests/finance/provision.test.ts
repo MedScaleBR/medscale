@@ -20,4 +20,27 @@ describe('ensureFinanceCategories', () => {
     mock.rpc.mockResolvedValueOnce({ data: null, error: { message: 'boom' } })
     await expect(ensureFinanceCategories(mock.client as never, 'acc-1')).rejects.toThrow('boom')
   })
+
+  it('degrada silenciosamente quando a função ainda não existe (código 42883)', async () => {
+    const mock = createSupabaseMock()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mock.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: '42883', message: 'function provision_finance_categories(uuid, jsonb) does not exist' },
+    })
+    await expect(ensureFinanceCategories(mock.client as never, 'acc-1')).resolves.toBeUndefined()
+    expect(warn).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
+  it('degrada quando a mensagem indica função ausente sem código', async () => {
+    const mock = createSupabaseMock()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    mock.rpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'Could not find the function public.provision_finance_categories in the schema cache' },
+    })
+    await expect(ensureFinanceCategories(mock.client as never, 'acc-1')).resolves.toBeUndefined()
+    warn.mockRestore()
+  })
 })

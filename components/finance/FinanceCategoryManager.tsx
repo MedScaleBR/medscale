@@ -26,9 +26,10 @@ import {
 
 // Gerenciador CRUD da árvore de categorias/subcategorias do financeiro,
 // renderizado dentro da tela /finance. Busca a própria árvore (2 níveis) via
-// GET /api/finance/categories no mount e após cada mutação — estado local,
-// sem depender de router.refresh (o que a página serve no servidor não é o
-// que este componente lê).
+// GET /api/finance/categories no mount e após cada mutação (estado local, para
+// a lista deste componente atualizar na hora). Além disso chama onChanged()
+// após cada mutação para o pai revalidar a árvore renderizada no servidor,
+// que alimenta o picker/tabela/gráfico dos Lançamentos.
 
 type NodeWithCount = {
   id: string
@@ -60,7 +61,17 @@ type DialogState =
   | { mode: 'create-sub'; parentId: string; parentName: string }
   | { mode: 'rename'; targetId: string; current: string }
 
-export function FinanceCategoryManager({ kind }: { kind: 'pf' | 'pj' }): JSX.Element {
+export function FinanceCategoryManager({
+  kind,
+  onChanged,
+}: {
+  kind: 'pf' | 'pj'
+  // Chamado após cada mutação bem-sucedida. FinanceClient passa router.refresh()
+  // para revalidar a árvore renderizada no servidor (picker/tabela/gráfico dos
+  // Lançamentos). O load() local continua — a lista deste componente precisa
+  // atualizar na hora.
+  onChanged?: () => void
+}): JSX.Element {
   const [data, setData] = useState<NodeWithCount[]>([])
   const [showArchived, setShowArchived] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -116,19 +127,28 @@ export function FinanceCategoryManager({ kind }: { kind: 'pf' | 'pj' }): JSX.Ele
       '/api/finance/categories',
       jsonInit('POST', { kind, name, parent_id: parentId ?? null }),
     )
-    if (ok) await load()
+    if (ok) {
+      await load()
+      onChanged?.()
+    }
     return ok
   }
 
   const rename = async (id: string, name: string): Promise<boolean> => {
     const ok = await send(`/api/finance/categories/${id}`, jsonInit('PATCH', { name }))
-    if (ok) await load()
+    if (ok) {
+      await load()
+      onChanged?.()
+    }
     return ok
   }
 
   const move = async (id: string, parentId: string): Promise<void> => {
     const ok = await send(`/api/finance/categories/${id}`, jsonInit('PATCH', { parent_id: parentId }))
-    if (ok) await load()
+    if (ok) {
+      await load()
+      onChanged?.()
+    }
   }
 
   const archive = async (node: NodeWithCount, isRoot: boolean, value: boolean): Promise<void> => {
@@ -142,7 +162,10 @@ export function FinanceCategoryManager({ kind }: { kind: 'pf' | 'pj' }): JSX.Ele
       `/api/finance/categories/${node.id}`,
       jsonInit('PATCH', { is_archived: value }),
     )
-    if (ok) await load()
+    if (ok) {
+      await load()
+      onChanged?.()
+    }
   }
 
   // Reordena trocando sort_order com o vizinho — dois PATCH { sort_order }.
@@ -164,12 +187,18 @@ export function FinanceCategoryManager({ kind }: { kind: 'pf' | 'pj' }): JSX.Ele
       `/api/finance/categories/${neighbour.id}`,
       jsonInit('PATCH', { sort_order: node.sortOrder }),
     )
-    if (ok2) await load()
+    if (ok2) {
+      await load()
+      onChanged?.()
+    }
   }
 
   const remove = async (id: string): Promise<void> => {
     const ok = await send(`/api/finance/categories/${id}`, { method: 'DELETE' })
-    if (ok) await load()
+    if (ok) {
+      await load()
+      onChanged?.()
+    }
   }
 
   const toggleExpand = (id: string) => {
@@ -240,7 +269,7 @@ export function FinanceCategoryManager({ kind }: { kind: 'pf' | 'pj' }): JSX.Ele
         </label>
       </div>
 
-      {error && (
+      {error && !dialog && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
           <span>{error}</span>
           <button
@@ -436,6 +465,11 @@ export function FinanceCategoryManager({ kind }: { kind: 'pf' | 'pj' }): JSX.Ele
               if (e.key === 'Enter') void submitDialog()
             }}
           />
+          {error && (
+            <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </p>
+          )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setDialog(null)} disabled={busy}>
               Cancelar

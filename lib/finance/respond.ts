@@ -163,6 +163,13 @@ export function buildUnknownMessage(): string {
   return `Não consegui entender. Você pode me dizer algo como "gastei 50 no almoço" ou "quanto gastei esse mês?". Digite /ajuda para ver mais exemplos.`
 }
 
+// Consulta que nomeia uma categoria fora da árvore da conta. Sem isto, a
+// consulta rodaria sem filtro e devolveria o total do mês inteiro como se
+// tivesse respondido à pergunta.
+export function buildCategoryNotFoundMessage(name: string): string {
+  return `Não encontrei a categoria "${name}" nas suas finanças. Você pode ver e criar categorias no painel financeiro.`
+}
+
 export function buildUnregisteredMessage(): string {
   return `Número não encontrado na MedScale. Certifique-se de que sua conta está ativa e tente novamente.`
 }
