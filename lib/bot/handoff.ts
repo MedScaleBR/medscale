@@ -18,6 +18,10 @@ interface HandoffParams {
   phoneNumberId: string
   metaToken: string // já descriptografado pelo chamador
   triggerReason: HandoffTriggerReason
+  // Unidades que recebem a notificação push. Default: só `workspaceId`. Quando
+  // o paciente ainda não escolheu a unidade (conta multi-unidade), o chamador
+  // passa todas para o pedido não ficar sem dono.
+  notifyWorkspaceIds?: string[]
 }
 
 export async function executeHandoff(params: HandoffParams) {
@@ -35,10 +39,17 @@ export async function executeHandoff(params: HandoffParams) {
   }
 
   // 3. Marcar conversa como handoff no banco e pausar o bot — ele só volta a
-  // responder quando a equipe reativar pelo painel.
+  // responder quando a equipe reativar pelo painel. Grava também a unidade que
+  // vai atender, para o chat aparecer no /conversa dela (é NULL até aqui quando
+  // o paciente pediu um humano antes de escolher a unidade).
   await supabase
     .from('conversations')
-    .update({ status: 'handoff', bot_paused: true, resolved_at: new Date().toISOString() })
+    .update({
+      status: 'handoff',
+      bot_paused: true,
+      resolved_at: new Date().toISOString(),
+      workspace_id: workspaceId,
+    })
     .eq('id', conversationId)
 
   // 4. Registrar log de handoff
@@ -61,11 +72,16 @@ export async function executeHandoff(params: HandoffParams) {
       .single()
     const patientName = (convo?.patients as unknown as { full_name: string } | null)?.full_name ?? 'Paciente'
     const { sendHandoffPush } = await import('@/lib/push/send')
-    await sendHandoffPush(workspaceId, {
-      title: '🔔 Atendimento solicitado',
-      body: `${patientName} pediu atendimento humano`,
-      url: `/bot?c=${conversationId}`,
-    })
+    const notifyIds = params.notifyWorkspaceIds?.length ? params.notifyWorkspaceIds : [workspaceId]
+    await Promise.all(
+      notifyIds.map((wid) =>
+        sendHandoffPush(wid, {
+          title: '🔔 Atendimento solicitado',
+          body: `${patientName} pediu atendimento humano`,
+          url: `/bot?c=${conversationId}`,
+        })
+      )
+    )
   } catch (err) {
     console.error('[handoff] push notification failed', err)
   }
