@@ -62,3 +62,60 @@ describe('POST /api/finance/categories', () => {
     expect((await res.json()).id).toBe('new-1')
   })
 })
+
+import { PATCH, DELETE } from '@/app/api/finance/categories/[id]/route'
+
+const params = (id: string) => ({ params: Promise.resolve({ id }) })
+
+describe('PATCH /api/finance/categories/[id]', () => {
+  it('arquivar raiz cascateia para os filhos', async () => {
+    g.supabase = createSupabaseMock({
+      finance_categories: {
+        select: { data: [
+          { id: 'r1', account_id: 'a1', kind: 'pf', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
+          { id: 's1', account_id: 'a1', kind: 'pf', parent_id: 'r1', name: 'Escola', sort_order: 0, is_archived: false, created_at: '' },
+        ] },
+        update: { data: null },
+      },
+    })
+    const res = await PATCH(new Request('https://app.test/x', { method: 'PATCH', body: JSON.stringify({ is_archived: true }), headers: { 'content-type': 'application/json' } }) as never, params('r1') as never)
+    expect(res.status).toBe(200)
+    const updates = g.supabase.callsTo('finance_categories', 'update')
+    expect(updates.length).toBeGreaterThanOrEqual(1) // raiz + filhos (via .in ou 2ª chamada)
+  })
+  it('400 ao renomear para nome de irmã existente', async () => {
+    g.supabase = createSupabaseMock({
+      finance_categories: { select: { data: [
+        { id: 'r1', account_id: 'a1', kind: 'pf', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
+        { id: 'r2', account_id: 'a1', kind: 'pf', parent_id: null, name: 'Alimentação', sort_order: 1, is_archived: false, created_at: '' },
+      ] } },
+    })
+    const res = await PATCH(new Request('https://app.test/x', { method: 'PATCH', body: JSON.stringify({ name: 'alimentacao' }), headers: { 'content-type': 'application/json' } }) as never, params('r1') as never)
+    expect(res.status).toBe(400)
+    expect((await res.json()).code).toBe('duplicate_sibling')
+  })
+})
+
+describe('DELETE /api/finance/categories/[id]', () => {
+  it('409 quando há lançamentos usando', async () => {
+    g.supabase = createSupabaseMock({
+      finance_categories: { select: { data: [
+        { id: 'r1', account_id: 'a1', kind: 'pf', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
+      ] } },
+      finance_entries: { select: { data: [{ id: 'e1' }] } },
+    })
+    const res = await DELETE(new Request('https://app.test/x', { method: 'DELETE' }) as never, params('r1') as never)
+    expect(res.status).toBe(409)
+    expect((await res.json()).code).toBe('in_use')
+  })
+  it('200 quando vazia', async () => {
+    g.supabase = createSupabaseMock({
+      finance_categories: { select: { data: [
+        { id: 'r1', account_id: 'a1', kind: 'pf', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
+      ] }, delete: { data: null } },
+      finance_entries: { select: { data: [] } },
+    })
+    const res = await DELETE(new Request('https://app.test/x', { method: 'DELETE' }) as never, params('r1') as never)
+    expect(res.status).toBe(200)
+  })
+})
