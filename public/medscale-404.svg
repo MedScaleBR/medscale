@@ -1,0 +1,138 @@
+<svg viewBox="0 0 800 520" xmlns="http://www.w3.org/2000/svg" font-family="system-ui, -apple-system, 'Segoe UI', sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#162755"/>
+      <stop offset="100%" stop-color="#0F1E45"/>
+    </linearGradient>
+    <linearGradient id="cardGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1e3870"/>
+      <stop offset="100%" stop-color="#162755"/>
+    </linearGradient>
+    <linearGradient id="cyanGlow" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#00B9D8" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#00B9D8" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#00B9D8" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="softShadow">
+      <feDropShadow dx="0" dy="8" stdDeviation="18" flood-color="#0F1E45" flood-opacity="0.55"/>
+    </filter>
+    <filter id="cyanBlur">
+      <feGaussianBlur stdDeviation="28"/>
+    </filter>
+    <clipPath id="cardClip">
+      <rect x="160" y="60" width="480" height="400" rx="16"/>
+    </clipPath>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="520" fill="url(#bg)"/>
+
+  <!-- Subtle grid lines — quadriculado hospitalar distante -->
+  <g stroke="rgba(0,185,216,0.045)" stroke-width="1">
+    <line x1="0" y1="52" x2="800" y2="52"/>
+    <line x1="0" y1="104" x2="800" y2="104"/>
+    <line x1="0" y1="156" x2="800" y2="156"/>
+    <line x1="0" y1="208" x2="800" y2="208"/>
+    <line x1="0" y1="260" x2="800" y2="260"/>
+    <line x1="0" y1="312" x2="800" y2="312"/>
+    <line x1="0" y1="364" x2="800" y2="364"/>
+    <line x1="0" y1="416" x2="800" y2="416"/>
+    <line x1="0" y1="468" x2="800" y2="468"/>
+    <line x1="80" y1="0" x2="80" y2="520"/>
+    <line x1="160" y1="0" x2="160" y2="520"/>
+    <line x1="240" y1="0" x2="240" y2="520"/>
+    <line x1="320" y1="0" x2="320" y2="520"/>
+    <line x1="400" y1="0" x2="400" y2="520"/>
+    <line x1="480" y1="0" x2="480" y2="520"/>
+    <line x1="560" y1="0" x2="560" y2="520"/>
+    <line x1="640" y1="0" x2="640" y2="520"/>
+    <line x1="720" y1="0" x2="720" y2="520"/>
+  </g>
+
+  <!-- Cyan ambient glow behind card -->
+  <ellipse cx="400" cy="260" rx="260" ry="160" fill="#00B9D8" opacity="0.07" filter="url(#cyanBlur)"/>
+
+  <!-- Prontuário card -->
+  <rect x="160" y="60" width="480" height="400" rx="16" fill="url(#cardGrad)" filter="url(#softShadow)" stroke="rgba(0,185,216,0.18)" stroke-width="1"/>
+
+  <!-- Card header strip — cor de aba de prontuário -->
+  <rect x="160" y="60" width="480" height="52" rx="16" fill="#1B3068"/>
+  <rect x="160" y="88" width="480" height="24" fill="#1B3068"/>
+
+  <!-- Header: logotipo pill + título do documento -->
+  <rect x="180" y="74" width="90" height="24" rx="6" fill="rgba(0,185,216,0.15)" stroke="#00B9D8" stroke-width="1"/>
+  <text x="225" y="91" text-anchor="middle" fill="#00B9D8" font-size="11" font-weight="600" letter-spacing="0.5">MedScale</text>
+
+  <text x="476" y="91" text-anchor="end" fill="rgba(255,255,255,0.35)" font-size="10.5" letter-spacing="0.3">PRONTUÁRIO · REF #404</text>
+
+  <!-- Divider abaixo do header -->
+  <line x1="160" y1="112" x2="640" y2="112" stroke="rgba(0,185,216,0.2)" stroke-width="1"/>
+
+  <!-- Campos de ficha clínica — linhas tracejadas vazias -->
+  <!-- Campo: Paciente -->
+  <text x="184" y="140" fill="rgba(255,255,255,0.3)" font-size="9.5" letter-spacing="1">PACIENTE</text>
+  <line x1="184" y1="155" x2="456" y2="155" stroke="rgba(255,255,255,0.12)" stroke-width="1" stroke-dasharray="4 3"/>
+  <text x="184" y="152" fill="rgba(255,255,255,0.18)" font-size="11" font-style="italic">Página não encontrada</text>
+
+  <text x="472" y="140" fill="rgba(255,255,255,0.3)" font-size="9.5" letter-spacing="1">DATA</text>
+  <line x1="472" y1="155" x2="620" y2="155" stroke="rgba(255,255,255,0.12)" stroke-width="1" stroke-dasharray="4 3"/>
+
+  <!-- Campo: CRM -->
+  <text x="184" y="182" fill="rgba(255,255,255,0.3)" font-size="9.5" letter-spacing="1">CID-10</text>
+  <line x1="184" y1="197" x2="330" y2="197" stroke="rgba(255,255,255,0.12)" stroke-width="1" stroke-dasharray="4 3"/>
+  <text x="184" y="194" fill="rgba(255,255,255,0.18)" font-size="11" font-style="italic">R99 – Inespecificado</text>
+
+  <text x="348" y="182" fill="rgba(255,255,255,0.3)" font-size="9.5" letter-spacing="1">CONVÊNIO</text>
+  <line x1="348" y1="197" x2="620" y2="197" stroke="rgba(255,255,255,0.12)" stroke-width="1" stroke-dasharray="4 3"/>
+
+  <!-- Divisória de seção -->
+  <line x1="184" y1="212" x2="616" y2="212" stroke="rgba(0,185,216,0.12)" stroke-width="1"/>
+
+  <!-- ÁREA PRINCIPAL: 404 como campo de anamnese em branco -->
+  <!-- Label da seção -->
+  <text x="184" y="234" fill="rgba(0,185,216,0.55)" font-size="9.5" font-weight="600" letter-spacing="1.5">ANAMNESE / LOCALIZAÇÃO DO RECURSO</text>
+
+  <!-- O grande 404 — tratado como conteúdo ausente do prontuário -->
+  <text x="400" y="330" text-anchor="middle" fill="none" stroke="#00B9D8" stroke-width="1.2" stroke-opacity="0.22" font-size="148" font-weight="700" letter-spacing="-4">404</text>
+  <text x="400" y="330" text-anchor="middle" fill="white" fill-opacity="0.06" font-size="148" font-weight="700" letter-spacing="-4">404</text>
+
+  <!-- Linha de resultado dentro do 404: texto sobreposto pequeno -->
+  <text x="400" y="296" text-anchor="middle" fill="rgba(255,255,255,0.22)" font-size="10.5" letter-spacing="0.5">Esta página não existe nos nossos registros.</text>
+  <text x="400" y="312" text-anchor="middle" fill="rgba(255,255,255,0.14)" font-size="10" letter-spacing="0.3">O endereço pode ter mudado ou nunca existiu.</text>
+
+  <!-- Linhas de campo dentro da área do 404 (textura de ficha) -->
+  <line x1="184" y1="248" x2="616" y2="248" stroke="rgba(255,255,255,0.05)" stroke-width="1" stroke-dasharray="3 4"/>
+  <line x1="184" y1="264" x2="616" y2="264" stroke="rgba(255,255,255,0.05)" stroke-width="1" stroke-dasharray="3 4"/>
+  <line x1="184" y1="280" x2="616" y2="280" stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="3 4"/>
+  <line x1="184" y1="344" x2="616" y2="344" stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="3 4"/>
+  <line x1="184" y1="360" x2="616" y2="360" stroke="rgba(255,255,255,0.04)" stroke-width="1" stroke-dasharray="3 4"/>
+
+  <!-- Divisória inferior -->
+  <line x1="184" y1="376" x2="616" y2="376" stroke="rgba(0,185,216,0.12)" stroke-width="1"/>
+
+  <!-- Rodapé do card: conduta / CTA -->
+  <text x="184" y="398" fill="rgba(255,255,255,0.3)" font-size="9.5" letter-spacing="1">CONDUTA</text>
+  <text x="184" y="415" fill="rgba(255,255,255,0.5)" font-size="11">Retornar ao painel principal ou verificar o endereço digitado.</text>
+
+  <!-- Botão CTA -->
+  <rect x="428" y="399" width="168" height="34" rx="8" fill="#00B9D8"/>
+  <text x="512" y="421" text-anchor="middle" fill="#0F1E45" font-size="12" font-weight="700">Ir para o início</text>
+
+  <!-- Assinatura / carimbo do médico (canto inferior direito do card) -->
+  <!-- Carimbo circular estilizado -->
+  <circle cx="108" cy="390" r="36" fill="none" stroke="rgba(0,185,216,0.2)" stroke-width="1.5" stroke-dasharray="5 3"/>
+  <circle cx="108" cy="390" r="28" fill="none" stroke="rgba(0,185,216,0.12)" stroke-width="1"/>
+  <text x="108" y="386" text-anchor="middle" fill="rgba(0,185,216,0.4)" font-size="8" font-weight="700" letter-spacing="1">MED</text>
+  <text x="108" y="397" text-anchor="middle" fill="rgba(0,185,216,0.4)" font-size="8" font-weight="700" letter-spacing="1">SCALE</text>
+
+  <!-- Canto superior esquerdo: pequena decoração de pulso/ECG -->
+  <polyline
+    points="36,82 50,82 56,64 63,98 70,72 76,82 90,82"
+    fill="none" stroke="#00B9D8" stroke-width="1.5" stroke-opacity="0.35" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Canto superior direito: espelho -->
+  <polyline
+    points="710,82 724,82 730,64 737,98 744,72 750,82 764,82"
+    fill="none" stroke="#00B9D8" stroke-width="1.5" stroke-opacity="0.35" stroke-linecap="round" stroke-linejoin="round"/>
+
+</svg>
