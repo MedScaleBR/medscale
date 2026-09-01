@@ -7,13 +7,26 @@ import { FinanceSummaryCards } from './FinanceSummaryCards'
 import { FinanceCategoryChart } from './FinanceCategoryChart'
 import { FinanceEntryTable } from './FinanceEntryTable'
 import type { FinanceEntry, FinanceEntryType } from '@/lib/finance/types'
+import type { FinanceCategoryTree } from '@/lib/finance/categories'
 
 function currentMonth(): string {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
 }
 
-export function FinanceClient({ initialEntries }: { initialEntries: FinanceEntry[] }) {
+export function FinanceClient({
+  initialEntries,
+  categoryTree,
+  workspaces,
+}: {
+  initialEntries: FinanceEntry[]
+  categoryTree: FinanceCategoryTree
+  workspaces: { id: string; name: string }[]
+}) {
+  // categoryTree/workspaces são consumidos na reestruturação da Task 15.
+  void categoryTree
+  void workspaces
+
   const [activeTab, setActiveTab] = useState<FinanceEntryType>('pf')
   const [month, setMonth] = useState(currentMonth())
 
