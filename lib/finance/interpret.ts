@@ -1,6 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { PF_CATEGORIES, PJ_CATEGORIES } from './categorize'
 import type { FinanceIntent, FinanceEntryType } from './types'
+import type { FinanceCategoryTree } from './categories'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -82,6 +82,11 @@ const INTENT_TOOL = {
           'A categoria EXATA da lista fornecida. Em lancamento: a categoria do gasto. ' +
           'Em consulta: a categoria pela qual filtrar, ou null quando a consulta é sobre tudo.',
       },
+      subcategoria: {
+        type: ['string', 'null'],
+        description:
+          'Em lancamento/consulta: a subcategoria EXATA da árvore, quando fizer sentido (ex: "Escola" dentro de "Filhos"). null se não houver.',
+      },
       mes: {
         type: ['string', 'null'],
         description: 'Mês da consulta no formato YYYY-MM. null quando é o mês atual.',
@@ -99,6 +104,7 @@ const INTENT_TOOL = {
       'descricao',
       'valor',
       'categoria',
+      'subcategoria',
       'mes',
       'unidade',
       'paciente',
@@ -117,6 +123,7 @@ type IntentToolInput = {
   descricao: string | null
   valor: number | null
   categoria: string | null
+  subcategoria: string | null
   mes: string | null
   unidade: string | null
   paciente: string | null
@@ -124,7 +131,16 @@ type IntentToolInput = {
   forma_pagamento: PaymentMethodValue | null
 }
 
-function buildSystem(today: string): string {
+function buildSystem(today: string, tree: FinanceCategoryTree): string {
+  const fmt = (nodes: FinanceCategoryTree['pf']) =>
+    nodes
+      .filter((c) => !c.isArchived)
+      .map((c) => {
+        const subs = c.children.filter((s) => !s.isArchived).map((s) => s.name)
+        return subs.length ? `${c.name} (${subs.join(', ')})` : c.name
+      })
+      .join('; ')
+
   return `Você interpreta mensagens que um médico manda para o assistente financeiro dele no WhatsApp.
 Sua única função é classificar a mensagem chamando a ferramenta ${TOOL_NAME}. Nunca responda em texto.
 
@@ -134,8 +150,8 @@ O médico separa as finanças em dois tipos:
 - pf (pessoa física): gastos pessoais dele — mercado, streaming, escola dos filhos, viagem.
 - pj (pessoa jurídica): gastos da clínica — aluguel da sala, equipamento, salário de secretária, imposto.
 
-Categorias válidas em pf: ${PF_CATEGORIES.join(', ')}
-Categorias válidas em pj: ${PJ_CATEGORIES.join(', ')}
+Categorias válidas em pf: ${fmt(tree.pf)}
+Categorias válidas em pj: ${fmt(tree.pj)}
 
 Regras:
 - "confirmar_pagamento" é sobre um PACIENTE que pagou uma consulta ("o João pagou", "recebi da Ana"), não sobre um gasto do médico. Extraia o nome do paciente em "paciente"; o horário em "horario" se ele disser; a forma de pagamento em "forma_pagamento" se ele disser.
@@ -148,11 +164,15 @@ Regras:
 // Interpreta linguagem natural. Só é chamada quando parseCommand não
 // reconheceu um atalho com barra, então o custo de LLM não incide sobre
 // quem usa os comandos.
-export async function interpretMessage(messageText: string, today: string): Promise<FinanceIntent> {
+export async function interpretMessage(
+  messageText: string,
+  today: string,
+  tree: FinanceCategoryTree
+): Promise<FinanceIntent> {
   const response = await anthropic.messages.create({
     model: MODEL,
     max_tokens: 1000,
-    system: buildSystem(today),
+    system: buildSystem(today, tree),
     tools: [INTENT_TOOL],
     // Força a chamada da ferramenta — sem isso o modelo às vezes responde
     // em texto e não sobra nada estruturado para executar.
@@ -184,11 +204,12 @@ function toIntent(input: IntentToolInput, raw: string): FinanceIntent {
         type,
         description: input.descricao,
         amount: input.valor,
-        // Aproveita a categoria que este mesmo passo já deduziu, evitando
-        // uma segunda chamada ao modelo (categorizeEntry) no caminho de
-        // linguagem natural. Só vale se for uma categoria real do tipo —
-        // senão volta null e o agente categoriza da forma antiga.
-        category: validCategory(input.categoria, type),
+        // Aproveita a categoria/subcategoria que este mesmo passo já deduziu,
+        // evitando uma segunda chamada ao modelo (categorizeEntry) no caminho
+        // de linguagem natural. Passa os NOMES adiante — o agente resolve
+        // nome->id contra a árvore da conta e valida.
+        category: input.categoria?.trim() || null,
+        subcategory: input.subcategoria?.trim() || null,
         // Só PJ pertence a uma unidade; PF é sempre consolidado.
         workspaceHint: type === 'pj' ? input.unidade?.trim() || null : null,
       }
@@ -198,7 +219,9 @@ function toIntent(input: IntentToolInput, raw: string): FinanceIntent {
       return {
         kind: 'query',
         type: input.tipo,
-        category: input.categoria,
+        // Nomes passam adiante; o agente resolve nome->id e valida.
+        category: input.categoria?.trim() || null,
+        subcategory: input.subcategoria?.trim() || null,
         month: /^\d{4}-\d{2}$/.test(input.mes ?? '') ? input.mes : null,
         workspace: input.unidade?.trim() || null,
       }
@@ -223,13 +246,4 @@ function toIntent(input: IntentToolInput, raw: string): FinanceIntent {
     default:
       return { kind: 'unknown', raw }
   }
-}
-
-// Só aceita categoria que exista de fato na lista do tipo — o modelo pode
-// devolver uma variação ("Assinatura") que não casaria com o que está
-// gravado em finance_entries.category.
-function validCategory(category: string | null, type: FinanceEntryType): string | null {
-  if (!category) return null
-  const valid = type === 'pf' ? PF_CATEGORIES : PJ_CATEGORIES
-  return valid.includes(category) ? category : null
 }
