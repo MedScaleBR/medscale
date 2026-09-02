@@ -864,6 +864,8 @@ export interface Database {
           description: string | null
           amount: number
           category: string | null
+          category_id: string | null
+          subcategory_id: string | null
           raw_message: string
           entry_date: string
           created_at: string
@@ -912,6 +914,38 @@ export interface Database {
           },
         ]
       }
+      finance_categories: {
+        Row: {
+          id: string
+          account_id: string
+          kind: FinanceEntryType
+          parent_id: string | null
+          name: string
+          sort_order: number
+          is_archived: boolean
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['finance_categories']['Row']> & {
+          account_id: string
+          kind: FinanceEntryType
+          name: string
+        }
+        Update: Partial<Database['public']['Tables']['finance_categories']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'finance_categories_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'finance_categories_parent_id_fkey'
+            columns: ['parent_id']
+            referencedRelation: 'finance_categories'
+            referencedColumns: ['id']
+          },
+        ]
+      }
     }
     Views: Record<string, never>
     Functions: {
@@ -927,6 +961,11 @@ export interface Database {
       trigger_transcription_generate: {
         Args: { p_transcription_id: string; p_app_url: string }
         Returns: void
+      }
+      normalize_category_name: { Args: { p_name: string }; Returns: string }
+      provision_finance_categories: {
+        Args: { p_account_id: string; p_tree: Record<string, unknown> }
+        Returns: undefined
       }
     }
     Enums: Record<string, never>
