@@ -96,11 +96,6 @@ export function FinanceEntryForm({
             </div>
           </div>
 
-          <div>
-            <label className="mb-1 block text-xs text-gray-400">Descrição</label>
-            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex.: Escola João" />
-          </div>
-
           <FinanceCategoryPicker
             kind={kind}
             tree={tree}
@@ -109,11 +104,20 @@ export function FinanceEntryForm({
             onChange={({ categoryId, subcategoryId }) => { setCategoryId(categoryId); setSubcategoryId(subcategoryId) }}
           />
 
+          <div>
+            <label className="mb-1 block text-xs text-gray-400">Descrição (opcional)</label>
+            <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Ex.: Escola João" />
+          </div>
+
           {kind === 'pj' && workspaces.length > 1 && (
             <div>
               <label className="mb-1 block text-xs text-gray-400">Unidade</label>
-              <Select value={workspaceId ?? NONE} onValueChange={(v) => setWorkspaceId(v === NONE ? null : v)}>
-                <SelectTrigger><SelectValue placeholder="Consolidado (sem unidade)" /></SelectTrigger>
+              <Select
+                items={{ [NONE]: 'Consolidado (sem unidade)', ...Object.fromEntries(workspaces.map((w) => [w.id, w.name])) }}
+                value={workspaceId ?? NONE}
+                onValueChange={(v) => setWorkspaceId(v === NONE ? null : v)}
+              >
+                <SelectTrigger className="w-full"><SelectValue placeholder="Consolidado (sem unidade)" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value={NONE}>Consolidado (sem unidade)</SelectItem>
                   {workspaces.map((w) => <SelectItem key={w.id} value={w.id}>{w.name}</SelectItem>)}

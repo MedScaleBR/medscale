@@ -24,16 +24,22 @@ export function FinanceCategoryPicker({
   const label = (n: { name: string; isArchived: boolean }) =>
     n.isArchived ? `${n.name} (arquivada)` : n.name
 
+  // base-ui Select renderiza o value cru no trigger — sem este mapa id->nome o
+  // SelectValue mostraria o UUID. NONE entra no mapa para o placeholder textual.
+  const rootItems = { [NONE]: 'Sem categoria', ...Object.fromEntries(roots.map((c) => [c.id, label(c)])) }
+  const subItems = { [NONE]: 'Nenhuma', ...Object.fromEntries(subs.map((s) => [s.id, label(s)])) }
+
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <div>
+      <div className="min-w-0">
         <label className="mb-1 block text-xs text-gray-400">Categoria</label>
         <Select
+          items={rootItems}
           value={categoryId ?? NONE}
           disabled={disabled}
           onValueChange={(v) => onChange({ categoryId: v === NONE ? null : v, subcategoryId: null })}
         >
-          <SelectTrigger><SelectValue placeholder="Sem categoria" /></SelectTrigger>
+          <SelectTrigger className="w-full"><SelectValue placeholder="Sem categoria" /></SelectTrigger>
           <SelectContent>
             <SelectItem value={NONE}>Sem categoria</SelectItem>
             {roots.map((c) => (
@@ -44,14 +50,15 @@ export function FinanceCategoryPicker({
       </div>
 
       {subs.length > 0 && (
-        <div>
+        <div className="min-w-0">
           <label className="mb-1 block text-xs text-gray-400">Subcategoria</label>
           <Select
+            items={subItems}
             value={subcategoryId ?? NONE}
             disabled={disabled}
             onValueChange={(v) => onChange({ categoryId, subcategoryId: v === NONE ? null : v })}
           >
-            <SelectTrigger><SelectValue placeholder="Nenhuma" /></SelectTrigger>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Nenhuma" /></SelectTrigger>
             <SelectContent>
               <SelectItem value={NONE}>Nenhuma</SelectItem>
               {subs.map((s) => (
