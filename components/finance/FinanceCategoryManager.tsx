@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useState } from 'react'
 import type { JSX } from 'react'
 import {
   Archive,
@@ -25,13 +25,14 @@ import {
 } from '@/components/ui/dialog'
 
 // Gerenciador CRUD da árvore de categorias/subcategorias do financeiro,
-// renderizado dentro da tela /finance. Busca a própria árvore (2 níveis) via
-// GET /api/finance/categories no mount e após cada mutação (estado local, para
-// a lista deste componente atualizar na hora). Além disso chama onChanged()
-// após cada mutação para o pai revalidar a árvore renderizada no servidor,
-// que alimenta o picker/tabela/gráfico dos Lançamentos.
+// renderizado dentro da tela /finance. Recebe a árvore inicial (2 níveis, com
+// contagem de lançamentos) já pronta do pai — que a deriva dos dados que o
+// server component de /finance carregou — então não faz fetch no mount. Após
+// cada mutação recarrega a própria lista via GET /api/finance/categories
+// (estado local, para atualizar na hora) e chama onChanged() para o pai
+// revalidar a árvore do servidor, que alimenta picker/tabela/gráfico.
 
-type NodeWithCount = {
+export type NodeWithCount = {
   id: string
   name: string
   sortOrder: number
@@ -63,16 +64,22 @@ type DialogState =
 
 export function FinanceCategoryManager({
   kind,
+  initialData,
   onChanged,
 }: {
   kind: 'pf' | 'pj'
+  // Árvore inicial (com entryCount) para este kind, derivada pelo pai dos dados
+  // já carregados pelo server component. O componente monta com ela — sem fetch.
+  // FinanceClient passa key={kind}, então trocar de aba PF/PJ remonta com a
+  // árvore do kind certo.
+  initialData: NodeWithCount[]
   // Chamado após cada mutação bem-sucedida. FinanceClient passa router.refresh()
   // para revalidar a árvore renderizada no servidor (picker/tabela/gráfico dos
   // Lançamentos). O load() local continua — a lista deste componente precisa
   // atualizar na hora.
   onChanged?: () => void
 }): JSX.Element {
-  const [data, setData] = useState<NodeWithCount[]>([])
+  const [data, setData] = useState<NodeWithCount[]>(initialData)
   const [showArchived, setShowArchived] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -80,17 +87,13 @@ export function FinanceCategoryManager({
   const [dialog, setDialog] = useState<DialogState | null>(null)
   const [nameValue, setNameValue] = useState('')
 
+  // Recarrega a lista deste componente após uma mutação (o pai revalida o
+  // resto via onChanged). Não roda no mount — initialData já cobre isso.
   const load = useCallback(async () => {
     const r = await fetch(`/api/finance/categories?kind=${kind}`)
     const j = (await r.json()) as Record<string, NodeWithCount[]>
     setData(j[kind] ?? [])
   }, [kind])
-
-  useEffect(() => {
-    // load() só chama setData depois do fetch (microtask), não em cascata síncrona.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void load()
-  }, [load])
 
   // Dispara a requisição, trata erros conhecidos (400 por code, 409 in_use) e
   // devolve se deu certo. Sempre limpa o erro anterior antes de tentar.
