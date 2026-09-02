@@ -12,6 +12,11 @@ export type FinanceEntry = {
   description: string | null
   amount: number
   category: string | null
+  // Vínculo com a árvore finance_categories. null = "Sem categoria" na tela
+  // (lançamento antigo sem match, ou lançado sem categoria). `category` (texto)
+  // segue preenchido como snapshot do nome resolvido.
+  category_id: string | null
+  subcategory_id: string | null
   raw_message: string
   entry_date: string
   created_at: string
@@ -23,20 +28,23 @@ export type FinanceEntry = {
 export type FinanceIntent =
   // `category` vem preenchida quando a interpretação por linguagem natural
   // já deduziu uma categoria válida; null (caminho dos atalhos) faz o agente
-  // categorizar num passo à parte.
+  // categorizar num passo à parte. `subcategory` segue a mesma lógica.
   | {
       kind: 'entry'
       type: FinanceEntryType
       description: string | null
       amount: number
       category: string | null
+      // Nome da subcategoria deduzido (linguagem natural) ou null. O agente
+      // resolve nome -> id contra a árvore da conta.
+      subcategory: string | null
       // Trecho do nome da unidade mencionado na mensagem (PJ). O agente
       // resolve contra as unidades reais da account; null = não mencionou.
       workspaceHint: string | null
     }
   // `type: null` = PF e PJ juntos; `category: null` = todas; `month: null` = mês atual.
   // `workspace: null` = consolidado (todas as unidades).
-  | { kind: 'query'; type: FinanceEntryType | null; category: string | null; month: string | null; workspace: string | null }
+  | { kind: 'query'; type: FinanceEntryType | null; category: string | null; subcategory: string | null; month: string | null; workspace: string | null }
   // Ciclo de receita: o médico avisa que um paciente pagou uma consulta.
   // Sempre passa por confirmação explícita antes de persistir.
   | { kind: 'confirm_payment'; patient: string | null; time: string | null; method: RevenuePaymentMethod | null }

@@ -48,7 +48,12 @@ Total ${typeLabel} em ${mes}: ${total}`
 
 export interface QueryFilters {
   type: FinanceEntryType | null
+  // Nome da categoria resolvida, usado só no texto da resposta
+  // (describeScope / groupByCategory).
   category: string | null
+  // Filtro real contra finance_entries.category_id / subcategory_id.
+  categoryId: string | null
+  subcategoryId: string | null
   month: string | null
   // Unidade pela qual filtrar; null = consolidado (todas).
   workspaceId: string | null
@@ -156,6 +161,13 @@ Os gastos são registrados na data de hoje. Dúvidas? Fale com o suporte MedScal
 
 export function buildUnknownMessage(): string {
   return `Não consegui entender. Você pode me dizer algo como "gastei 50 no almoço" ou "quanto gastei esse mês?". Digite /ajuda para ver mais exemplos.`
+}
+
+// Consulta que nomeia uma categoria fora da árvore da conta. Sem isto, a
+// consulta rodaria sem filtro e devolveria o total do mês inteiro como se
+// tivesse respondido à pergunta.
+export function buildCategoryNotFoundMessage(name: string): string {
+  return `Não encontrei a categoria "${name}" nas suas finanças. Você pode ver e criar categorias no painel financeiro.`
 }
 
 export function buildUnregisteredMessage(): string {

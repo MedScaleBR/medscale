@@ -2,6 +2,7 @@
 
 import { Bar, BarChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 
+// TODO(bloco A+): drill-down categoria -> subcategoria
 interface FinanceCategoryChartProps {
   data: { category: string; total: number }[]
 }

@@ -45,3 +45,6 @@ next-env.d.ts
 
 # Claude Design export — source for the invite email template, not app code
 Invite email HTML design/
+
+# superpowers SDD scratch (ledger, briefs, review packages)
+.superpowers/
