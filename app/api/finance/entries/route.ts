@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import type { Database } from '@/types/database'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession, requireModule, requireRole, type ApiSession } from '@/lib/session/api'
-import { ensureFinanceCategories } from '@/lib/finance/provision'
 import { getFinanceCategoryTree, rootCategoryName } from '@/lib/finance/categories'
 import { validateEntryInput } from '@/lib/finance/entry-validation'
 import type { FinanceEntryType } from '@/lib/finance/types'
@@ -65,7 +64,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     return NextResponse.json({ error: "type deve ser 'pf' ou 'pj'" }, { status: 400 })
   }
   const supabase = await createClient()
-  await ensureFinanceCategories(supabase, g.session.accountId)
+  // Provisionamento roda em finance/page.tsx e no agente; esta rota vem sempre
+  // da tela já provisionada.
   const tree = await getFinanceCategoryTree(supabase, g.session.accountId)
 
   const err = validateEntryInput(tree, {

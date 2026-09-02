@@ -1,13 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession, requireModule, requireRole, type ApiSession } from '@/lib/session/api'
-import { ensureFinanceCategories } from '@/lib/finance/provision'
 import { getFinanceCategoryTree, type CategoryNode } from '@/lib/finance/categories'
 import { validateCategoryShape } from '@/lib/finance/category-validation'
 
 // CRUD da árvore de categorias do financeiro. Exclusivo do owner (dado
 // financeiro), módulo 'finance'. Escrita com createClient() — a policy
 // "finance_categories: owner only" é o guarda.
+//
+// O provisionamento da árvore (ensureFinanceCategories) roda em
+// app/(dashboard)/finance/page.tsx e no agente do WhatsApp; estas rotas são
+// sempre alcançadas a partir da tela já provisionada, então não repetem a
+// chamada (era 1 round-trip por request sem efeito).
 
 type GuardResult =
   | { error: NextResponse; session?: never }
@@ -27,13 +31,12 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const g = await guard(req)
   if (g.error) return g.error
   const supabase = await createClient()
-  await ensureFinanceCategories(supabase, g.session.accountId)
 
-  const tree = await getFinanceCategoryTree(supabase, g.session.accountId, { includeArchived: true })
-  const { data: refs } = await supabase
-    .from('finance_entries')
-    .select('category_id, subcategory_id')
-    .eq('account_id', g.session.accountId)
+  // Árvore e contagem de lançamentos em paralelo — não dependem uma da outra.
+  const [tree, { data: refs }] = await Promise.all([
+    getFinanceCategoryTree(supabase, g.session.accountId, { includeArchived: true }),
+    supabase.from('finance_entries').select('category_id, subcategory_id').eq('account_id', g.session.accountId),
+  ])
 
   const counts = new Map<string, number>()
   for (const r of (refs ?? []) as Array<{ category_id: string | null; subcategory_id: string | null }>) {
@@ -59,7 +62,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const parentId = body.parent_id ? String(body.parent_id) : null
 
   const supabase = await createClient()
-  await ensureFinanceCategories(supabase, g.session.accountId)
   const tree = await getFinanceCategoryTree(supabase, g.session.accountId, { includeArchived: true })
 
   const err = validateCategoryShape(tree, { kind, name, parentId })
