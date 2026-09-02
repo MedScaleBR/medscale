@@ -13,7 +13,6 @@ vi.mock('@/lib/session/api', () => ({
   requireRole: (s: { role: string }, roles: string[]) =>
     roles.includes(s.role) ? null : new Response('{}', { status: 403 }),
 }))
-vi.mock('@/lib/finance/provision', () => ({ ensureFinanceCategories: vi.fn(async () => {}) }))
 
 import { POST } from '@/app/api/finance/entries/route'
 import { PATCH, DELETE } from '@/app/api/finance/entries/[id]/route'
