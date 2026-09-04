@@ -66,6 +66,7 @@ drop function if exists public.normalize_category_name(text) cascade;
 drop function if exists public.enforce_finance_category_depth() cascade;
 drop function if exists public.enforce_finance_entry_category() cascade;
 drop function if exists public.provision_finance_categories(uuid, jsonb) cascade;
+drop function if exists public.ensure_finance_income_seed(uuid) cascade;
 
 -- ============================================================
 -- 1. EXTENSÕES
@@ -246,6 +247,10 @@ create table public.finance_categories (
   id           uuid default uuid_generate_v4() primary key,
   account_id   uuid references public.accounts(id) on delete cascade not null,
   kind         text not null check (kind in ('pf','pj')),
+  -- Entrada (receita) ou saída (despesa). Categorias de receita são semeadas
+  -- por public.ensure_finance_income_seed. Subcategoria herda o direction do
+  -- pai (garantido por trg_enforce_finance_category_depth).
+  direction    text not null default 'out' check (direction in ('in','out')),
   -- null = categoria-raiz; preenchido = subcategoria. Profundidade máxima 2
   -- (garantida por trg_enforce_finance_category_depth).
   parent_id    uuid references public.finance_categories(id) on delete cascade,
@@ -279,6 +284,10 @@ create table public.finance_entries (
   workspace_id      uuid references public.workspaces(id) on delete set null,
   recorded_by_phone text not null,
   type              text not null check (type in ('pf','pj')),
+  -- Entrada (receita) ou saída (despesa). Default 'out': todo lançamento
+  -- histórico e todo lançamento manual são despesa. 'in' vem do cadastro de
+  -- receita ou do espelho do ciclo de receita (revenue_entry_id).
+  direction         text not null default 'out' check (direction in ('in','out')),
   description       text,
   amount            numeric(12, 2) not null check (amount > 0),
   category          text,
@@ -290,6 +299,10 @@ create table public.finance_entries (
   subcategory_id    uuid references public.finance_categories(id) on delete set null,
   raw_message       text not null,
   entry_date        date not null default current_date,
+  -- Preenchido quando o lançamento é o espelho de um pagamento confirmado do
+  -- ciclo de receita. A FK (on delete cascade) é criada após a tabela
+  -- revenue_entries (seção 8). Linha read-only na tela e na API.
+  revenue_entry_id  uuid,
   created_at        timestamptz not null default now()
 );
 
@@ -523,6 +536,16 @@ create table public.revenue_entries (
   created_at      timestamptz not null default now()
 );
 
+-- FK de finance_entries.revenue_entry_id → revenue_entries (definida aqui
+-- porque finance_entries é criada antes, na seção 7). on delete cascade: se a
+-- receita some, o lançamento-espelho no financeiro some junto. UNIQUE:
+-- idempotência do espelho (ver lib/revenue/finance-mirror.ts).
+alter table public.finance_entries
+  add constraint finance_entries_revenue_entry_id_fkey
+  foreign key (revenue_entry_id) references public.revenue_entries(id) on delete cascade;
+create unique index idx_finance_entries_revenue_entry
+  on public.finance_entries(revenue_entry_id);
+
 -- Preferências do ciclo de receita automático (por workspace) — alimenta o
 -- cron daily-revenue-summary e a tela /configuracoes/receita. Exclusivo do
 -- owner, como revenue_entries.
@@ -728,13 +751,17 @@ create index idx_finance_entries_account     on public.finance_entries(account_i
 create index idx_finance_entries_type        on public.finance_entries(account_id, type);
 create index idx_finance_entries_workspace   on public.finance_entries(account_id, workspace_id, entry_date desc);
 create index idx_finance_entries_category    on public.finance_entries(account_id, category_id, entry_date desc);
+create index idx_finance_entries_direction   on public.finance_entries(account_id, type, direction, entry_date desc);
 create index idx_finance_categories_tree
   on public.finance_categories(account_id, kind, parent_id, sort_order);
--- Impede duas irmãs de mesmo nome (case/acento-insensitive); permite mesmo
--- nome em ramos diferentes. Coalesce porque NULL em unique é sempre distinto.
+create index idx_finance_categories_tree_dir
+  on public.finance_categories(account_id, kind, direction, parent_id, sort_order);
+-- Impede duas irmãs de mesmo nome (case/acento-insensitive) dentro do mesmo
+-- direction; permite mesmo nome em ramos ou direções diferentes. Coalesce
+-- porque NULL em unique é sempre distinto.
 create unique index idx_finance_categories_unique_sibling
   on public.finance_categories(
-    account_id, kind,
+    account_id, kind, direction,
     coalesce(parent_id, '00000000-0000-0000-0000-000000000000'::uuid),
     public.normalize_category_name(name)
   );
@@ -840,7 +867,7 @@ begin
     if new.parent_id = new.id then
       raise exception 'finance_categories: categoria não pode ser pai de si mesma';
     end if;
-    select account_id, kind, parent_id into v_parent
+    select account_id, kind, direction, parent_id into v_parent
       from public.finance_categories where id = new.parent_id;
     if not found then
       raise exception 'finance_categories: parent_id % inexistente', new.parent_id;
@@ -848,8 +875,10 @@ begin
     if v_parent.parent_id is not null then
       raise exception 'finance_categories: profundidade máxima é 2 níveis';
     end if;
-    if v_parent.account_id <> new.account_id or v_parent.kind <> new.kind then
-      raise exception 'finance_categories: parent_id de outra conta ou kind';
+    if v_parent.account_id <> new.account_id
+       or v_parent.kind <> new.kind
+       or v_parent.direction <> new.direction then
+      raise exception 'finance_categories: parent_id de outra conta, kind ou direction';
     end if;
     if exists (select 1 from public.finance_categories where parent_id = new.id) then
       raise exception 'finance_categories: categoria com subcategorias não pode virar subcategoria';
@@ -863,17 +892,21 @@ create trigger trg_enforce_finance_category_depth
   before insert or update on public.finance_categories
   for each row execute procedure public.enforce_finance_category_depth();
 
--- subcategory_id tem que ser filha de category_id; kind da categoria = type.
+-- subcategory_id tem que ser filha de category_id; kind da categoria = type;
+-- direction da categoria = direction do lançamento.
 create or replace function public.enforce_finance_entry_category()
 returns trigger language plpgsql as $$
 declare v_cat record; v_sub_parent uuid;
 begin
   if new.category_id is not null then
-    select kind, parent_id into v_cat
+    select kind, direction, parent_id into v_cat
       from public.finance_categories where id = new.category_id;
     if not found then raise exception 'finance_entries: category_id inexistente'; end if;
     if v_cat.kind <> new.type then
       raise exception 'finance_entries: kind da categoria difere do type do lançamento';
+    end if;
+    if v_cat.direction <> new.direction then
+      raise exception 'finance_entries: direction da categoria difere do lançamento';
     end if;
   end if;
   if new.subcategory_id is not null then
@@ -1057,6 +1090,42 @@ $$;
 
 grant execute on function public.provision_finance_categories(uuid, jsonb) to authenticated, service_role;
 grant execute on function public.normalize_category_name(text) to authenticated, service_role;
+
+-- Seed idempotente das categorias-raiz de RECEITA (direction 'in') da conta.
+-- Separado de provision_finance_categories porque aquele tem guarda "se já há
+-- qualquer categoria, retorna" — contas que já provisionaram despesa não
+-- ganhariam receita. Chamado por lib/finance/provision.ts (que roda em
+-- /finance, no agente e no espelho do ciclo de receita).
+create or replace function public.ensure_finance_income_seed(p_account_id uuid)
+returns void language plpgsql as $$
+declare v_name text; v_order int;
+begin
+  perform pg_advisory_xact_lock(hashtext('income-seed:' || p_account_id::text));
+  if exists (select 1 from public.finance_categories
+             where account_id = p_account_id and direction = 'in') then
+    return;
+  end if;
+  v_order := 0;
+  foreach v_name in array array[
+    'Consultas particulares','Procedimentos','Convênios','Outras receitas'
+  ] loop
+    insert into public.finance_categories
+      (account_id, kind, direction, parent_id, name, sort_order)
+    values (p_account_id, 'pj', 'in', null, v_name, v_order);
+    v_order := v_order + 1;
+  end loop;
+  v_order := 0;
+  foreach v_name in array array[
+    'Salário / Pró-labore','Aluguéis recebidos','Investimentos','Outras receitas'
+  ] loop
+    insert into public.finance_categories
+      (account_id, kind, direction, parent_id, name, sort_order)
+    values (p_account_id, 'pf', 'in', null, v_name, v_order);
+    v_order := v_order + 1;
+  end loop;
+end;
+$$;
+grant execute on function public.ensure_finance_income_seed(uuid) to authenticated, service_role;
 
 -- ============================================================
 -- 12.1 FUNÇÕES — disparo assíncrono do pipeline de transcrição via pg_net.

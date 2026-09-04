@@ -7,6 +7,7 @@ export type EntryValidationError =
   | { code: 'category_not_found' }
   | { code: 'subcategory_not_found' }
   | { code: 'category_kind_mismatch' }
+  | { code: 'category_direction_mismatch' }
   | { code: 'subcategory_not_child' }
 
 export interface EntryInput {
@@ -15,6 +16,7 @@ export interface EntryInput {
   amount: number
   categoryId: string | null
   subcategoryId: string | null
+  direction: 'in' | 'out'
 }
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
@@ -43,6 +45,7 @@ export function validateEntryInput(
     root = findRoot(tree, input.categoryId)
     if (!root) return { code: 'category_not_found' }
     if (root.kind !== input.type) return { code: 'category_kind_mismatch' }
+    if (root.node.direction !== input.direction) return { code: 'category_direction_mismatch' }
   }
 
   if (input.subcategoryId) {

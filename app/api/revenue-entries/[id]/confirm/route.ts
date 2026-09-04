@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
+import { mirrorPaidRevenueToFinance } from '@/lib/revenue/finance-mirror'
 import type { RevenuePaymentMethod } from '@/types/database'
 
 // Confirmação de pagamento de uma consulta (1 clique na tela, ou via agente
@@ -72,5 +73,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  await mirrorPaidRevenueToFinance(supabase, {
+    id: data.id,
+    accountId: data.account_id,
+    workspaceId: data.workspace_id,
+    amount: Number(data.amount),
+    procedureName: data.procedure_name ?? null,
+    paidAtIso: data.paid_at ?? null,
+  })
+
   return NextResponse.json(data)
 }

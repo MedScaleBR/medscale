@@ -35,6 +35,7 @@ import {
 export type NodeWithCount = {
   id: string
   name: string
+  direction: 'in' | 'out'
   sortOrder: number
   isArchived: boolean
   entryCount: number
@@ -64,14 +65,18 @@ type DialogState =
 
 export function FinanceCategoryManager({
   kind,
+  direction,
   initialData,
   onChanged,
 }: {
   kind: 'pf' | 'pj'
-  // Árvore inicial (com entryCount) para este kind, derivada pelo pai dos dados
-  // já carregados pelo server component. O componente monta com ela — sem fetch.
-  // FinanceClient passa key={kind}, então trocar de aba PF/PJ remonta com a
-  // árvore do kind certo.
+  // Receita ou despesa — filtra quais categorias aparecem e em qual direção
+  // as novas são criadas.
+  direction: 'in' | 'out'
+  // Árvore inicial (com entryCount), já filtrada por kind+direction pelo pai a
+  // partir dos dados que o server component carregou. O componente monta com
+  // ela — sem fetch. FinanceClient passa key={`${kind}-${direction}`}, então
+  // trocar de aba PF/PJ ou de Despesas/Receitas remonta com a árvore certa.
   initialData: NodeWithCount[]
   // Chamado após cada mutação bem-sucedida. FinanceClient passa router.refresh()
   // para revalidar a árvore renderizada no servidor (picker/tabela/gráfico dos
@@ -90,10 +95,10 @@ export function FinanceCategoryManager({
   // Recarrega a lista deste componente após uma mutação (o pai revalida o
   // resto via onChanged). Não roda no mount — initialData já cobre isso.
   const load = useCallback(async () => {
-    const r = await fetch(`/api/finance/categories?kind=${kind}`)
+    const r = await fetch(`/api/finance/categories?kind=${kind}&direction=${direction}`)
     const j = (await r.json()) as Record<string, NodeWithCount[]>
     setData(j[kind] ?? [])
-  }, [kind])
+  }, [kind, direction])
 
   // Dispara a requisição, trata erros conhecidos (400 por code, 409 in_use) e
   // devolve se deu certo. Sempre limpa o erro anterior antes de tentar.
@@ -128,7 +133,7 @@ export function FinanceCategoryManager({
   const create = async (name: string, parentId?: string): Promise<boolean> => {
     const ok = await send(
       '/api/finance/categories',
-      jsonInit('POST', { kind, name, parent_id: parentId ?? null }),
+      jsonInit('POST', { kind, direction, name, parent_id: parentId ?? null }),
     )
     if (ok) {
       await load()

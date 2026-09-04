@@ -6,6 +6,9 @@ import { normalizeCategoryName } from './default-categories'
 export interface CategoryNode {
   id: string
   name: string
+  // Entrada (receita) ou saída (despesa). Subcategoria sempre herda o
+  // direction do pai (garantido pela trigger trg_enforce_finance_category_depth).
+  direction: 'in' | 'out'
   sortOrder: number
   isArchived: boolean
   children: CategoryNode[]
@@ -28,7 +31,7 @@ export async function getFinanceCategoryTree(
 ): Promise<FinanceCategoryTree> {
   let q = client
     .from('finance_categories')
-    .select('id, account_id, kind, parent_id, name, sort_order, is_archived, created_at')
+    .select('id, account_id, kind, direction, parent_id, name, sort_order, is_archived, created_at')
     .eq('account_id', accountId)
     .order('sort_order', { ascending: true })
   if (!opts.includeArchived) q = q.eq('is_archived', false)
@@ -39,7 +42,8 @@ export async function getFinanceCategoryTree(
 
 function buildTree(rows: Row[]): FinanceCategoryTree {
   const node = (r: Row): CategoryNode => ({
-    id: r.id, name: r.name, sortOrder: r.sort_order, isArchived: r.is_archived, children: [],
+    id: r.id, name: r.name, direction: r.direction, sortOrder: r.sort_order,
+    isArchived: r.is_archived, children: [],
   })
   const make = (kind: FinanceEntryType): CategoryNode[] => {
     const ofKind = rows.filter((r) => r.kind === kind)
@@ -90,13 +94,16 @@ export function resolveCategoryPair(
   tree: FinanceCategoryTree,
   type: FinanceEntryType | null,
   categoryName: string | null,
-  subcategoryName: string | null
+  subcategoryName: string | null,
+  direction: 'in' | 'out' = 'out'
 ): ResolvedCategoryPair {
   if (!categoryName) return EMPTY
   const kinds: FinanceEntryType[] = type ? [type] : ['pf', 'pj']
   const target = normalizeCategoryName(categoryName)
   for (const kind of kinds) {
-    const cat = tree[kind].find((c) => normalizeCategoryName(c.name) === target)
+    const cat = tree[kind].find(
+      (c) => c.direction === direction && normalizeCategoryName(c.name) === target
+    )
     if (!cat) continue
     let subId: string | null = null
     let subName: string | null = null

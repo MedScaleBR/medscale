@@ -611,10 +611,14 @@ async function getEntries(accountId: string, filters: QueryFilters): Promise<Fin
   const firstDay = new Date(ref.getFullYear(), ref.getMonth(), 1).toISOString().split('T')[0]
   const lastDay = new Date(ref.getFullYear(), ref.getMonth() + 1, 0).toISOString().split('T')[0]
 
+  // direction 'out': o agente do WhatsApp só fala de despesa por enquanto
+  // (registro e consulta de receita ficam para uma entrega futura). Sem este
+  // filtro, receita manual/espelho do ciclo entraria no "quanto gastei".
   let query = supabase
     .from('finance_entries')
     .select('*')
     .eq('account_id', accountId)
+    .eq('direction', 'out')
     .gte('entry_date', firstDay)
     .lte('entry_date', lastDay)
 

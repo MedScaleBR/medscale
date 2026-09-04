@@ -9,6 +9,10 @@ export type FinanceEntry = {
   workspace_id: string | null
   recorded_by_phone: string
   type: FinanceEntryType
+  // Entrada (receita) ou saída (despesa). Lançamento manual da tela e do
+  // agente é sempre 'out'; 'in' vem do cadastro de receita ou do espelho do
+  // ciclo de receita (ver revenue_entry_id).
+  direction: 'in' | 'out'
   description: string | null
   amount: number
   category: string | null
@@ -19,6 +23,10 @@ export type FinanceEntry = {
   subcategory_id: string | null
   raw_message: string
   entry_date: string
+  // Preenchido quando o lançamento é o espelho de um pagamento confirmado do
+  // ciclo de receita (revenue_entries.id, ver lib/revenue/finance-mirror.ts).
+  // Linha read-only na tela e na API — ver /api/finance/entries/[id].
+  revenue_entry_id: string | null
   created_at: string
 }
 

@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database, RevenuePaymentMethod } from '@/types/database'
 import { summarizeRevenueEntries } from '@/lib/revenue/summary'
+import { mirrorPaidRevenueToFinance } from '@/lib/revenue/finance-mirror'
 
 // Ciclo de receita pelo WhatsApp: casar "o João pagou a consulta das 14h" com
 // uma consulta real de hoje e confirmar o recebimento. Sempre passa por
@@ -109,10 +110,21 @@ export async function confirmAppointmentPayment(
     })
     .eq('id', revenueEntryId)
     .in('payment_status', ['pending', 'realized'])
-    .select('id')
+    .select('id, account_id, workspace_id, amount, procedure_name, paid_at')
     .maybeSingle()
 
-  return !error && !!data
+  if (error || !data) return false
+
+  await mirrorPaidRevenueToFinance(supabase, {
+    id: data.id,
+    accountId: data.account_id,
+    workspaceId: data.workspace_id,
+    amount: Number(data.amount),
+    procedureName: data.procedure_name ?? null,
+    paidAtIso: data.paid_at ?? null,
+  })
+
+  return true
 }
 
 // Totais de receita de hoje agregados por account (todos os workspaces

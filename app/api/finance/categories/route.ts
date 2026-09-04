@@ -47,8 +47,14 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
   const withCounts = (nodes: CategoryNode[]): (CategoryNode & { entryCount: number })[] =>
     nodes.map((n) => ({ ...n, entryCount: counts.get(n.id) ?? 0, children: withCounts(n.children) }))
 
-  const kind = new URL(req.url).searchParams.get('kind')
-  const out = { pf: withCounts(tree.pf), pj: withCounts(tree.pj) }
+  const url = new URL(req.url)
+  const kind = url.searchParams.get('kind')
+  const directionParam = url.searchParams.get('direction')
+  const filterDirection = directionParam === 'in' || directionParam === 'out' ? directionParam : null
+  const byDirection = (nodes: CategoryNode[]) =>
+    filterDirection ? nodes.filter((n) => n.direction === filterDirection) : nodes
+
+  const out = { pf: withCounts(byDirection(tree.pf)), pj: withCounts(byDirection(tree.pj)) }
   if (kind === 'pf' || kind === 'pj') return NextResponse.json({ [kind]: out[kind] })
   return NextResponse.json(out)
 }
@@ -64,7 +70,16 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const supabase = await createClient()
   const tree = await getFinanceCategoryTree(supabase, g.session.accountId, { includeArchived: true })
 
-  const err = validateCategoryShape(tree, { kind, name, parentId })
+  // Subcategoria herda o direction do pai (raiz que ainda não existe não
+  // define nada) — evita um POST tentando pendurar receita sob despesa via
+  // direction divergente do body. Raiz nova usa o direction do body.
+  let direction: 'in' | 'out' = body.direction === 'in' ? 'in' : 'out'
+  if (parentId && (kind === 'pf' || kind === 'pj')) {
+    const parent = tree[kind].find((c) => c.id === parentId)
+    if (parent) direction = parent.direction
+  }
+
+  const err = validateCategoryShape(tree, { kind, direction, name, parentId })
   if (err) return NextResponse.json({ error: 'Categoria inválida', code: err.code }, { status: 400 })
 
   // sort_order = fim da lista de irmãs
@@ -75,7 +90,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
 
   const { data, error } = await supabase
     .from('finance_categories')
-    .insert({ account_id: g.session.accountId, kind: kind as 'pf' | 'pj', parent_id: parentId, name, sort_order: sortOrder })
+    .insert({
+      account_id: g.session.accountId,
+      kind: kind as 'pf' | 'pj',
+      direction,
+      parent_id: parentId,
+      name,
+      sort_order: sortOrder,
+    })
     .select('id')
     .single()
 

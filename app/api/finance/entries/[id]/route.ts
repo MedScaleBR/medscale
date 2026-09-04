@@ -36,11 +36,17 @@ export async function PATCH(
   const supabase = await createClient()
   const { data: existing } = await supabase
     .from('finance_entries')
-    .select('id, account_id, type')
+    .select('id, account_id, type, direction, category_id, subcategory_id, revenue_entry_id')
     .eq('id', id)
     .eq('account_id', g.session.accountId)
     .maybeSingle()
   if (!existing) return NextResponse.json({ error: 'Lançamento não encontrado' }, { status: 404 })
+  if (existing.revenue_entry_id) {
+    return NextResponse.json(
+      { error: 'Lançamento gerido pelo ciclo de receita', code: 'revenue_mirror_locked' },
+      { status: 409 }
+    )
+  }
 
   const type = existing.type as FinanceEntryType
   // Um lançamento existente pode apontar para uma categoria já arquivada — isso
@@ -52,6 +58,7 @@ export async function PATCH(
   if (b.entry_date !== undefined) patch.entry_date = String(b.entry_date)
   if (b.description !== undefined) patch.description = b.description ? String(b.description) : null
   if (b.amount !== undefined) patch.amount = Number(b.amount)
+  if (b.direction !== undefined) patch.direction = b.direction === 'in' ? 'in' : 'out'
   if (b.category_id !== undefined) {
     patch.category_id = b.category_id ? String(b.category_id) : null
     // `category` (texto) acompanha `category_id` — snapshot do nome da raiz.
@@ -73,16 +80,21 @@ export async function PATCH(
     patch.workspace_id = wid
   }
 
-  // Revalida categoria/subcategoria com os valores finais. Data/valor não
-  // informados no body ganham placeholders seguros que sempre validam, então
-  // um erro aqui é sempre real (categoria/subcategoria inválida, ou data/valor
-  // inválidos que vieram mesmo no patch).
+  // Revalida categoria/subcategoria/direção com os valores finais — os que não
+  // vieram no body caem para o que já está gravado, para pegar uma direção
+  // nova que ficaria incoerente com uma categoria antiga (ou vice-versa). Data
+  // não informada ganha um placeholder seguro que sempre valida.
+  const nextDirection = (patch.direction as 'in' | 'out' | undefined) ?? existing.direction
+  const nextCategoryId = b.category_id !== undefined ? (patch.category_id as string | null) : existing.category_id
+  const nextSubcategoryId =
+    b.subcategory_id !== undefined ? (patch.subcategory_id as string | null) : existing.subcategory_id
   const err = validateEntryInput(tree, {
     type,
     entryDate: (patch.entry_date as string) ?? '2026-01-01',
     amount: patch.amount !== undefined ? (patch.amount as number) : 1,
-    categoryId: (patch.category_id as string | null) ?? null,
-    subcategoryId: (patch.subcategory_id as string | null) ?? null,
+    categoryId: nextCategoryId,
+    subcategoryId: nextSubcategoryId,
+    direction: nextDirection,
   })
   if (err) {
     return NextResponse.json({ error: 'Alteração inválida', code: err.code }, { status: 400 })
@@ -106,6 +118,20 @@ export async function DELETE(
   const g = await guard(req)
   if (g.error) return g.error
   const supabase = await createClient()
+
+  const { data: existing } = await supabase
+    .from('finance_entries')
+    .select('id, revenue_entry_id')
+    .eq('id', id)
+    .eq('account_id', g.session.accountId)
+    .maybeSingle()
+  if (existing?.revenue_entry_id) {
+    return NextResponse.json(
+      { error: 'Lançamento gerido pelo ciclo de receita', code: 'revenue_mirror_locked' },
+      { status: 409 }
+    )
+  }
+
   const { error, count } = await supabase
     .from('finance_entries')
     .delete({ count: 'exact' })
