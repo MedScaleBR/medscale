@@ -418,10 +418,14 @@ async function handleUndo(
   accountId: string,
   senderPhone: string
 ): Promise<void> {
+  // .is('revenue_entry_id', null): nunca apaga o espelho de um pagamento do
+  // ciclo de receita — essa linha só a API web trava (409 revenue_mirror_locked)
+  // e este caminho grava direto via admin client, sem passar por ela.
   const { data: last } = await supabase
     .from('finance_entries')
     .select('*')
     .eq('account_id', accountId)
+    .is('revenue_entry_id', null)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()
