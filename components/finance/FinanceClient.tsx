@@ -34,6 +34,10 @@ export function FinanceClient({
   const [month, setMonth] = useState(currentMonth())
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<FinanceEntry | null>(null)
+  // Lado do gráfico "Por categoria" — independente das abas PF/PJ. Default
+  // despesa porque é o caso mais comum (toda conta tem gasto; nem toda tem
+  // receita ainda cadastrada).
+  const [chartSide, setChartSide] = useState<'out' | 'in'>('out')
 
   const unitNames = useMemo(
     () => Object.fromEntries(workspaces.map((w) => [w.id, w.name])),
@@ -44,27 +48,31 @@ export function FinanceClient({
     () => initialEntries.filter((e) => e.type === kind && e.entry_date.startsWith(month)),
     [initialEntries, kind, month]
   )
-  const total = filtered.reduce((s, e) => s + e.amount, 0)
+  const receitas = useMemo(() => filtered.filter((e) => e.direction === 'in'), [filtered])
+  const despesas = useMemo(() => filtered.filter((e) => e.direction === 'out'), [filtered])
+  const totalReceitas = receitas.reduce((s, e) => s + e.amount, 0)
+  const totalDespesas = despesas.reduce((s, e) => s + e.amount, 0)
 
-  const roots = kind === 'pf' ? categoryTree.pf : categoryTree.pj
+  const roots = (kind === 'pf' ? categoryTree.pf : categoryTree.pj).filter((c) => c.direction === chartSide)
+  const chartEntries = chartSide === 'in' ? receitas : despesas
 
   const byCategory = useMemo(() => {
     const catName = (e: FinanceEntry) =>
       roots.find((c) => c.id === e.category_id)?.name ?? (e.category_id ? '—' : 'Sem categoria')
     const totals = new Map<string, number>()
-    for (const e of filtered) {
+    for (const e of chartEntries) {
       const key = catName(e)
       totals.set(key, (totals.get(key) ?? 0) + e.amount)
     }
     return Array.from(totals.entries())
       .map(([category, total]) => ({ category, total }))
       .sort((a, b) => b.total - a.total)
-  }, [filtered, roots])
+  }, [chartEntries, roots])
 
-  const topCategory = byCategory[0]
+  const topCategory = chartSide === 'out' && byCategory[0]
     ? { name: byCategory[0].category, value: byCategory[0].total }
     : null
-  const uncategorized = filtered.filter((e) => !e.category_id).length
+  const uncategorized = chartEntries.filter((e) => !e.category_id).length
 
   const refresh = () => router.refresh()
   const openNew = () => {
@@ -102,7 +110,7 @@ export function FinanceClient({
         </TabsList>
 
         <TabsContent value="overview" className="mt-4 space-y-4">
-          <FinanceSummaryCards total={total} topCategory={topCategory} />
+          <FinanceSummaryCards receitas={totalReceitas} despesas={totalDespesas} topCategory={topCategory} />
           {uncategorized > 0 && (
             <button
               onClick={() => setView('entries')}
@@ -111,6 +119,12 @@ export function FinanceClient({
               {uncategorized} lançamento(s) sem categoria neste período — clique para revisar.
             </button>
           )}
+          <Tabs value={chartSide} onValueChange={(v) => setChartSide(v as 'out' | 'in')}>
+            <TabsList>
+              <TabsTrigger value="out">Despesas</TabsTrigger>
+              <TabsTrigger value="in">Receitas</TabsTrigger>
+            </TabsList>
+          </Tabs>
           <FinanceCategoryChart data={byCategory} />
         </TabsContent>
 

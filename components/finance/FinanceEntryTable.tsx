@@ -9,14 +9,15 @@ import type { FinanceCategoryTree } from '@/lib/finance/categories'
 
 const MAX_ROWS = 200
 
-function names(tree: FinanceCategoryTree, e: FinanceEntry): { cat: string; sub: string } {
-  const roots = e.type === 'pf' ? tree.pf : tree.pj
+function names(tree: FinanceCategoryTree, e: FinanceEntry): { cat: string; sub: string; uncategorized: boolean } {
+  const roots = (e.type === 'pf' ? tree.pf : tree.pj).filter((c) => c.direction === e.direction)
   const cat = roots.find((c) => c.id === e.category_id)
   const sub = cat?.children.find((s) => s.id === e.subcategory_id)
-  return {
-    cat: cat?.name ?? (e.category_id ? '—' : 'Sem categoria'),
-    sub: sub?.name ?? '—',
-  }
+  if (cat) return { cat: cat.name, sub: sub?.name ?? '—', uncategorized: false }
+  // Espelho do ciclo de receita sem categoria resolvida (seed degradado) —
+  // ainda tem o snapshot em `category`, não é "sem categoria" de verdade.
+  if (e.category) return { cat: e.category, sub: '—', uncategorized: false }
+  return { cat: 'Sem categoria', sub: '—', uncategorized: true }
 }
 
 export function FinanceEntryTable({
@@ -42,6 +43,7 @@ export function FinanceEntryTable({
             <thead>
               <tr className="border-b border-[var(--navy-06)] bg-[var(--navy-06)]/40 text-left text-xs text-gray-400">
                 <th className="px-5 py-3 font-normal">Data</th>
+                <th className="px-5 py-3 font-normal">Tipo</th>
                 <th className="px-5 py-3 font-normal">Descrição</th>
                 <th className="px-5 py-3 font-normal">Categoria</th>
                 <th className="px-5 py-3 font-normal">Subcategoria</th>
@@ -53,30 +55,47 @@ export function FinanceEntryTable({
             <tbody>
               {rows.map((e) => {
                 const n = names(tree, e)
+                const isIncome = e.direction === 'in'
+                const isMirror = !!e.revenue_entry_id
                 return (
                   <tr key={e.id} className="border-b border-[var(--navy-06)] last:border-0">
                     <td className="px-5 py-3 text-gray-600">
                       {new Date(e.entry_date + 'T00:00:00').toLocaleDateString('pt-BR')}
                     </td>
+                    <td className="px-5 py-3">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs ${
+                          isIncome ? 'bg-green-100 text-green-700' : 'bg-[var(--navy-06)] text-gray-500'
+                        }`}
+                      >
+                        {isIncome ? 'Receita' : 'Despesa'}
+                      </span>
+                    </td>
                     <td className="px-5 py-3 text-gray-600">{e.description ?? '—'}</td>
-                    <td className={`px-5 py-3 ${e.category_id ? 'text-gray-600' : 'text-amber-600'}`}>{n.cat}</td>
+                    <td className={`px-5 py-3 ${n.uncategorized ? 'text-amber-600' : 'text-gray-600'}`}>{n.cat}</td>
                     <td className="px-5 py-3 text-gray-600">{n.sub}</td>
                     {kind === 'pj' && (
                       <td className="px-5 py-3 text-gray-600">
                         {e.workspace_id ? (unitNames[e.workspace_id] ?? 'Unidade') : 'Consolidado'}
                       </td>
                     )}
-                    <td className="px-5 py-3 font-medium text-gray-900">{formatBRL(e.amount)}</td>
+                    <td className={`px-5 py-3 font-medium ${isIncome ? 'text-green-600' : 'text-gray-900'}`}>
+                      {isIncome ? '+' : ''}{formatBRL(e.amount)}
+                    </td>
                     <td className="px-2 py-3 text-right">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger className="rounded p-1 hover:bg-[var(--navy-06)]">
-                          <MoreVertical className="h-4 w-4 text-gray-400" />
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuItem onClick={() => onEdit(e)}>Editar</DropdownMenuItem>
-                          <DropdownMenuItem className="text-red-600" onClick={() => onDelete(e)}>Excluir</DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
+                      {isMirror ? (
+                        <span className="text-xs text-gray-400">Ciclo de receita</span>
+                      ) : (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger className="rounded p-1 hover:bg-[var(--navy-06)]">
+                            <MoreVertical className="h-4 w-4 text-gray-400" />
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => onEdit(e)}>Editar</DropdownMenuItem>
+                            <DropdownMenuItem className="text-red-600" onClick={() => onDelete(e)}>Excluir</DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
                     </td>
                   </tr>
                 )
