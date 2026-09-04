@@ -38,6 +38,7 @@ async function readEntryBody(req: NextRequest) {
     categoryId: b.category_id === undefined ? undefined : (b.category_id ? String(b.category_id) : null),
     subcategoryId: b.subcategory_id === undefined ? undefined : (b.subcategory_id ? String(b.subcategory_id) : null),
     workspaceId: b.workspace_id === undefined ? undefined : (b.workspace_id ? String(b.workspace_id) : null),
+    direction: (b.direction === 'in' ? 'in' : 'out') as 'in' | 'out',
   }
 }
 
@@ -74,6 +75,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     amount: b.amount ?? NaN,
     categoryId: b.categoryId ?? null,
     subcategoryId: b.subcategoryId ?? null,
+    direction: b.direction,
   })
   if (err) return NextResponse.json({ error: 'Lançamento inválido', code: err.code }, { status: 400 })
 
@@ -88,6 +90,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     workspace_id: b.type === 'pj' ? b.workspaceId ?? null : null,
     recorded_by_phone: 'web',
     type: b.type,
+    direction: b.direction,
     description: b.description ?? null,
     amount: b.amount as number,
     category: rootCategoryName(tree, b.categoryId ?? null),
