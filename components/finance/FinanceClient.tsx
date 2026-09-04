@@ -10,13 +10,28 @@ import { FinanceSummaryCards } from './FinanceSummaryCards'
 import { FinanceCategoryChart } from './FinanceCategoryChart'
 import { FinanceEntryTable } from './FinanceEntryTable'
 import { FinanceEntryForm } from './FinanceEntryForm'
-import { FinanceCategoryManager } from './FinanceCategoryManager'
+import { FinanceCategoryManager, type NodeWithCount } from './FinanceCategoryManager'
 import type { FinanceEntry, FinanceEntryType } from '@/lib/finance/types'
-import type { FinanceCategoryTree } from '@/lib/finance/categories'
+import type { CategoryNode, FinanceCategoryTree } from '@/lib/finance/categories'
 
 function currentMonth(): string {
   const now = new Date()
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+}
+
+// Anexa entryCount a cada nó da árvore a partir dos lançamentos já em memória,
+// para o gerenciador de categorias montar sem bater na API. Conta abrange a
+// janela de initialEntries (MONTHS_OF_HISTORY meses); a checagem "em uso" ao
+// excluir é feita à parte no servidor, então isso é só o rótulo "(N)" da tela.
+function withEntryCounts(nodes: CategoryNode[], counts: Map<string, number>): NodeWithCount[] {
+  return nodes.map((n) => ({
+    id: n.id,
+    name: n.name,
+    sortOrder: n.sortOrder,
+    isArchived: n.isArchived,
+    entryCount: counts.get(n.id) ?? 0,
+    children: withEntryCounts(n.children, counts),
+  }))
 }
 
 export function FinanceClient({
@@ -47,6 +62,22 @@ export function FinanceClient({
   const total = filtered.reduce((s, e) => s + e.amount, 0)
 
   const roots = kind === 'pf' ? categoryTree.pf : categoryTree.pj
+
+  // Árvore com contagem para o gerenciador de categorias — derivada aqui em vez
+  // de um GET /api/finance/categories no mount da aba (que refazia auth +
+  // provision + scan de finance_entries em série).
+  const categoryManagerData = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const e of initialEntries) {
+      for (const id of [e.category_id, e.subcategory_id]) {
+        if (id) counts.set(id, (counts.get(id) ?? 0) + 1)
+      }
+    }
+    return {
+      pf: withEntryCounts(categoryTree.pf, counts),
+      pj: withEntryCounts(categoryTree.pj, counts),
+    }
+  }, [initialEntries, categoryTree])
 
   const byCategory = useMemo(() => {
     const catName = (e: FinanceEntry) =>
@@ -131,7 +162,12 @@ export function FinanceClient({
         </TabsContent>
 
         <TabsContent value="categories" className="mt-4">
-          <FinanceCategoryManager kind={kind} onChanged={refresh} />
+          <FinanceCategoryManager
+            key={kind}
+            kind={kind}
+            initialData={kind === 'pf' ? categoryManagerData.pf : categoryManagerData.pj}
+            onChanged={refresh}
+          />
         </TabsContent>
       </Tabs>
 
