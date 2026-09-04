@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
 import { revenueStatusToPaymentStatus } from '@/lib/revenue/cycle'
+import { mirrorPaidRevenueToFinance } from '@/lib/revenue/finance-mirror'
 import type { RevenuePaymentMethod, RevenueStatus } from '@/types/database'
 
 // Lançamento manual avulso na tela de ciclo de receita (/ciclo-receita).
@@ -96,5 +97,17 @@ export async function POST(req: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  if (paymentStatus === 'paid') {
+    await mirrorPaidRevenueToFinance(supabase, {
+      id: data.id,
+      accountId: data.account_id,
+      workspaceId: data.workspace_id,
+      amount: Number(data.amount),
+      procedureName: data.procedure_name ?? null,
+      paidAtIso: data.paid_at ?? null,
+    })
+  }
+
   return NextResponse.json(data, { status: 201 })
 }

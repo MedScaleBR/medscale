@@ -19,7 +19,7 @@ vi.mock('@/lib/session/api', () => ({
 import { GET, POST } from '@/app/api/finance/categories/route'
 
 const CAT_ROWS = [
-  { id: 'r1', account_id: 'a1', kind: 'pf', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
+  { id: 'r1', account_id: 'a1', kind: 'pf', direction: 'out', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
 ]
 
 function req(body?: unknown, url = 'https://app.test/api/finance/categories') {
@@ -44,6 +44,18 @@ describe('GET /api/finance/categories', () => {
     const json = await res.json()
     expect(json.pf[0].entryCount).toBe(1)
   })
+  it('?direction=in devolve só categorias de receita', async () => {
+    g.supabase = createSupabaseMock({
+      finance_categories: { select: { data: [
+        { id: 'd1', account_id: 'a1', kind: 'pj', direction: 'out', parent_id: null, name: 'Aluguel', sort_order: 0, is_archived: false, created_at: '' },
+        { id: 'r1', account_id: 'a1', kind: 'pj', direction: 'in', parent_id: null, name: 'Consultas particulares', sort_order: 0, is_archived: false, created_at: '' },
+      ] } },
+      finance_entries: { select: { data: [] } },
+    })
+    const res = await GET(req(undefined, 'https://app.test/api/finance/categories?kind=pj&direction=in') as never)
+    const json = await res.json()
+    expect(json.pj.map((c: { id: string }) => c.id)).toEqual(['r1'])
+  })
 })
 
 describe('POST /api/finance/categories', () => {
@@ -60,6 +72,31 @@ describe('POST /api/finance/categories', () => {
     const res = await POST(req({ kind: 'pf', name: 'Pets' }) as never)
     expect(res.status).toBe(201)
     expect((await res.json()).id).toBe('new-1')
+    const ins = g.supabase.callsTo('finance_categories', 'insert')[0]
+    expect((ins.payload as Record<string, unknown>).direction).toBe('out')
+  })
+  it('cria categoria de receita quando direction=in', async () => {
+    g.supabase = createSupabaseMock({
+      finance_categories: { select: { data: [] }, insert: { data: { id: 'novo' } } },
+    })
+    const res = await POST(req({ kind: 'pj', name: 'Telemedicina', direction: 'in' }) as never)
+    expect(res.status).toBe(201)
+    const ins = g.supabase.callsTo('finance_categories', 'insert')[0]
+    expect((ins.payload as Record<string, unknown>).direction).toBe('in')
+  })
+  it('subcategoria herda o direction do pai, ignorando o direction do body', async () => {
+    g.supabase = createSupabaseMock({
+      finance_categories: {
+        select: { data: [
+          { id: 'r1', account_id: 'a1', kind: 'pj', direction: 'in', parent_id: null, name: 'Consultas particulares', sort_order: 0, is_archived: false, created_at: '' },
+        ] },
+        insert: { data: { id: 'sub1' } },
+      },
+    })
+    const res = await POST(req({ kind: 'pj', name: 'Telemedicina', parent_id: 'r1', direction: 'out' }) as never)
+    expect(res.status).toBe(201)
+    const ins = g.supabase.callsTo('finance_categories', 'insert')[0]
+    expect((ins.payload as Record<string, unknown>).direction).toBe('in')
   })
 })
 
@@ -72,8 +109,8 @@ describe('PATCH /api/finance/categories/[id]', () => {
     g.supabase = createSupabaseMock({
       finance_categories: {
         select: { data: [
-          { id: 'r1', account_id: 'a1', kind: 'pf', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
-          { id: 's1', account_id: 'a1', kind: 'pf', parent_id: 'r1', name: 'Escola', sort_order: 0, is_archived: false, created_at: '' },
+          { id: 'r1', account_id: 'a1', kind: 'pf', direction: 'out', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
+          { id: 's1', account_id: 'a1', kind: 'pf', direction: 'out', parent_id: 'r1', name: 'Escola', sort_order: 0, is_archived: false, created_at: '' },
         ] },
         update: { data: null },
       },
@@ -86,8 +123,8 @@ describe('PATCH /api/finance/categories/[id]', () => {
   it('400 ao renomear para nome de irmã existente', async () => {
     g.supabase = createSupabaseMock({
       finance_categories: { select: { data: [
-        { id: 'r1', account_id: 'a1', kind: 'pf', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
-        { id: 'r2', account_id: 'a1', kind: 'pf', parent_id: null, name: 'Alimentação', sort_order: 1, is_archived: false, created_at: '' },
+        { id: 'r1', account_id: 'a1', kind: 'pf', direction: 'out', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
+        { id: 'r2', account_id: 'a1', kind: 'pf', direction: 'out', parent_id: null, name: 'Alimentação', sort_order: 1, is_archived: false, created_at: '' },
       ] } },
     })
     const res = await PATCH(new Request('https://app.test/x', { method: 'PATCH', body: JSON.stringify({ name: 'alimentacao' }), headers: { 'content-type': 'application/json' } }) as never, params('r1') as never)
@@ -100,7 +137,7 @@ describe('DELETE /api/finance/categories/[id]', () => {
   it('409 quando há lançamentos usando', async () => {
     g.supabase = createSupabaseMock({
       finance_categories: { select: { data: [
-        { id: 'r1', account_id: 'a1', kind: 'pf', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
+        { id: 'r1', account_id: 'a1', kind: 'pf', direction: 'out', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
       ] } },
       finance_entries: { select: { data: [{ id: 'e1' }] } },
     })
@@ -111,7 +148,7 @@ describe('DELETE /api/finance/categories/[id]', () => {
   it('200 quando vazia', async () => {
     g.supabase = createSupabaseMock({
       finance_categories: { select: { data: [
-        { id: 'r1', account_id: 'a1', kind: 'pf', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
+        { id: 'r1', account_id: 'a1', kind: 'pf', direction: 'out', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
       ] }, delete: { data: null } },
       finance_entries: { select: { data: [] } },
     })

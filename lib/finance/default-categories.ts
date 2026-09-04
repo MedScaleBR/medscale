@@ -11,6 +11,13 @@ export interface DefaultCategoryTree {
 // lib/finance/provision.ts). Editável pelo owner depois de criada. Os nomes
 // de raiz reaproveitam os das constantes antigas (PF_CATEGORIES/PJ_CATEGORIES,
 // removidas) para o backfill dos lançamentos antigos casar por nome.
+//
+// Só categorias de DESPESA (direction 'out'). As categorias de RECEITA
+// (direction 'in') não ficam aqui — são semeadas pela função SQL
+// public.ensure_finance_income_seed (supabase/migration_receita_financeiro.sql),
+// chamada via RPC por ensureFinanceCategories (lib/finance/provision.ts):
+//   PJ: Consultas particulares, Procedimentos, Convênios, Outras receitas
+//   PF: Salário / Pró-labore, Aluguéis recebidos, Investimentos, Outras receitas
 export const DEFAULT_FINANCE_CATEGORIES: DefaultCategoryTree = {
   pf: [
     { name: 'Alimentação', children: ['Mercado', 'Restaurante', 'Delivery'] },

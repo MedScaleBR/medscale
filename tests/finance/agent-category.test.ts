@@ -33,8 +33,8 @@ vi.mock('@/lib/finance/categorize', () => ({ categorizeEntry: vi.fn(async () => 
 
 // Filhos -> Escola, ambos pf.
 const CAT_ROWS = [
-  { id: 'fil', account_id: PARAMS.accountId, kind: 'pf', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
-  { id: 'esc', account_id: PARAMS.accountId, kind: 'pf', parent_id: 'fil', name: 'Escola', sort_order: 0, is_archived: false, created_at: '' },
+  { id: 'fil', account_id: PARAMS.accountId, kind: 'pf', direction: 'out', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
+  { id: 'esc', account_id: PARAMS.accountId, kind: 'pf', direction: 'out', parent_id: 'fil', name: 'Escola', sort_order: 0, is_archived: false, created_at: '' },
 ]
 
 function financeConfig() {
@@ -114,6 +114,22 @@ describe('processFinancialMessage — categorias', () => {
     expect(sel).toBeDefined()
     expect(filterValue(sel as RecordedCall, 'eq', 'category_id')).toBe('fil')
     expect((sel as RecordedCall).filters.some((f) => f[0] === 'eq' && f[1] === 'category')).toBe(false)
+  })
+
+  it('consulta de gasto filtra direction=out — não deixa receita entrar no total', async () => {
+    financeConfig()
+    h.intent = {
+      kind: 'query', type: 'pf', category: 'Filhos', subcategory: null,
+      month: null, workspace: null,
+    }
+    const { processFinancialMessage } = await import('@/lib/finance/agent')
+    await processFinancialMessage(PARAMS.patientPhone, 'quanto gastei com os filhos esse mes')
+
+    const sel = state.supabase
+      .callsTo('finance_entries', 'select')
+      .find((c: RecordedCall) => c.filters.some((f) => f[0] === 'eq' && f[1] === 'category_id'))
+    expect(sel).toBeDefined()
+    expect(filterValue(sel as RecordedCall, 'eq', 'direction')).toBe('out')
   })
 
   it('consulta com categoria fora da árvore responde "não encontrei" e não roda a query ampla', async () => {

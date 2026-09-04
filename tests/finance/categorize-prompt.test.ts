@@ -4,13 +4,13 @@ import type { FinanceCategoryTree } from '@/lib/finance/categories'
 
 const TREE: FinanceCategoryTree = {
   pf: [
-    { id: 'fil', name: 'Filhos', sortOrder: 0, isArchived: false, children: [
-      { id: 'esc', name: 'Escola', sortOrder: 0, isArchived: false, children: [] },
+    { id: 'fil', name: 'Filhos', direction: 'out', sortOrder: 0, isArchived: false, children: [
+      { id: 'esc', name: 'Escola', direction: 'out', sortOrder: 0, isArchived: false, children: [] },
     ] },
-    { id: 'arq', name: 'Arquivada', sortOrder: 1, isArchived: true, children: [] },
-    { id: 'out', name: 'Outros', sortOrder: 2, isArchived: false, children: [] },
+    { id: 'arq', name: 'Arquivada', direction: 'out', sortOrder: 1, isArchived: true, children: [] },
+    { id: 'out', name: 'Outros', direction: 'out', sortOrder: 2, isArchived: false, children: [] },
   ],
-  pj: [{ id: 'alu', name: 'Aluguel', sortOrder: 0, isArchived: false, children: [] }],
+  pj: [{ id: 'alu', name: 'Aluguel', direction: 'out', sortOrder: 0, isArchived: false, children: [] }],
 }
 
 describe('buildCategorizePrompt', () => {

@@ -861,6 +861,7 @@ export interface Database {
           workspace_id: string | null
           recorded_by_phone: string
           type: FinanceEntryType
+          direction: 'in' | 'out'
           description: string | null
           amount: number
           category: string | null
@@ -868,6 +869,7 @@ export interface Database {
           subcategory_id: string | null
           raw_message: string
           entry_date: string
+          revenue_entry_id: string | null
           created_at: string
         }
         Insert: Partial<Database['public']['Tables']['finance_entries']['Row']> & {
@@ -889,6 +891,12 @@ export interface Database {
             foreignKeyName: 'finance_entries_workspace_id_fkey'
             columns: ['workspace_id']
             referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'finance_entries_revenue_entry_id_fkey'
+            columns: ['revenue_entry_id']
+            referencedRelation: 'revenue_entries'
             referencedColumns: ['id']
           },
         ]
@@ -919,6 +927,7 @@ export interface Database {
           id: string
           account_id: string
           kind: FinanceEntryType
+          direction: 'in' | 'out'
           parent_id: string | null
           name: string
           sort_order: number
@@ -965,6 +974,10 @@ export interface Database {
       normalize_category_name: { Args: { p_name: string }; Returns: string }
       provision_finance_categories: {
         Args: { p_account_id: string; p_tree: Record<string, unknown> }
+        Returns: undefined
+      }
+      ensure_finance_income_seed: {
+        Args: { p_account_id: string }
         Returns: undefined
       }
     }
