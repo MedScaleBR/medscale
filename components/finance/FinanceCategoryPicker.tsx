@@ -6,9 +6,12 @@ import type { FinanceCategoryTree } from '@/lib/finance/categories'
 const NONE = '__none__'
 
 export function FinanceCategoryPicker({
-  kind, tree, categoryId, subcategoryId, onChange, disabled,
+  kind, direction, tree, categoryId, subcategoryId, onChange, disabled,
 }: {
   kind: 'pf' | 'pj'
+  // Receita ou despesa — filtra as raízes exibidas. Subcategoria herda a
+  // direção da raiz, então não precisa ser filtrada separadamente.
+  direction: 'in' | 'out'
   tree: FinanceCategoryTree
   categoryId: string | null
   subcategoryId: string | null
@@ -19,7 +22,7 @@ export function FinanceCategoryPicker({
   // lançamento — senão o Select mostraria o placeholder e o lançamento
   // pareceria sem categoria enquanto o estado ainda guarda o id.
   const current = tree[kind].find((c) => c.id === categoryId) ?? null
-  const roots = tree[kind].filter((c) => !c.isArchived || c.id === categoryId)
+  const roots = tree[kind].filter((c) => c.direction === direction && (!c.isArchived || c.id === categoryId))
   const subs = (current?.children ?? []).filter((s) => !s.isArchived || s.id === subcategoryId)
   const label = (n: { name: string; isArchived: boolean }) =>
     n.isArchived ? `${n.name} (arquivada)` : n.name
