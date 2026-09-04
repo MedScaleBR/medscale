@@ -28,8 +28,8 @@ Objetivo:
 | 2 | Modelo de receita/despesa | `finance_entries.direction` (`'in'`/`'out'`); tela mostra Receitas / Despesas / Saldo nas duas abas |
 | 3 | Estorno / exclusão | Reversão automática: sai de `'paid'` → espelho apagado; `revenue_entry` deletada → espelho apagado (FK cascade) |
 | 4 | Retroativo | Não. Só pagamentos confirmados após o deploy geram espelho |
-| 5 | Edição do espelho | Read-only na tela e na API. Categoria de receita fixa atribuída pelo trigger |
-| 6 | Ponto único do espelho | Trigger no Postgres em `revenue_entries` (não helper TS) |
+| 5 | Edição do espelho | Read-only na tela e na API. Categoria de receita fixa atribuída pelo helper de espelho |
+| 6 | Ponto único do espelho | Helper TS `lib/revenue/finance-mirror.ts`, chamado nos 3 sites que marcam `paid`. **Revisado** (era trigger Postgres): o repo não tem harness de teste com banco real; o helper é 100% testável com `createSupabaseMock` e segue o padrão de `lib/revenue/cycle.ts` |
 | 7 | Categorias de receita | Árvore separada por `direction`; seed provisionado por tipo (PF e PJ) |
 | 8 | Lançamento manual de receita | Tela **e** agente WhatsApp |
 
@@ -88,89 +88,105 @@ e `kind`, o pai precisa ter o mesmo `direction` da filha.
 `kind = type`, exige `finance_categories.direction = finance_entries.direction`.
 Nova mensagem: `finance_entries: direction da categoria difere do lançamento`.
 
-### Trigger novo — espelho do pagamento
+### Helper do espelho — `lib/revenue/finance-mirror.ts`
 
-```sql
-create or replace function public.mirror_paid_revenue_to_finance()
-returns trigger language plpgsql security definer as $$
-declare
-  v_income_cat uuid;
-  v_paid_date  date;
-begin
-  -- entrou em 'paid'
-  if (tg_op = 'INSERT' and new.payment_status = 'paid')
-     or (tg_op = 'UPDATE' and new.payment_status = 'paid'
-         and old.payment_status is distinct from 'paid') then
+Sem trigger. Um módulo TS com duas funções, chamadas com `createAdminClient()`
+(mesma razão de `lib/revenue/cycle.ts`: `finance_entries` e `revenue_entries`
+têm RLS owner-only e os writers já usam service role).
 
-    if exists (select 1 from public.finance_entries
-               where revenue_entry_id = new.id) then
-      return new; -- idempotente
-    end if;
+```ts
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/types/database'
+import { ensureFinanceCategories } from '@/lib/finance/provision'
+import { getFinanceCategoryTree } from '@/lib/finance/categories'
+import { saoPauloDateOnly } from '@/lib/revenue/cycle'
 
-    -- categoria de receita padrão da conta (PJ, direction 'in', raiz
-    -- "Consultas particulares"). Garante o seed caso o owner nunca tenha
-    -- aberto /finance ainda.
-    perform public.ensure_finance_income_seed(new.account_id);
-    select id into v_income_cat
-      from public.finance_categories
-      where account_id = new.account_id and kind = 'pj' and direction = 'in'
-        and parent_id is null
-        and public.normalize_category_name(name)
-            = public.normalize_category_name('Consultas particulares')
-      limit 1;
+type SupabaseAdmin = SupabaseClient<Database>
 
-    v_paid_date := (coalesce(new.paid_at, now())
-                    at time zone 'America/Sao_Paulo')::date;
+/** Nome da categoria-raiz PJ (direction 'in') que o espelho usa. */
+export const REVENUE_MIRROR_CATEGORY = 'Consultas particulares'
 
-    insert into public.finance_entries (
-      account_id, workspace_id, recorded_by_phone, type, direction,
-      description, amount, category, category_id, subcategory_id,
-      raw_message, entry_date, revenue_entry_id
-    ) values (
-      new.account_id, new.workspace_id, 'revenue-cycle', 'pj', 'in',
-      coalesce(new.procedure_name, 'Consulta'),
-      new.amount, 'Consultas particulares', v_income_cat, null,
-      '(ciclo de receita)', v_paid_date, new.id
-    );
-    return new;
-  end if;
+interface MirrorInput {
+  id: string                 // revenue_entries.id
+  accountId: string
+  workspaceId: string
+  amount: number
+  procedureName: string | null
+  paidAtIso: string | null   // revenue_entries.paid_at
+}
 
-  -- saiu de 'paid' (refunded, cancelled, pending, realized…)
-  if tg_op = 'UPDATE' and old.payment_status = 'paid'
-     and new.payment_status is distinct from 'paid' then
-    delete from public.finance_entries where revenue_entry_id = new.id;
-  end if;
+/**
+ * Cria (idempotente) o finance_entry de entrada que espelha um pagamento de
+ * receita confirmado. No-op se já existe um espelho para essa revenue_entry.
+ * Nunca lança: falha é logada e engolida — não pode derrubar a confirmação
+ * do pagamento.
+ */
+export async function mirrorPaidRevenueToFinance(
+  supabase: SupabaseAdmin,
+  input: MirrorInput
+): Promise<void>
 
-  return new;
-end;
-$$;
-
-create trigger trg_mirror_paid_revenue
-  after insert or update of payment_status on public.revenue_entries
-  for each row execute procedure public.mirror_paid_revenue_to_finance();
+/**
+ * Remove o espelho de uma revenue_entry (reembolso / correção de status /
+ * pré-exclusão). No-op se não havia espelho. Pronta para o dia em que existir
+ * um fluxo de estorno; hoje a exclusão da revenue_entry já cascateia via FK.
+ */
+export async function unmirrorPaidRevenue(
+  supabase: SupabaseAdmin,
+  revenueEntryId: string
+): Promise<void>
 ```
 
-Notas:
+Comportamento de `mirrorPaidRevenueToFinance`:
 
-- `security definer` porque `revenue_entries` é gravada com service role e
-  `finance_entries` tem RLS owner-only; o trigger precisa inserir
-  independentemente da sessão.
-- `after ... of payment_status` — só dispara quando a coluna relevante muda.
-- O `delete` do espelho ao sair de `'paid'` é o caminho de reembolso
-  (`refunded`) e de correção (voltou para `pending`/`realized`). Não há
-  lançamento negativo de estorno — a linha some, mantendo `/finance` alinhado
-  ao ciclo (decisão 3).
-- A trigger `enforce_finance_entry_category` valida a linha inserida:
-  `category_id` é raiz PJ `direction='in'`, coerente com `type='pj'` e
-  `direction='in'`.
+1. `select id from finance_entries where revenue_entry_id = input.id` → se
+   existe, retorna (idempotente; cobre reconfirmação e corrida).
+2. `await ensureFinanceCategories(supabase, accountId)` — garante o seed de
+   receita mesmo que o owner nunca tenha aberto `/finance`.
+3. Lê a árvore, acha a raiz `kind='pj'`, `direction='in'`, nome
+   normalizado == `REVENUE_MIRROR_CATEGORY`. Se não achar (seed degradado),
+   segue com `category_id = null`.
+4. `insert` em `finance_entries`:
+
+| campo | valor |
+|---|---|
+| `account_id` / `workspace_id` | `input.accountId` / `input.workspaceId` |
+| `type` / `direction` | `'pj'` / `'in'` |
+| `amount` | `input.amount` |
+| `entry_date` | `saoPauloDateOnly(input.paidAtIso ?? new Date().toISOString())` |
+| `category` | `REVENUE_MIRROR_CATEGORY` (ou `null` se não resolveu) |
+| `category_id` / `subcategory_id` | id da raiz resolvida / `null` |
+| `description` | `input.procedureName ?? 'Consulta'` |
+| `recorded_by_phone` | `'revenue-cycle'` |
+| `raw_message` | `'(ciclo de receita)'` |
+| `revenue_entry_id` | `input.id` |
+
+5. Erro no insert → `console.error('[revenue-mirror] …')` e retorna. A coluna
+   `revenue_entry_id UNIQUE` é o backstop final contra duplicata.
+
+`unmirrorPaidRevenue`: `delete from finance_entries where revenue_entry_id = X`.
+
+**Sites de chamada:**
+
+| Arquivo | Onde | Chamada |
+|---|---|---|
+| `app/api/revenue-entries/[id]/confirm/route.ts` | depois do `update ... payment_status:'paid'` bem-sucedido | `mirrorPaidRevenueToFinance(supabase, { id, accountId, workspaceId, amount: data.amount, procedureName: data.procedure_name, paidAtIso: data.paid_at })` |
+| `lib/finance/appointment-payment.ts` → `confirmAppointmentPayment` | depois do `update` que retornou linha | idem, com os campos da linha atualizada (o `update` passa a `.select('id, account_id, workspace_id, amount, procedure_name, paid_at')`) |
+| `app/api/revenue/route.ts` POST | quando `paymentStatus === 'paid'`, depois do insert | idem, a partir de `data` |
+
+Reversão automática hoje = só a FK `on delete cascade` (exclusão da
+`revenue_entry` ou da conta). Não existe fluxo de `paid → refunded` no código
+atual; quando existir, chama `unmirrorPaidRevenue` nele.
 
 ### Provisionamento de categorias de receita
 
 O RPC `provision_finance_categories` tem guarda "se já existe qualquer
 categoria da conta, retorna". Contas que já provisionaram despesa **não**
-ganhariam o seed de receita. Solução: função idempotente dedicada, chamada
-(a) pelo trigger acima, (b) por `ensureFinanceCategories` no carregamento de
-`/finance` e no agente.
+ganhariam o seed de receita. Solução: função idempotente dedicada
+`ensure_finance_income_seed`, chamada por `ensureFinanceCategories` (que roda
+no carregamento de `/finance`, no agente, e é invocada pelo
+`mirrorPaidRevenueToFinance` antes de ler a árvore), mais um `select` único
+por conta na migration.
 
 ```sql
 create or replace function public.ensure_finance_income_seed(p_account_id uuid)
@@ -222,18 +238,22 @@ O espelho do ciclo aponta sempre para **PJ › Consultas particulares**.
 Ordem, para rodar no SQL Editor (não reexecutar `schema.sql`):
 
 1. `alter table finance_categories add column direction ...` (default `'out'`).
-2. `alter table finance_entries add column direction ..., add column
-   revenue_entry_id ...`.
-3. Recriar índice único de irmãos com `direction`; criar índices novos.
-4. `create or replace` das duas funções de trigger de categoria.
+2. `alter table finance_entries add column direction ...` (default `'out'`)
+   `, add column revenue_entry_id uuid unique references revenue_entries(id)
+   on delete cascade`.
+3. Recriar índice único de irmãos com `direction`; criar
+   `idx_finance_categories_tree_dir` e `idx_finance_entries_direction`.
+4. `create or replace` das duas funções de trigger de categoria
+   (`enforce_finance_category_depth`, `enforce_finance_entry_category`) com a
+   checagem de `direction`.
 5. `create function ensure_finance_income_seed`.
-6. `create function mirror_paid_revenue_to_finance` + `create trigger`.
-7. `select ensure_finance_income_seed(id) from accounts` — semeia receita em
+6. `select ensure_finance_income_seed(id) from accounts` — semeia receita em
    todas as contas existentes (uma vez).
-8. Espelhar `schema.sql` (fonte de verdade para reconstrução) com as mesmas
+7. Espelhar `schema.sql` (fonte de verdade para reconstrução) com as mesmas
    mudanças.
 
-Sem backfill de `revenue_entries` já pagas (decisão 4).
+Sem trigger de espelho (o espelho é o helper TS). Sem backfill de
+`revenue_entries` já pagas (decisão 4).
 
 ## Camada `lib/`
 
@@ -251,33 +271,48 @@ Sem backfill de `revenue_entries` já pagas (decisão 4).
 
 ### `lib/finance/categories.ts`
 
-`CategoryNode` inalterado. `FinanceCategoryTree` passa a separar por direção:
+`FinanceCategoryTree` **mantém a forma** `{ pf: CategoryNode[]; pj:
+CategoryNode[] }` — restruturá-la para `{in,out}` explodiria em ~10 arquivos e
+~8 testes. Em vez disso, o `direction` vai **no nó**:
 
 ```ts
-interface FinanceCategoryTree {
-  pf: { in: CategoryNode[]; out: CategoryNode[] }
-  pj: { in: CategoryNode[]; out: CategoryNode[] }
+interface CategoryNode {
+  id: string
+  name: string
+  direction: 'in' | 'out'   // novo
+  sortOrder: number
+  isArchived: boolean
+  children: CategoryNode[]
 }
 ```
 
-`buildTree` agrupa por `(kind, direction)`. `rootCategoryName(tree, id)`
-procura em ambos os sub-arrays (só precisa do id → nome). `resolveCategoryPair`
-ganha parâmetro `direction: 'in' | 'out'` (default `'out'` para os chamadores
-atuais) e resolve em `tree[kind][direction]`. Chamadas atualizadas em todos os
-consumidores (rotas, agente).
+- `getFinanceCategoryTree`: adiciona `direction` ao `select`.
+- `buildTree`: agrupa por `kind` como hoje; cada nó carrega `r.direction`.
+  Uma subcategoria herda o `direction` do pai (o banco garante coerência).
+- `rootCategoryName(tree, id)`: inalterado (busca por id).
+- `resolveCategoryPair(tree, type, categoryName, subcategoryName, direction)`:
+  novo 5º parâmetro `direction: 'in' | 'out'` (default `'out'`); filtra
+  `tree[kind].filter(c => c.direction === direction)` antes de casar o nome.
+
+Consumidores que só precisam de "todas as categorias do tipo" seguem
+inalterados; quem filtra por direção usa `.filter(c => c.direction === dir)`.
 
 ### `lib/finance/default-categories.ts`
 
-`DefaultCategoryTree` continua só com as categorias de **despesa** (o seed de
-receita vive na função SQL `ensure_finance_income_seed`, para o trigger
-poder garanti-lo sem passar pelo TS). Documentar o espelhamento dos nomes.
+`DefaultCategoryTree` continua só com as categorias de **despesa**. O seed de
+receita vive na função SQL `ensure_finance_income_seed` (chamada via RPC por
+`ensureFinanceCategories`), então o helper de espelho o garante indiretamente
+via `ensureFinanceCategories`. Documentar o espelhamento dos nomes PF/PJ de
+receita num comentário neste arquivo, para quem for editar o seed SQL achar.
 
 ### `lib/finance/entry-validation.ts`
 
-`EntryInput` ganha `direction`. `findRoot` procura no sub-array
-`tree[kind][direction]`. Novo código de erro `category_direction_mismatch`.
-`validateEntryInput` valida que a categoria/subcategoria pertence à direção do
-lançamento.
+`EntryInput` ganha `direction: 'in' | 'out'`. `findRoot` passa a rejeitar (ou
+o chamador filtra) nós cujo `node.direction !== input.direction`. Novo código
+`category_direction_mismatch` em `EntryValidationError`. `validateEntryInput`:
+se `categoryId` resolve para um nó de direção diferente de `input.direction`,
+retorna `{ code: 'category_direction_mismatch' }` (checado antes de
+`category_kind_mismatch`).
 
 ### `lib/finance/provision.ts`
 
@@ -287,8 +322,9 @@ lançamento.
 
 ### `lib/revenue/cycle.ts`
 
-Nenhuma mudança — o espelho é 100% trigger. Comentar no topo do arquivo que a
-transição para `'paid'` dispara `trg_mirror_paid_revenue`.
+Nenhuma mudança de lógica. `saoPauloDateOnly` (já exportado) é reusado por
+`finance-mirror.ts`. Um comentário próximo às transições de `payment_status`
+aponta para `lib/revenue/finance-mirror.ts`.
 
 ## Rotas API
 
@@ -310,9 +346,9 @@ transição para `'paid'` dispara `trg_mirror_paid_revenue`.
 
 ### `app/(dashboard)/finance/page.tsx`
 
-`getFinanceCategoryTree` já traz a árvore nova (com `in`/`out`). Passa
-`workspaces` como hoje. Sem outra mudança (a query de `finance_entries` já é
-`select *`, então `direction`/`revenue_entry_id` vêm juntos).
+`getFinanceCategoryTree` já traz os nós com `direction`. Passa `workspaces`
+como hoje. Sem outra mudança (a query de `finance_entries` já é `select *`,
+então `direction`/`revenue_entry_id` vêm juntos).
 
 ### `FinanceClient.tsx`
 
@@ -320,7 +356,8 @@ transição para `'paid'` dispara `trg_mirror_paid_revenue`.
   (`direction === 'out'`), para **as duas abas**.
 - `byCategory`/`FinanceCategoryChart`: segmento "Despesas | Receitas" acima do
   gráfico (estado local, default Despesas), agrupando o lado escolhido.
-- `roots` para o formulário e o gráfico vêm de `categoryTree[kind][direction]`.
+- `roots` para o formulário e o gráfico saem de
+  `categoryTree[kind].filter(c => c.direction === direction)`.
 - `uncategorized` conta só o lado visível.
 
 ### `FinanceSummaryCards.tsx`
@@ -336,15 +373,15 @@ iguais para PF e PJ:
 ### `FinanceEntryForm.tsx`
 
 - Toggle **Receita / Despesa** no topo (default Despesa). Controla `direction`.
-- `FinanceCategoryPicker` recebe `direction` e lista
-  `tree[kind][direction]`.
+- `FinanceCategoryPicker` recebe `direction` e lista só os nós dessa direção.
 - Ao trocar o toggle: zera `categoryId`/`subcategoryId`.
 - `payload` inclui `direction`.
 - Edição de espelho não acontece aqui (a tabela esconde a ação).
 
 ### `FinanceCategoryPicker.tsx`
 
-Nova prop `direction`; troca `tree[kind]` por `tree[kind][direction]`.
+Nova prop `direction`; `roots`/`subs` filtram `c.direction === direction`
+além de `!c.isArchived`.
 
 ### `FinanceEntryTable.tsx`
 
@@ -383,8 +420,8 @@ Documentar no help (`respond.ts` / `buildHelpMessage`).
 
 ### `categorize.ts`
 
-Categoriza contra `tree[type][direction]` — o passo de categorização recebe a
-direção do intent e só considera as raízes daquela direção.
+Categoriza contra os nós de `tree[type]` cuja `direction` bate com a do
+intent — o passo de categorização só considera as raízes daquela direção.
 
 ### `respond.ts`
 
@@ -415,27 +452,35 @@ Atualizar o(s) prompt(s) do agente financeiro e
 
 | Situação | Comportamento |
 |----------|---------------|
-| Pagamento confirmado antes de `/finance` existir p/ a conta | Trigger chama `ensure_finance_income_seed`; se falhar o seed, insere espelho com `category_id = null` + `category = 'Consultas particulares'` (não bloqueia o `paid`) |
-| `enforce_finance_entry_category` recusa o espelho | Exceção propaga e **aborta a confirmação do pagamento** — indesejado. Mitigação: o trigger monta o insert já coerente; teste de integração cobre. Fallback `category_id = null` se a categoria não for encontrada |
-| Re-confirmar pagamento / update idempotente | `where revenue_entry_id = new.id` já existe → `return` sem inserir |
-| `refunded` → depois volta a `paid` | Espelho foi apagado na saída; volta a ser criado na reentrada |
-| PATCH/DELETE de espelho pela API | `409 revenue_mirror_locked` |
-| Categoria de direção errada num lançamento manual | `400 category_direction_mismatch` (validação TS) + exceção da trigger como backstop |
-| `direction` ausente em body/insert antigo | Default `'out'` |
+| Pagamento confirmado antes de `/finance` ter sido aberto p/ a conta | `mirrorPaidRevenueToFinance` chama `ensureFinanceCategories` (que roda o RPC de seed) antes de ler a árvore; se o seed degrada, insere o espelho com `category_id = null` + `category = 'Consultas particulares'` |
+| Insert do espelho falha (RLS, constraint, rede) | `console.error('[revenue-mirror] …')` e retorna — **nunca** derruba a confirmação do pagamento. `revenue_entry_id UNIQUE` evita duplicata se um retry parcial ocorreu |
+| Re-confirmar pagamento (idempotência) | `select id from finance_entries where revenue_entry_id = X` já retorna linha → helper faz no-op |
+| `confirmAppointmentPayment` numa entrada já paga | O `update ... .in('payment_status', ['pending','realized'])` não casa linha → helper não é chamado |
+| `revenue_entry` deletada | Espelho some via FK `on delete cascade` |
+| PATCH/DELETE de espelho pela API `/api/finance/entries` | `409 revenue_mirror_locked` |
+| Categoria de direção errada num lançamento manual | `400 category_direction_mismatch` (`validateEntryInput`); `enforce_finance_entry_category` no banco é o backstop |
+| `direction` ausente em body/insert antigo | Default `'out'` na coluna e nos readers de body |
 
 ## Testes
 
-**Trigger — `tests/finance/revenue-mirror.test.ts` (integração):**
-- `paid` (via `POST /api/revenue-entries/[id]/confirm`) cria 1 `finance_entry`
-  `direction='in'`, `type='pj'`, `amount`/`workspace_id` da origem,
-  `entry_date` = data de `paid_at` em SP, `revenue_entry_id` setado,
-  `category_id` = raiz PJ "Consultas particulares".
-- `POST /api/revenue` avulso já `confirmado` → espelha na hora.
-- Confirmar duas vezes / update sem trocar status → continua 1 linha.
-- `paid → refunded` → espelho apagado. `paid → cancelled` idem.
-  `paid → pending` idem.
-- `delete revenue_entry` → espelho some (cascade).
-- Conta sem categorias provisionadas → seed criado, espelho com categoria.
+**Helper — `tests/revenue/finance-mirror.test.ts` (`createSupabaseMock`):**
+- `mirrorPaidRevenueToFinance` com dados de um pagamento → 1 `insert` em
+  `finance_entries` com `direction:'in'`, `type:'pj'`, `amount`/`workspace_id`
+  da origem, `entry_date` = `saoPauloDateOnly(paidAtIso)`, `revenue_entry_id`
+  setado, `category`/`category_id` da raiz "Consultas particulares",
+  `recorded_by_phone:'revenue-cycle'`, `raw_message:'(ciclo de receita)'`.
+- Espelho já existe (`select` devolve linha) → nenhum `insert`.
+- Árvore sem a categoria de receita → `insert` com `category_id: null`,
+  `category: 'Consultas particulares'`.
+- `insert` retorna `error` → não lança; loga.
+- `unmirrorPaidRevenue` → `delete` filtrado por `revenue_entry_id`.
+
+**Sites de chamada (`tests/finance/*`, `tests/revenue/*`):**
+- `POST /api/revenue-entries/[id]/confirm` bem-sucedido chama o mirror com os
+  campos da linha atualizada.
+- `POST /api/revenue` com `status:'confirmado'` chama o mirror; com
+  `status:'previsto'` **não** chama.
+- `confirmAppointmentPayment` chama o mirror só quando o `update` casou linha.
 
 **Rotas — `tests/finance/api-entries.test.ts`:**
 - `POST` sem `direction` grava `'out'`; com `'in'` + categoria de receita
@@ -464,15 +509,21 @@ Atualizar o(s) prompt(s) do agente financeiro e
 
 ## Ordem de implementação
 
-1. Migration SQL + espelho em `schema.sql` + tipos `database.ts`.
-2. `lib/finance/categories.ts` (árvore `in`/`out`) + consumidores + testes.
-3. `entry-validation.ts` + `provision.ts` + testes.
-4. Rotas `/api/finance/entries` (+ categorias) — `direction` e trava do
-   espelho + testes.
-5. Trigger do espelho + `tests/finance/revenue-mirror.test.ts`.
-6. Tela `/finance` — form com toggle, cards, tabela, gráfico, manager.
-7. Agente WhatsApp — parser, interpret, categorize, respond, agent, prompts.
-8. Revisão final + `security-review`.
+**Plano 1 — dados + tela + espelho (este ciclo):**
+
+1. Migration SQL + mesmas mudanças em `schema.sql` + tipos `database.ts`.
+2. `lib/finance/categories.ts` (`direction` no nó) + consumidores + testes.
+3. `entry-validation.ts` + `category-validation.ts` + `provision.ts` + testes.
+4. Rotas `/api/finance/entries` e `/api/finance/categories` — `direction` e
+   trava do espelho (`409 revenue_mirror_locked`) + testes.
+5. `lib/revenue/finance-mirror.ts` + testes + fiação nos 3 sites de `paid`.
+6. Tela `/finance` — form com toggle, cards Receitas/Despesas/Saldo, tabela,
+   gráfico com segmento, `FinanceCategoryManager`.
+7. Revisão final + `security-review`.
+
+**Plano 2 — agente WhatsApp (ciclo seguinte, PR separado):** `parser.ts`,
+`interpret.ts`, `categorize.ts`, `respond.ts`, `agent.ts` (`getEntries`
+`direction`, `handleUndo` guard), prompts.
 
 ## Fora de escopo
 
