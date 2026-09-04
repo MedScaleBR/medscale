@@ -50,8 +50,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     body.parent_id !== undefined ? (body.parent_id ? String(body.parent_id) : null) : found.parentId
 
   if (body.name !== undefined || body.parent_id !== undefined) {
+    // direction do próprio nó não é editável por esta rota — só nome/pai/
+    // ordem/arquivamento. Mover para outro pai só é aceito se o pai tiver a
+    // mesma direction (checado por validateCategoryShape).
     const err = validateCategoryShape(tree, {
-      kind: found.kind, name: nextName, parentId: nextParent, nodeId: id,
+      kind: found.kind, direction: found.node.direction, name: nextName, parentId: nextParent, nodeId: id,
     })
     if (err) return NextResponse.json({ error: 'Alteração inválida', code: err.code }, { status: 400 })
   }
