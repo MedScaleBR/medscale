@@ -69,7 +69,7 @@ describe('processFinancialMessage — categorias', () => {
   it('grava category_id e subcategory_id resolvidos da árvore, com o nome como snapshot', async () => {
     financeConfig()
     h.intent = {
-      kind: 'entry', type: 'pf', description: 'Escola do João', amount: 200,
+      kind: 'entry', type: 'pf', direction: 'out', description: 'Escola do João', amount: 200,
       category: 'Filhos', subcategory: 'Escola', workspaceHint: null,
     }
     const { processFinancialMessage } = await import('@/lib/finance/agent')
@@ -86,7 +86,7 @@ describe('processFinancialMessage — categorias', () => {
   it('cai no categorizeEntry quando a interpretação não trouxe categoria, e ainda resolve id', async () => {
     financeConfig()
     h.intent = {
-      kind: 'entry', type: 'pf', description: 'material escolar do joão', amount: 90,
+      kind: 'entry', type: 'pf', direction: 'out', description: 'material escolar do joão', amount: 90,
       category: null, subcategory: null, workspaceHint: null,
     }
     h.categorize = { categoryName: 'Filhos', subcategoryName: 'Escola' }
@@ -102,7 +102,7 @@ describe('processFinancialMessage — categorias', () => {
   it('consulta por categoria filtra por category_id, não pelo texto', async () => {
     financeConfig()
     h.intent = {
-      kind: 'query', type: 'pf', category: 'Filhos', subcategory: null,
+      kind: 'query', type: 'pf', direction: 'out', category: 'Filhos', subcategory: null,
       month: null, workspace: null,
     }
     const { processFinancialMessage } = await import('@/lib/finance/agent')
@@ -119,7 +119,7 @@ describe('processFinancialMessage — categorias', () => {
   it('consulta de gasto filtra direction=out — não deixa receita entrar no total', async () => {
     financeConfig()
     h.intent = {
-      kind: 'query', type: 'pf', category: 'Filhos', subcategory: null,
+      kind: 'query', type: 'pf', direction: 'out', category: 'Filhos', subcategory: null,
       month: null, workspace: null,
     }
     const { processFinancialMessage } = await import('@/lib/finance/agent')
@@ -135,7 +135,7 @@ describe('processFinancialMessage — categorias', () => {
   it('consulta com categoria fora da árvore responde "não encontrei" e não roda a query ampla', async () => {
     financeConfig()
     h.intent = {
-      kind: 'query', type: 'pf', category: 'Criptomoedas', subcategory: null,
+      kind: 'query', type: 'pf', direction: 'out', category: 'Criptomoedas', subcategory: null,
       month: null, workspace: null,
     }
     const { processFinancialMessage } = await import('@/lib/finance/agent')
@@ -150,7 +150,7 @@ describe('processFinancialMessage — categorias', () => {
   it('consulta com categoria válida mas subcategoria inexistente ainda consulta a categoria', async () => {
     financeConfig()
     h.intent = {
-      kind: 'query', type: 'pf', category: 'Filhos', subcategory: 'Mesada',
+      kind: 'query', type: 'pf', direction: 'out', category: 'Filhos', subcategory: 'Mesada',
       month: null, workspace: null,
     }
     const { processFinancialMessage } = await import('@/lib/finance/agent')

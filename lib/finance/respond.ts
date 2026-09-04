@@ -197,13 +197,15 @@ export function buildRevenueCycleInactiveMessage(): string {
 
 export function buildChooseWorkspaceMessage(
   units: { name: string }[],
+  direction: 'in' | 'out',
   entryDescription: string | null,
   amount: number
 ): string {
   const desc = entryDescription ?? 'lançamento'
+  const rotulo = direction === 'in' ? 'Essa receita da clínica' : 'Esse gasto da clínica'
   const list = units.map((u, i) => `${i + 1}. ${u.name}`).join('\n')
   return (
-    `Esse gasto da clínica (${desc} — ${formatBRL(amount)}) é de qual unidade?\n${list}\n\n` +
+    `${rotulo} (${desc} — ${formatBRL(amount)}) é de qual unidade?\n${list}\n\n` +
     `Responda com o nome ou o número da unidade.`
   )
 }

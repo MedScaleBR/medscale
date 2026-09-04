@@ -51,6 +51,7 @@ interface PendingChooseWorkspace {
   kind: 'choose_workspace'
   entry: {
     type: 'pj'
+    direction: 'in' | 'out'
     description: string | null
     amount: number
     // `category` (texto) é o snapshot do nome; os ids resolvem a árvore.
@@ -266,7 +267,7 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
 
     // Nome -> id contra a árvore da conta. O nome resolvido (pair.categoryName)
     // fica no filtro para o texto da resposta; os ids fazem o filtro real.
-    const pair = resolveCategoryPair(categoryTree, intent.type, intent.category, intent.subcategory)
+    const pair = resolveCategoryPair(categoryTree, intent.type, intent.category, intent.subcategory, intent.direction)
 
     // O modelo extraiu um nome de categoria que não casa com a árvore da conta.
     // Rodar a consulta sem esse filtro devolveria o total do mês inteiro como
@@ -279,6 +280,7 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
 
     const filters: QueryFilters = {
       type: intent.type,
+      direction: intent.direction,
       category: pair.categoryName,
       categoryId: pair.categoryId,
       subcategoryId: pair.subcategoryId,
@@ -296,10 +298,10 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
   // 4. Categorizar. A interpretação por linguagem natural já traz a
   // categoria; só o caminho dos atalhos precisa desta chamada extra.
   // Sempre resolvemos nome -> id contra a árvore da conta.
-  let pair = resolveCategoryPair(categoryTree, intent.type, intent.category, intent.subcategory)
+  let pair = resolveCategoryPair(categoryTree, intent.type, intent.category, intent.subcategory, intent.direction)
   if (!pair.categoryId && intent.description) {
-    const guess = await categorizeEntry(intent.description, intent.type, categoryTree)
-    pair = resolveCategoryPair(categoryTree, intent.type, guess.categoryName, guess.subcategoryName)
+    const guess = await categorizeEntry(intent.description, intent.type, intent.direction, categoryTree)
+    pair = resolveCategoryPair(categoryTree, intent.type, guess.categoryName, guess.subcategoryName, intent.direction)
   }
 
   // 4.5 Lançamento PJ pertence a uma unidade. Se a account tem mais de uma e a
@@ -316,6 +318,7 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
         kind: 'choose_workspace',
         entry: {
           type: 'pj',
+          direction: intent.direction,
           description: intent.description,
           amount: intent.amount,
           category: pair.categoryName,
@@ -324,7 +327,10 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
           raw_message: messageText,
         },
       })
-      await sendFinanceReply(senderPhone, buildChooseWorkspaceMessage(units, intent.description, intent.amount))
+      await sendFinanceReply(
+        senderPhone,
+        buildChooseWorkspaceMessage(units, intent.direction, intent.description, intent.amount)
+      )
       return
     }
   }
@@ -335,6 +341,7 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
     senderPhone,
     userId: membership.user_id,
     type: intent.type,
+    direction: intent.direction,
     description: intent.description,
     amount: intent.amount,
     categoryName: pair.categoryName,
@@ -355,6 +362,7 @@ async function persistEntryAndConfirm(
     senderPhone: string
     userId: string
     type: FinanceEntry['type']
+    direction: 'in' | 'out'
     description: string | null
     amount: number
     // Nome renomeado para não colidir com a coluna `category` do insert.
@@ -373,6 +381,7 @@ async function persistEntryAndConfirm(
       workspace_id: args.workspaceId,
       recorded_by_phone: args.senderPhone,
       type: args.type,
+      direction: args.direction,
       description: args.description,
       amount: args.amount,
       category: args.categoryName,
@@ -397,6 +406,7 @@ async function persistEntryAndConfirm(
 
   const monthEntries = await getEntries(args.accountId, {
     type: args.type,
+    direction: args.direction,
     category: null,
     categoryId: null,
     subcategoryId: null,
@@ -582,6 +592,7 @@ async function handlePendingChooseWorkspace(
     senderPhone,
     userId,
     type: 'pj',
+    direction: pending.entry.direction,
     description: pending.entry.description,
     amount: pending.entry.amount,
     categoryName: pending.entry.category,
@@ -615,14 +626,13 @@ async function getEntries(accountId: string, filters: QueryFilters): Promise<Fin
   const firstDay = new Date(ref.getFullYear(), ref.getMonth(), 1).toISOString().split('T')[0]
   const lastDay = new Date(ref.getFullYear(), ref.getMonth() + 1, 0).toISOString().split('T')[0]
 
-  // direction 'out': o agente do WhatsApp só fala de despesa por enquanto
-  // (registro e consulta de receita ficam para uma entrega futura). Sem este
-  // filtro, receita manual/espelho do ciclo entraria no "quanto gastei".
+  // direction vem sempre explícita do chamador — nunca mistura receita e
+  // despesa na mesma consulta ou no total pós-registro (ver QueryFilters).
   let query = supabase
     .from('finance_entries')
     .select('*')
     .eq('account_id', accountId)
-    .eq('direction', 'out')
+    .eq('direction', filters.direction)
     .gte('entry_date', firstDay)
     .lte('entry_date', lastDay)
 
