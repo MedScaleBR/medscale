@@ -144,8 +144,14 @@ export function FinanceClient({
           />
         </TabsContent>
 
-        <TabsContent value="categories" className="mt-4">
-          <FinanceCategoryManager kind={kind} onChanged={refresh} />
+        <TabsContent value="categories" className="mt-4 space-y-4">
+          <Tabs value={chartSide} onValueChange={(v) => setChartSide(v as 'out' | 'in')}>
+            <TabsList>
+              <TabsTrigger value="out">Despesas</TabsTrigger>
+              <TabsTrigger value="in">Receitas</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          <FinanceCategoryManager kind={kind} direction={chartSide} onChanged={refresh} />
         </TabsContent>
       </Tabs>
 

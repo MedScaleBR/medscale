@@ -63,9 +63,13 @@ type DialogState =
 
 export function FinanceCategoryManager({
   kind,
+  direction,
   onChanged,
 }: {
   kind: 'pf' | 'pj'
+  // Receita ou despesa — filtra quais categorias aparecem e em qual direção
+  // as novas são criadas.
+  direction: 'in' | 'out'
   // Chamado após cada mutação bem-sucedida. FinanceClient passa router.refresh()
   // para revalidar a árvore renderizada no servidor (picker/tabela/gráfico dos
   // Lançamentos). O load() local continua — a lista deste componente precisa
@@ -81,10 +85,10 @@ export function FinanceCategoryManager({
   const [nameValue, setNameValue] = useState('')
 
   const load = useCallback(async () => {
-    const r = await fetch(`/api/finance/categories?kind=${kind}`)
+    const r = await fetch(`/api/finance/categories?kind=${kind}&direction=${direction}`)
     const j = (await r.json()) as Record<string, NodeWithCount[]>
     setData(j[kind] ?? [])
-  }, [kind])
+  }, [kind, direction])
 
   useEffect(() => {
     // load() só chama setData depois do fetch (microtask), não em cascata síncrona.
@@ -125,7 +129,7 @@ export function FinanceCategoryManager({
   const create = async (name: string, parentId?: string): Promise<boolean> => {
     const ok = await send(
       '/api/finance/categories',
-      jsonInit('POST', { kind, name, parent_id: parentId ?? null }),
+      jsonInit('POST', { kind, direction, name, parent_id: parentId ?? null }),
     )
     if (ok) {
       await load()
