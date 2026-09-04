@@ -116,6 +116,22 @@ describe('processFinancialMessage — categorias', () => {
     expect((sel as RecordedCall).filters.some((f) => f[0] === 'eq' && f[1] === 'category')).toBe(false)
   })
 
+  it('consulta de gasto filtra direction=out — não deixa receita entrar no total', async () => {
+    financeConfig()
+    h.intent = {
+      kind: 'query', type: 'pf', category: 'Filhos', subcategory: null,
+      month: null, workspace: null,
+    }
+    const { processFinancialMessage } = await import('@/lib/finance/agent')
+    await processFinancialMessage(PARAMS.patientPhone, 'quanto gastei com os filhos esse mes')
+
+    const sel = state.supabase
+      .callsTo('finance_entries', 'select')
+      .find((c: RecordedCall) => c.filters.some((f) => f[0] === 'eq' && f[1] === 'category_id'))
+    expect(sel).toBeDefined()
+    expect(filterValue(sel as RecordedCall, 'eq', 'direction')).toBe('out')
+  })
+
   it('consulta com categoria fora da árvore responde "não encontrei" e não roda a query ampla', async () => {
     financeConfig()
     h.intent = {

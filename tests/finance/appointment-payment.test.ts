@@ -1,18 +1,22 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createSupabaseMock, filterValue, type SupabaseMock } from '../helpers/supabase-mock'
 
 const g = vi.hoisted(() => ({ supabase: null as unknown as SupabaseMock }))
+const mirror = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 
 vi.mock('@/lib/supabase/server', () => ({
   createAdminClient: () => g.supabase.client,
   createClient: async () => g.supabase.client,
 }))
+vi.mock('@/lib/revenue/finance-mirror', () => ({ mirrorPaidRevenueToFinance: mirror }))
 
 import {
   findTodayUnpaidByPatient,
   confirmAppointmentPayment,
   normalizeName,
 } from '@/lib/finance/appointment-payment'
+
+beforeEach(() => mirror.mockClear())
 
 const ENTRY_ID = 'aaaaaaaa-0000-0000-0000-000000000001'
 
@@ -101,5 +105,26 @@ describe('confirmAppointmentPayment', () => {
     })
     const ok = await confirmAppointmentPayment(g.supabase.client as never, ENTRY_ID, 'pix')
     expect(ok).toBe(false)
+    expect(mirror).not.toHaveBeenCalled()
+  })
+
+  it('chama o espelho com os campos da linha atualizada quando confirma', async () => {
+    g.supabase = createSupabaseMock({
+      workspaces: { select: { data: [{ id: 'w1' }] } },
+      revenue_entries: {
+        update: {
+          data: {
+            id: ENTRY_ID, account_id: 'a1', workspace_id: 'w1', amount: 350,
+            procedure_name: 'Consulta de rotina', paid_at: '2026-09-04T12:00:00.000Z',
+          },
+        },
+      },
+    })
+    const ok = await confirmAppointmentPayment(g.supabase.client as never, ENTRY_ID, 'pix')
+    expect(ok).toBe(true)
+    expect(mirror).toHaveBeenCalledWith(expect.anything(), {
+      id: ENTRY_ID, accountId: 'a1', workspaceId: 'w1', amount: 350,
+      procedureName: 'Consulta de rotina', paidAtIso: '2026-09-04T12:00:00.000Z',
+    })
   })
 })
