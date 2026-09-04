@@ -97,6 +97,16 @@ const INTENT_TOOL = {
           'Nome (ou trecho do nome) da unidade/clínica mencionada. Em lancamento PJ: a unidade a que o gasto pertence. ' +
           'Em consulta: a unidade pela qual filtrar. null quando a mensagem não cita nenhuma unidade.',
       },
+      // anyOf pelo mesmo motivo de `tipo` (API rejeita enum + null direto).
+      direcao: {
+        anyOf: [{ type: 'string', enum: ['entrada', 'saida'] }, { type: 'null' }],
+        description:
+          'Em lancamento/consulta: entrada = o médico RECEBEU dinheiro (ex: "recebi 500 de aluguel", ' +
+          '"entrou um pix de 200", "quanto recebi esse mês"). saida = o médico GASTOU (ex: "gastei 50", ' +
+          '"paguei 3500", "quanto gastei"). Um PACIENTE pagando uma consulta é sempre confirmar_pagamento, ' +
+          'nunca lancamento com direcao entrada, mesmo que o médico diga "recebi" ("recebi da Ana"). ' +
+          'null quando a mensagem não deixa claro (interpretado como saida).',
+      },
     },
     required: [
       'intencao',
@@ -110,6 +120,7 @@ const INTENT_TOOL = {
       'paciente',
       'horario',
       'forma_pagamento',
+      'direcao',
     ],
     additionalProperties: false,
   },
@@ -129,6 +140,7 @@ type IntentToolInput = {
   paciente: string | null
   horario: string | null
   forma_pagamento: PaymentMethodValue | null
+  direcao: 'entrada' | 'saida' | null
 }
 
 function buildSystem(today: string, tree: FinanceCategoryTree): string {
@@ -140,6 +152,8 @@ function buildSystem(today: string, tree: FinanceCategoryTree): string {
         return subs.length ? `${c.name} (${subs.join(', ')})` : c.name
       })
       .join('; ')
+  const byDirection = (nodes: FinanceCategoryTree['pf'], direction: 'in' | 'out') =>
+    fmt(nodes.filter((c) => c.direction === direction))
 
   return `Você interpreta mensagens que um médico manda para o assistente financeiro dele no WhatsApp.
 Sua única função é classificar a mensagem chamando a ferramenta ${TOOL_NAME}. Nunca responda em texto.
@@ -147,18 +161,22 @@ Sua única função é classificar a mensagem chamando a ferramenta ${TOOL_NAME}
 Hoje é ${today}. Use essa data para resolver referências como "esse mês", "mês passado", "em março".
 
 O médico separa as finanças em dois tipos:
-- pf (pessoa física): gastos pessoais dele — mercado, streaming, escola dos filhos, viagem.
-- pj (pessoa jurídica): gastos da clínica — aluguel da sala, equipamento, salário de secretária, imposto.
+- pf (pessoa física): pessoal dele — mercado, streaming, escola dos filhos, viagem, mas também salário/pró-labore, aluguel recebido, investimentos.
+- pj (pessoa jurídica): da clínica — aluguel da sala, equipamento, salário de secretária, imposto, mas também receita de consultas e procedimentos.
 
-Categorias válidas em pf: ${fmt(tree.pf)}
-Categorias válidas em pj: ${fmt(tree.pj)}
+Categorias de despesa em pf: ${byDirection(tree.pf, 'out')}
+Categorias de receita em pf: ${byDirection(tree.pf, 'in')}
+Categorias de despesa em pj: ${byDirection(tree.pj, 'out')}
+Categorias de receita em pj: ${byDirection(tree.pj, 'in')}
 
 Regras:
-- "confirmar_pagamento" é sobre um PACIENTE que pagou uma consulta ("o João pagou", "recebi da Ana"), não sobre um gasto do médico. Extraia o nome do paciente em "paciente"; o horário em "horario" se ele disser; a forma de pagamento em "forma_pagamento" se ele disser.
-- Em "consulta", se o médico citar um assunto (ex: "assinaturas", "aluguel"), mapeie para a categoria EXATA das listas acima. Se não citar, categoria = null.
+- "confirmar_pagamento" é sobre um PACIENTE que pagou uma consulta ("o João pagou", "recebi da Ana"), não sobre um gasto ou receita do médico. Extraia o nome do paciente em "paciente"; o horário em "horario" se ele disser; a forma de pagamento em "forma_pagamento" se ele disser.
+- "direcao" = entrada quando o médico RECEBEU dinheiro (ex: "recebi 500 de aluguel", "entrou um pix de 200", "quanto recebi esse mês"); saida quando ele GASTOU (ex: "gastei 50", "paguei 3500", "quanto gastei"). Se não estiver claro, use saida.
+- Em "lancamento" ou "consulta" com direcao entrada, use as listas de RECEITA acima para "categoria"; com direcao saida, use as listas de DESPESA. Nunca misture as duas.
+- Em "consulta", se o médico citar um assunto (ex: "assinaturas", "aluguel"), mapeie para a categoria EXATA da lista certa (despesa ou receita, conforme a direcao). Se não citar, categoria = null.
 - Em "lancamento", nunca invente valor: se a mensagem não tiver um número claro, use intencao "desconhecido".
-- Se a mensagem misturar vários gastos de uma vez, use "desconhecido" — o registro é de um gasto por vez.
-- Na dúvida entre pf e pj num lançamento, escolha pelo contexto clínico: sala, equipamento, funcionário e imposto são pj; o resto é pf.`
+- Se a mensagem misturar vários gastos/receitas de uma vez, use "desconhecido" — o registro é de um por vez.
+- Na dúvida entre pf e pj num lançamento, escolha pelo contexto clínico: sala, equipamento, funcionário, imposto e receita de consulta são pj; o resto é pf.`
 }
 
 // Interpreta linguagem natural. Só é chamada quando parseCommand não
@@ -202,6 +220,7 @@ function toIntent(input: IntentToolInput, raw: string): FinanceIntent {
       return {
         kind: 'entry',
         type,
+        direction: input.direcao === 'entrada' ? 'in' : 'out',
         description: input.descricao,
         amount: input.valor,
         // Aproveita a categoria/subcategoria que este mesmo passo já deduziu,
@@ -219,6 +238,7 @@ function toIntent(input: IntentToolInput, raw: string): FinanceIntent {
       return {
         kind: 'query',
         type: input.tipo,
+        direction: input.direcao === 'entrada' ? 'in' : 'out',
         // Nomes passam adiante; o agente resolve nome->id e valida.
         category: input.categoria?.trim() || null,
         subcategory: input.subcategoria?.trim() || null,
