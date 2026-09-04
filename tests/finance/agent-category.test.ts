@@ -33,8 +33,8 @@ vi.mock('@/lib/finance/categorize', () => ({ categorizeEntry: vi.fn(async () => 
 
 // Filhos -> Escola, ambos pf.
 const CAT_ROWS = [
-  { id: 'fil', account_id: PARAMS.accountId, kind: 'pf', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
-  { id: 'esc', account_id: PARAMS.accountId, kind: 'pf', parent_id: 'fil', name: 'Escola', sort_order: 0, is_archived: false, created_at: '' },
+  { id: 'fil', account_id: PARAMS.accountId, kind: 'pf', direction: 'out', parent_id: null, name: 'Filhos', sort_order: 0, is_archived: false, created_at: '' },
+  { id: 'esc', account_id: PARAMS.accountId, kind: 'pf', direction: 'out', parent_id: 'fil', name: 'Escola', sort_order: 0, is_archived: false, created_at: '' },
 ]
 
 function financeConfig() {
