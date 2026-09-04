@@ -8,6 +8,7 @@ export type CategoryValidationError =
   | { code: 'parent_not_found' }
   | { code: 'parent_not_root' }
   | { code: 'parent_kind_mismatch' }
+  | { code: 'parent_direction_mismatch' }
   | { code: 'duplicate_sibling' }
   | { code: 'would_orphan_children' }
   | { code: 'node_not_found' }
@@ -29,7 +30,7 @@ function flatten(tree: FinanceCategoryTree): Flat[] {
 // editar (com nodeId). Não toca o banco — a rota resolve a árvore antes.
 export function validateCategoryShape(
   tree: FinanceCategoryTree,
-  input: { kind: string; name: string; parentId: string | null; nodeId?: string }
+  input: { kind: string; direction: 'in' | 'out'; name: string; parentId: string | null; nodeId?: string }
 ): CategoryValidationError | null {
   if (input.kind !== 'pf' && input.kind !== 'pj') return { code: 'kind_invalid' }
   const name = input.name?.trim() ?? ''
@@ -46,6 +47,7 @@ export function validateCategoryShape(
     if (!parent) return { code: 'parent_not_found' }
     if (parent.parentId !== null) return { code: 'parent_not_root' }
     if (parent.kind !== input.kind) return { code: 'parent_kind_mismatch' }
+    if (parent.node.direction !== input.direction) return { code: 'parent_direction_mismatch' }
   }
 
   if (input.nodeId && input.parentId) {
@@ -57,6 +59,7 @@ export function validateCategoryShape(
   const siblingClash = flat.some(
     (f) =>
       f.kind === input.kind &&
+      f.node.direction === input.direction &&
       f.parentId === (input.parentId ?? null) &&
       f.node.id !== input.nodeId &&
       normalizeCategoryName(f.node.name) === target
