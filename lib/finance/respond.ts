@@ -23,6 +23,7 @@ Sempre confirme o que foi registrado e mostre o total do mês na mesma resposta.
 
 export async function buildConfirmationMessage(entry: FinanceEntry, monthTotal: number): Promise<string> {
   const typeLabel = entry.type === 'pf' ? 'Pessoal (PF)' : 'Clínica (PJ)'
+  const direcaoLabel = entry.direction === 'in' ? 'Receita' : 'Despesa'
   const desc = entry.description ?? 'Sem descrição'
   const cat = entry.category ?? 'Outros'
   const valor = formatBRL(entry.amount)
@@ -31,10 +32,11 @@ export async function buildConfirmationMessage(entry: FinanceEntry, monthTotal: 
 
   const prompt = `Confirme este registro de forma curta:
 Tipo: ${typeLabel}
+Direção: ${direcaoLabel}
 Descrição: ${desc}
 Categoria: ${cat}
 Valor: ${valor}
-Total ${typeLabel} em ${mes}: ${total}`
+Total de ${direcaoLabel.toLowerCase()} em ${typeLabel} em ${mes}: ${total}`
 
   const msg = await anthropic.messages.create({
     model: 'claude-sonnet-4-5',
@@ -48,6 +50,9 @@ Total ${typeLabel} em ${mes}: ${total}`
 
 export interface QueryFilters {
   type: FinanceEntryType | null
+  // Entrada (receita) ou saída (despesa) — sem menção clara na mensagem,
+  // o agente resolve 'out' (comportamento histórico de "quanto gastei").
+  direction: 'in' | 'out'
   // Nome da categoria resolvida, usado só no texto da resposta
   // (describeScope / groupByCategory).
   category: string | null
@@ -141,8 +146,13 @@ export function buildHelpMessage(): string {
 "gastei 35 na Netflix"
 "paguei 3500 de aluguel do consultório"
 
+💰 Registrar uma receita:
+"recebi 3000 de aluguel"
+"entrou um pix de 500 de dividendos"
+
 📊 Consultar:
 "quanto gastei esse mês?"
+"quanto recebi esse mês?"
 "me liste meus gastos em assinaturas"
 "quanto a clínica gastou em março?"
 "quanto a unidade Moema gastou esse mês?"
@@ -152,11 +162,14 @@ export function buildHelpMessage(): string {
 
 Se preferir atalhos, também funcionam:
 /pf Netflix 35
+/pf+ Aluguel recebido 3000
 /pj Aluguel 3500
+/pj+ 3000
 /resumo pf
+/resumo pf+
 /desfazer
 
-Os gastos são registrados na data de hoje. Dúvidas? Fale com o suporte MedScale.`
+Gastos e receitas são registrados na data de hoje. Dúvidas? Fale com o suporte MedScale.`
 }
 
 export function buildUnknownMessage(): string {
@@ -184,13 +197,15 @@ export function buildRevenueCycleInactiveMessage(): string {
 
 export function buildChooseWorkspaceMessage(
   units: { name: string }[],
+  direction: 'in' | 'out',
   entryDescription: string | null,
   amount: number
 ): string {
   const desc = entryDescription ?? 'lançamento'
+  const rotulo = direction === 'in' ? 'Essa receita da clínica' : 'Esse gasto da clínica'
   const list = units.map((u, i) => `${i + 1}. ${u.name}`).join('\n')
   return (
-    `Esse gasto da clínica (${desc} — ${formatBRL(amount)}) é de qual unidade?\n${list}\n\n` +
+    `${rotulo} (${desc} — ${formatBRL(amount)}) é de qual unidade?\n${list}\n\n` +
     `Responda com o nome ou o número da unidade.`
   )
 }
@@ -252,11 +267,13 @@ export function buildUnsupportedTypeMessage(): string {
   return `Por favor, envie apenas mensagens de texto. Digite /ajuda para ver os comandos.`
 }
 
-// "gastos pessoais (PF) em Assinaturas em agosto de 2026" — usado tanto no
-// prompt do modelo quanto na resposta de "nenhum resultado".
+// "gastos pessoais (PF) em Assinaturas em agosto de 2026" (ou "receitas..."
+// quando direction:'in') — usado tanto no prompt do modelo quanto na
+// resposta de "nenhum resultado".
 function describeScope(filters: QueryFilters): string {
+  const base = filters.direction === 'in' ? 'receitas' : 'gastos'
   const tipo =
-    filters.type === 'pf' ? 'gastos pessoais (PF)' : filters.type === 'pj' ? 'gastos da clínica (PJ)' : 'gastos'
+    filters.type === 'pf' ? `${base} pessoais (PF)` : filters.type === 'pj' ? `${base} da clínica (PJ)` : base
   const categoria = filters.category ? ` em ${filters.category}` : ''
   const unidade = filters.unitLabel ? ` da ${filters.unitLabel}` : ''
   return `${tipo}${categoria}${unidade} em ${monthLabel(filters.month)}`

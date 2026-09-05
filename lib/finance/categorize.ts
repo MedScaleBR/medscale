@@ -5,9 +5,16 @@ import type { FinanceCategoryTree } from './categories'
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
 // Opções que o modelo pode escolher, a partir da árvore da conta (só
-// não-arquivadas). Cada linha é "Raiz" ou "Raiz > Subcategoria".
-export function buildCategorizePrompt(type: FinanceEntryType, tree: FinanceCategoryTree): string {
-  const roots = (type === 'pf' ? tree.pf : tree.pj).filter((c) => !c.isArchived)
+// não-arquivadas, e só as da direção pedida). Cada linha é "Raiz" ou
+// "Raiz > Subcategoria".
+export function buildCategorizePrompt(
+  type: FinanceEntryType,
+  direction: 'in' | 'out',
+  tree: FinanceCategoryTree
+): string {
+  const roots = (type === 'pf' ? tree.pf : tree.pj).filter(
+    (c) => !c.isArchived && c.direction === direction
+  )
   const lines: string[] = []
   for (const root of roots) {
     lines.push(root.name)
@@ -24,9 +31,10 @@ export function buildCategorizePrompt(type: FinanceEntryType, tree: FinanceCateg
 export async function categorizeEntry(
   description: string,
   type: FinanceEntryType,
+  direction: 'in' | 'out',
   tree: FinanceCategoryTree
 ): Promise<{ categoryName: string | null; subcategoryName: string | null }> {
-  const options = buildCategorizePrompt(type, tree)
+  const options = buildCategorizePrompt(type, direction, tree)
   if (!options) return { categoryName: null, subcategoryName: null }
 
   const message = await anthropic.messages.create({
@@ -45,7 +53,7 @@ export async function categorizeEntry(
   if (!valid.has(raw)) {
     // modelo saiu do script — tenta só a raiz
     const rootOnly = (type === 'pf' ? tree.pf : tree.pj).find(
-      (c) => !c.isArchived && c.name.toLowerCase() === (cat ?? '').toLowerCase()
+      (c) => !c.isArchived && c.direction === direction && c.name.toLowerCase() === (cat ?? '').toLowerCase()
     )
     return { categoryName: rootOnly?.name ?? null, subcategoryName: null }
   }

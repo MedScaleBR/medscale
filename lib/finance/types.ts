@@ -40,6 +40,9 @@ export type FinanceIntent =
   | {
       kind: 'entry'
       type: FinanceEntryType
+      // Entrada (receita) ou saída (despesa). Atalho `/pf`/`/pj` e "gastei
+      // X" → 'out'; `/pf+`/`/pj+` e "recebi X" → 'in'.
+      direction: 'in' | 'out'
       description: string | null
       amount: number
       category: string | null
@@ -51,8 +54,10 @@ export type FinanceIntent =
       workspaceHint: string | null
     }
   // `type: null` = PF e PJ juntos; `category: null` = todas; `month: null` = mês atual.
-  // `workspace: null` = consolidado (todas as unidades).
-  | { kind: 'query'; type: FinanceEntryType | null; category: string | null; subcategory: string | null; month: string | null; workspace: string | null }
+  // `workspace: null` = consolidado (todas as unidades). `direction` segue a
+  // mesma lógica do `entry`: sem menção clara na mensagem, 'out' (mantém o
+  // comportamento de "quanto gastei" como pergunta padrão).
+  | { kind: 'query'; type: FinanceEntryType | null; direction: 'in' | 'out'; category: string | null; subcategory: string | null; month: string | null; workspace: string | null }
   // Ciclo de receita: o médico avisa que um paciente pagou uma consulta.
   // Sempre passa por confirmação explícita antes de persistir.
   | { kind: 'confirm_payment'; patient: string | null; time: string | null; method: RevenuePaymentMethod | null }

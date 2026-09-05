@@ -9,20 +9,36 @@ const TREE: FinanceCategoryTree = {
     ] },
     { id: 'arq', name: 'Arquivada', direction: 'out', sortOrder: 1, isArchived: true, children: [] },
     { id: 'out', name: 'Outros', direction: 'out', sortOrder: 2, isArchived: false, children: [] },
+    { id: 'sal', name: 'Salário / Pró-labore', direction: 'in', sortOrder: 0, isArchived: false, children: [] },
   ],
-  pj: [{ id: 'alu', name: 'Aluguel', direction: 'out', sortOrder: 0, isArchived: false, children: [] }],
+  pj: [
+    { id: 'alu', name: 'Aluguel', direction: 'out', sortOrder: 0, isArchived: false, children: [] },
+    { id: 'rec', name: 'Consultas particulares', direction: 'in', sortOrder: 0, isArchived: false, children: [] },
+  ],
 }
 
 describe('buildCategorizePrompt', () => {
-  it('lista Categoria > Subcategoria e raízes sozinhas, sem arquivadas', () => {
-    const p = buildCategorizePrompt('pf', TREE)
+  it('lista Categoria > Subcategoria e raízes sozinhas, sem arquivadas (despesa)', () => {
+    const p = buildCategorizePrompt('pf', 'out', TREE)
     expect(p).toContain('Filhos > Escola')
     expect(p).toContain('Filhos')
     expect(p).toContain('Outros')
     expect(p).not.toContain('Arquivada')
+    expect(p).not.toContain('Salário / Pró-labore')
   })
   it('usa o kind certo', () => {
-    expect(buildCategorizePrompt('pj', TREE)).toContain('Aluguel')
-    expect(buildCategorizePrompt('pj', TREE)).not.toContain('Filhos')
+    expect(buildCategorizePrompt('pj', 'out', TREE)).toContain('Aluguel')
+    expect(buildCategorizePrompt('pj', 'out', TREE)).not.toContain('Filhos')
+  })
+  it('filtra pela direção — só categorias de receita quando direction=in', () => {
+    const p = buildCategorizePrompt('pf', 'in', TREE)
+    expect(p).toContain('Salário / Pró-labore')
+    expect(p).not.toContain('Filhos')
+    expect(p).not.toContain('Outros')
+  })
+  it('receita PJ', () => {
+    const p = buildCategorizePrompt('pj', 'in', TREE)
+    expect(p).toContain('Consultas particulares')
+    expect(p).not.toContain('Aluguel')
   })
 })
