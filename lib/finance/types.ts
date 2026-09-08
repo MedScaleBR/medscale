@@ -30,29 +30,36 @@ export type FinanceEntry = {
   created_at: string
 }
 
+// Um lançamento (gasto ou receita) extraído de uma mensagem. Uma mensagem
+// pode citar mais de um; hoje o fluxo processa 1 por vez.
+export interface EntryDraft {
+  // null quando a mensagem não deixa claro PF ou PJ. O agente ainda trata
+  // null como 'pf' (padrão menos danoso); a Task 2 passa a perguntar.
+  type: FinanceEntryType | null
+  // Entrada (receita) ou saída (despesa). Atalho `/pf`/`/pj` e "gastei X" →
+  // 'out'; `/pf+`/`/pj+` e "recebi X" → 'in'.
+  direction: 'in' | 'out'
+  // O que foi comprado/recebido, curto (ex: "Netflix", "Aluguel"). null se não der.
+  description: string | null
+  // Valor em reais, positivo. null quando a mensagem não traz um número claro.
+  amount: number | null
+  // Nome da categoria deduzido (linguagem natural) ou null (atalhos). O agente
+  // resolve nome -> id contra a árvore da conta.
+  category: string | null
+  // Nome da subcategoria deduzido (linguagem natural) ou null. Mesma lógica.
+  subcategory: string | null
+  // Trecho do nome da unidade mencionado na mensagem (PJ). O agente resolve
+  // contra as unidades reais da account; null = não mencionou.
+  workspaceHint: string | null
+}
+
 // O que o owner quis dizer, venha de um comando com barra (parser.ts, regex)
 // ou de linguagem natural (interpret.ts, via Claude). Os dois produzem este
 // mesmo tipo, então o agente executa um caminho só.
 export type FinanceIntent =
-  // `category` vem preenchida quando a interpretação por linguagem natural
-  // já deduziu uma categoria válida; null (caminho dos atalhos) faz o agente
-  // categorizar num passo à parte. `subcategory` segue a mesma lógica.
-  | {
-      kind: 'entry'
-      type: FinanceEntryType
-      // Entrada (receita) ou saída (despesa). Atalho `/pf`/`/pj` e "gastei
-      // X" → 'out'; `/pf+`/`/pj+` e "recebi X" → 'in'.
-      direction: 'in' | 'out'
-      description: string | null
-      amount: number
-      category: string | null
-      // Nome da subcategoria deduzido (linguagem natural) ou null. O agente
-      // resolve nome -> id contra a árvore da conta.
-      subcategory: string | null
-      // Trecho do nome da unidade mencionado na mensagem (PJ). O agente
-      // resolve contra as unidades reais da account; null = não mencionou.
-      workspaceHint: string | null
-    }
+  // `entries` sempre tem ≥ 1 item quando `kind === 'entry'`. Hoje o agente
+  // consome só o primeiro (1 lançamento por mensagem).
+  | { kind: 'entry'; entries: EntryDraft[] }
   // `type: null` = PF e PJ juntos; `category: null` = todas; `month: null` = mês atual.
   // `workspace: null` = consolidado (todas as unidades). `direction` segue a
   // mesma lógica do `entry`: sem menção clara na mensagem, 'out' (mantém o

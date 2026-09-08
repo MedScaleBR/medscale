@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { FinanceIntent, FinanceEntryType } from './types'
+import type { FinanceIntent, FinanceEntryType, EntryDraft } from './types'
 import type { FinanceCategoryTree } from './categories'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -11,6 +11,30 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 const MODEL = 'claude-opus-5'
 
 const TOOL_NAME = 'registrar_intencao'
+
+// Um item de `lancamentos[]`: um gasto ou receita citado na mensagem. Os
+// campos de tipo/categoria/unidade/direção que antes ficavam no topo da
+// ferramenta vivem aqui agora — um conjunto por lançamento.
+const LANCAMENTO_ITEM = {
+  type: 'object' as const,
+  properties: {
+    tipo: {
+      anyOf: [{ type: 'string', enum: ['pf', 'pj'] }, { type: 'null' }],
+      description: 'pf = gasto/receita pessoal do médico. pj = da clínica. null quando a mensagem não deixa claro.',
+    },
+    descricao: { type: ['string', 'null'], description: 'O que foi comprado/recebido, curto (ex: "Netflix", "Aluguel"). null se não der.' },
+    valor: { type: ['number', 'null'], description: 'Valor em reais, positivo. null quando a mensagem não traz um número claro.' },
+    categoria: { type: ['string', 'null'], description: 'A categoria EXATA da lista fornecida para o tipo/direção do item. null se não der.' },
+    subcategoria: { type: ['string', 'null'], description: 'A subcategoria EXATA da árvore, quando fizer sentido. null se não houver.' },
+    unidade: { type: ['string', 'null'], description: 'Nome (ou trecho) da unidade/clínica, se o médico citar. null se não citar.' },
+    direcao: {
+      anyOf: [{ type: 'string', enum: ['entrada', 'saida'] }, { type: 'null' }],
+      description: 'entrada = o médico RECEBEU dinheiro. saida = o médico GASTOU. null é tratado como saida.',
+    },
+  },
+  required: ['tipo', 'descricao', 'valor', 'categoria', 'subcategoria', 'unidade', 'direcao'],
+  additionalProperties: false,
+}
 
 // strict: true garante que o input bate exatamente com o schema — sem isso
 // um campo faltando ou um enum inventado só apareceria em runtime.
@@ -39,6 +63,13 @@ const INTENT_TOOL = {
           'desfazer = apagar o último lançamento. ajuda = quer saber como usar. ' +
           'conversa = saudação/agradecimento sem pedido. desconhecido = não dá para saber.',
       },
+      lancamentos: {
+        type: 'array',
+        items: LANCAMENTO_ITEM,
+        description:
+          'Em intencao "lancamento": um item para cada gasto ou receita citado na ' +
+          'mensagem (pode ser mais de um). Vazio ([]) em qualquer outra intenção.',
+      },
       paciente: {
         type: ['string', 'null'],
         description: 'Em confirmar_pagamento: o nome do paciente que pagou, como o médico escreveu. Senão null.',
@@ -65,62 +96,41 @@ const INTENT_TOOL = {
       tipo: {
         anyOf: [{ type: 'string', enum: ['pf', 'pj'] }, { type: 'null' }],
         description:
-          'pf = gasto pessoal do médico. pj = gasto da clínica. null quando a mensagem ' +
-          'não deixa claro, ou quando a consulta é sobre os dois juntos.',
-      },
-      descricao: {
-        type: ['string', 'null'],
-        description: 'Em lancamento: o que foi comprado, curto (ex: "Netflix", "Aluguel"). Senão null.',
-      },
-      valor: {
-        type: ['number', 'null'],
-        description: 'Em lancamento: o valor em reais, positivo. Senão null.',
+          'Em consulta: pf, pj, ou null quando a consulta é sobre os dois juntos. ' +
+          'Em lancamento o tipo vai em cada item de lancamentos, não aqui.',
       },
       categoria: {
         type: ['string', 'null'],
         description:
-          'A categoria EXATA da lista fornecida. Em lancamento: a categoria do gasto. ' +
-          'Em consulta: a categoria pela qual filtrar, ou null quando a consulta é sobre tudo.',
+          'Em consulta: a categoria EXATA da lista fornecida pela qual filtrar, ou null quando a consulta é sobre tudo.',
       },
       subcategoria: {
         type: ['string', 'null'],
         description:
-          'Em lancamento/consulta: a subcategoria EXATA da árvore, quando fizer sentido (ex: "Escola" dentro de "Filhos"). null se não houver.',
+          'Em consulta: a subcategoria EXATA da árvore, quando fizer sentido (ex: "Escola" dentro de "Filhos"). null se não houver.',
       },
       mes: {
         type: ['string', 'null'],
-        description: 'Mês da consulta no formato YYYY-MM. null quando é o mês atual.',
+        description: 'Em consulta: o mês no formato YYYY-MM. null quando é o mês atual.',
       },
       unidade: {
         type: ['string', 'null'],
         description:
-          'Nome (ou trecho do nome) da unidade/clínica mencionada. Em lancamento PJ: a unidade a que o gasto pertence. ' +
-          'Em consulta: a unidade pela qual filtrar. null quando a mensagem não cita nenhuma unidade.',
+          'Em consulta: nome (ou trecho do nome) da unidade/clínica pela qual filtrar. null quando a mensagem não cita nenhuma unidade.',
       },
       // anyOf pelo mesmo motivo de `tipo` (API rejeita enum + null direto).
       direcao: {
         anyOf: [{ type: 'string', enum: ['entrada', 'saida'] }, { type: 'null' }],
         description:
-          'Em lancamento/consulta: entrada = o médico RECEBEU dinheiro (ex: "recebi 500 de aluguel", ' +
-          '"entrou um pix de 200", "quanto recebi esse mês"). saida = o médico GASTOU (ex: "gastei 50", ' +
-          '"paguei 3500", "quanto gastei"). Um PACIENTE pagando uma consulta é sempre confirmar_pagamento, ' +
-          'nunca lancamento com direcao entrada, mesmo que o médico diga "recebi" ("recebi da Ana"). ' +
-          'null quando a mensagem não deixa claro (interpretado como saida).',
+          'Em consulta: entrada = o médico RECEBEU dinheiro (ex: "quanto recebi esse mês"); ' +
+          'saida = o médico GASTOU (ex: "quanto gastei"). null quando a mensagem não deixa ' +
+          'claro (interpretado como saida). Em lancamento a direção vai em cada item de lancamentos.',
       },
     },
     required: [
-      'intencao',
-      'tipo',
-      'descricao',
-      'valor',
-      'categoria',
-      'subcategoria',
-      'mes',
-      'unidade',
-      'paciente',
-      'horario',
-      'forma_pagamento',
-      'direcao',
+      'intencao', 'lancamentos',
+      'tipo', 'categoria', 'subcategoria', 'unidade', 'direcao',
+      'mes', 'paciente', 'horario', 'forma_pagamento',
     ],
     additionalProperties: false,
   },
@@ -128,19 +138,28 @@ const INTENT_TOOL = {
 
 type PaymentMethodValue = 'pix' | 'cartao_credito' | 'cartao_debito' | 'dinheiro' | 'transferencia' | 'outro'
 
-type IntentToolInput = {
-  intencao: 'lancamento' | 'consulta' | 'confirmar_pagamento' | 'desfazer' | 'ajuda' | 'conversa' | 'desconhecido'
+type LancamentoItem = {
   tipo: FinanceEntryType | null
   descricao: string | null
   valor: number | null
   categoria: string | null
   subcategoria: string | null
-  mes: string | null
   unidade: string | null
+  direcao: 'entrada' | 'saida' | null
+}
+
+type IntentToolInput = {
+  intencao: 'lancamento' | 'consulta' | 'confirmar_pagamento' | 'desfazer' | 'ajuda' | 'conversa' | 'desconhecido'
+  lancamentos: LancamentoItem[]
+  tipo: FinanceEntryType | null
+  categoria: string | null
+  subcategoria: string | null
+  unidade: string | null
+  direcao: 'entrada' | 'saida' | null
+  mes: string | null
   paciente: string | null
   horario: string | null
   forma_pagamento: PaymentMethodValue | null
-  direcao: 'entrada' | 'saida' | null
 }
 
 function buildSystem(today: string, tree: FinanceCategoryTree): string {
@@ -209,29 +228,29 @@ export async function interpretMessage(
 function toIntent(input: IntentToolInput, raw: string): FinanceIntent {
   switch (input.intencao) {
     case 'lancamento': {
-      // O schema permite valor null; um lançamento sem valor (ou com valor
-      // inválido) não pode virar linha no banco.
-      if (typeof input.valor !== 'number' || !isFinite(input.valor) || input.valor <= 0) {
-        return { kind: 'unknown', raw }
+      const drafts: EntryDraft[] = []
+      for (const item of input.lancamentos) {
+        // Task 1: comportamento de hoje — sem número claro, a mensagem inteira é unknown.
+        if (typeof item.valor !== 'number' || !isFinite(item.valor) || item.valor <= 0) {
+          return { kind: 'unknown', raw }
+        }
+        drafts.push({
+          // Sem tipo explícito, PF é o padrão menos danoso (gasto pessoal é o caso comum).
+          type: item.tipo ?? 'pf',
+          direction: item.direcao === 'entrada' ? 'in' : 'out',
+          description: item.descricao?.trim() || null,
+          amount: item.valor,
+          // Aproveita a categoria/subcategoria que este mesmo passo já deduziu,
+          // evitando uma segunda chamada ao modelo (categorizeEntry). Passa os
+          // NOMES adiante — o agente resolve nome->id contra a árvore e valida.
+          category: item.categoria?.trim() || null,
+          subcategory: item.subcategoria?.trim() || null,
+          // Só PJ pertence a uma unidade; PF ignora esse campo mais adiante.
+          workspaceHint: item.unidade?.trim() || null,
+        })
       }
-      // Sem tipo explícito, PF é o padrão menos danoso: gasto pessoal é o
-      // caso mais comum e não polui o fechamento da clínica.
-      const type = input.tipo ?? 'pf'
-      return {
-        kind: 'entry',
-        type,
-        direction: input.direcao === 'entrada' ? 'in' : 'out',
-        description: input.descricao,
-        amount: input.valor,
-        // Aproveita a categoria/subcategoria que este mesmo passo já deduziu,
-        // evitando uma segunda chamada ao modelo (categorizeEntry) no caminho
-        // de linguagem natural. Passa os NOMES adiante — o agente resolve
-        // nome->id contra a árvore da conta e valida.
-        category: input.categoria?.trim() || null,
-        subcategory: input.subcategoria?.trim() || null,
-        // Só PJ pertence a uma unidade; PF é sempre consolidado.
-        workspaceHint: type === 'pj' ? input.unidade?.trim() || null : null,
-      }
+      if (drafts.length === 0) return { kind: 'unknown', raw }
+      return { kind: 'entry', entries: drafts }
     }
 
     case 'consulta':

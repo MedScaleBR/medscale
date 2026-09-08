@@ -21,34 +21,40 @@ const TREE: FinanceCategoryTree = {
   ],
 }
 
-interface ToolInput {
-  intencao: 'lancamento' | 'consulta' | 'confirmar_pagamento' | 'desfazer' | 'ajuda' | 'conversa' | 'desconhecido'
+interface LancamentoItem {
   tipo: 'pf' | 'pj' | null
   descricao: string | null
   valor: number | null
   categoria: string | null
   subcategoria: string | null
-  mes: string | null
   unidade: string | null
+  direcao: 'entrada' | 'saida' | null
+}
+
+interface ToolInput {
+  intencao: 'lancamento' | 'consulta' | 'confirmar_pagamento' | 'desfazer' | 'ajuda' | 'conversa' | 'desconhecido'
+  lancamentos: LancamentoItem[]
+  tipo: 'pf' | 'pj' | null
+  categoria: string | null
+  subcategoria: string | null
+  unidade: string | null
+  direcao: 'entrada' | 'saida' | null
+  mes: string | null
   paciente: string | null
   horario: string | null
   forma_pagamento: string | null
-  direcao: 'entrada' | 'saida' | null
+}
+
+const ITEM: LancamentoItem = {
+  tipo: 'pf', descricao: 'Mercado', valor: 50,
+  categoria: null, subcategoria: null, unidade: null, direcao: 'saida',
 }
 
 const BASE_INPUT: ToolInput = {
   intencao: 'lancamento',
-  tipo: 'pf',
-  descricao: 'Aluguel recebido',
-  valor: 3000,
-  categoria: null,
-  subcategoria: null,
-  mes: null,
-  unidade: null,
-  paciente: null,
-  horario: null,
-  forma_pagamento: null,
-  direcao: 'entrada',
+  lancamentos: [ { ...ITEM } ],
+  tipo: null, categoria: null, subcategoria: null, unidade: null, direcao: null,
+  mes: null, paciente: null, horario: null, forma_pagamento: null,
 }
 
 function toolResponse(overrides: Partial<ToolInput>) {
@@ -60,27 +66,58 @@ function toolResponse(overrides: Partial<ToolInput>) {
 beforeEach(() => createMock.mockReset())
 
 describe('interpretMessage — direction', () => {
+  it('lancamento vira entry com um item em entries[]', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({ lancamentos: [{ ...ITEM, descricao: 'Mercado', valor: 50, direcao: 'saida' }] })
+    )
+    const intent = await interpretMessage('gastei 50 no mercado', '2026-09-04', TREE)
+    expect(intent).toMatchObject({ kind: 'entry' })
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries).toHaveLength(1)
+    expect(intent.entries[0]).toMatchObject({ type: 'pf', direction: 'out', amount: 50, description: 'Mercado' })
+  })
+
+  it('lancamento sem valor claro (com descrição) vira unknown — comportamento de hoje', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({ lancamentos: [{ ...ITEM, descricao: 'Mercado', valor: null, direcao: 'saida' }] })
+    )
+    const intent = await interpretMessage('comprei umas coisas no mercado', '2026-09-04', TREE)
+    expect(intent).toMatchObject({ kind: 'unknown' })
+  })
+
   it('lancamento com direcao=entrada vira entry direction=in', async () => {
-    createMock.mockResolvedValue(toolResponse({ direcao: 'entrada' }))
+    createMock.mockResolvedValue(
+      toolResponse({ lancamentos: [{ ...ITEM, descricao: 'Aluguel recebido', valor: 3000, direcao: 'entrada' }] })
+    )
     const intent = await interpretMessage('recebi 3000 de aluguel', '2026-09-04', TREE)
-    expect(intent).toMatchObject({ kind: 'entry', direction: 'in', amount: 3000 })
+    expect(intent).toMatchObject({ kind: 'entry' })
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries[0]).toMatchObject({ direction: 'in', amount: 3000 })
   })
 
   it('lancamento com direcao=saida vira entry direction=out', async () => {
-    createMock.mockResolvedValue(toolResponse({ direcao: 'saida', descricao: 'Mercado', valor: 50 }))
+    createMock.mockResolvedValue(
+      toolResponse({ lancamentos: [{ ...ITEM, descricao: 'Mercado', valor: 50, direcao: 'saida' }] })
+    )
     const intent = await interpretMessage('gastei 50 no mercado', '2026-09-04', TREE)
-    expect(intent).toMatchObject({ kind: 'entry', direction: 'out', amount: 50 })
+    expect(intent).toMatchObject({ kind: 'entry' })
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries[0]).toMatchObject({ direction: 'out', amount: 50 })
   })
 
   it('lancamento com direcao null vira entry direction=out (default)', async () => {
-    createMock.mockResolvedValue(toolResponse({ direcao: null }))
+    createMock.mockResolvedValue(
+      toolResponse({ lancamentos: [{ ...ITEM, descricao: null, valor: 30, direcao: null }] })
+    )
     const intent = await interpretMessage('30 mercado', '2026-09-04', TREE)
-    expect(intent).toMatchObject({ kind: 'entry', direction: 'out' })
+    expect(intent).toMatchObject({ kind: 'entry' })
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries[0]).toMatchObject({ direction: 'out' })
   })
 
   it('consulta com direcao=entrada vira query direction=in', async () => {
     createMock.mockResolvedValue(
-      toolResponse({ intencao: 'consulta', direcao: 'entrada', descricao: null, valor: null })
+      toolResponse({ intencao: 'consulta', direcao: 'entrada', lancamentos: [] })
     )
     const intent = await interpretMessage('quanto recebi esse mês', '2026-09-04', TREE)
     expect(intent).toMatchObject({ kind: 'query', direction: 'in' })
@@ -88,7 +125,7 @@ describe('interpretMessage — direction', () => {
 
   it('consulta com direcao=saida vira query direction=out', async () => {
     createMock.mockResolvedValue(
-      toolResponse({ intencao: 'consulta', direcao: 'saida', descricao: null, valor: null })
+      toolResponse({ intencao: 'consulta', direcao: 'saida', lancamentos: [] })
     )
     const intent = await interpretMessage('quanto gastei esse mês', '2026-09-04', TREE)
     expect(intent).toMatchObject({ kind: 'query', direction: 'out' })
@@ -97,7 +134,7 @@ describe('interpretMessage — direction', () => {
   it('confirmar_pagamento não carrega direction (não é entry/query)', async () => {
     createMock.mockResolvedValue(
       toolResponse({
-        intencao: 'confirmar_pagamento', direcao: 'entrada', paciente: 'João', descricao: null, valor: null,
+        intencao: 'confirmar_pagamento', direcao: 'entrada', paciente: 'João', lancamentos: [],
       })
     )
     const intent = await interpretMessage('o João pagou a consulta', '2026-09-04', TREE)

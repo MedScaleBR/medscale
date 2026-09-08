@@ -52,16 +52,19 @@ export function parseCommand(raw: string): FinanceIntent {
       if (!isNaN(amount) && amount > 0) {
         return {
           kind: 'entry',
-          type,
-          direction,
-          description: descRaw.length > 0 ? descRaw : null,
-          amount,
-          // Atalho não deduz categoria — quem categoriza é o agente.
-          category: null,
-          // Atalho não deduz subcategoria — quem categoriza é o agente.
-          subcategory: null,
-          // Atalho não menciona unidade; PJ multi-unidade cai na pergunta.
-          workspaceHint: null,
+          entries: [
+            {
+              type,
+              direction,
+              description: descRaw.length > 0 ? descRaw : null,
+              amount,
+              // Atalho não deduz categoria/subcategoria — quem categoriza é o agente.
+              category: null,
+              subcategory: null,
+              // Atalho não menciona unidade; PJ multi-unidade cai na pergunta.
+              workspaceHint: null,
+            },
+          ],
         }
       }
     }

@@ -34,7 +34,7 @@ import {
   summarizeAccountToday,
   type AppointmentPaymentMatch,
 } from './appointment-payment'
-import type { FinanceEntry } from './types'
+import type { FinanceEntry, FinanceEntryType } from './types'
 import type { RevenuePaymentMethod } from '@/types/database'
 
 // Confirmação de pagamento de consulta pendente de "sim" do owner, guardada
@@ -295,62 +295,70 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
     return
   }
 
-  // 4. Categorizar. A interpretação por linguagem natural já traz a
-  // categoria; só o caminho dos atalhos precisa desta chamada extra.
-  // Sempre resolvemos nome -> id contra a árvore da conta.
-  let pair = resolveCategoryPair(categoryTree, intent.type, intent.category, intent.subcategory, intent.direction)
-  if (!pair.categoryId && intent.description) {
-    const guess = await categorizeEntry(intent.description, intent.type, intent.direction, categoryTree)
-    pair = resolveCategoryPair(categoryTree, intent.type, guess.categoryName, guess.subcategoryName, intent.direction)
-  }
+  // Task 1: `intent.entries` sempre tem 1 item hoje. O laço prepara o terreno
+  // para multi-lançamento (Task 2); por ora um `return` interno (fluxo
+  // choose_workspace) ainda aborta a mensagem inteira — comportamento de hoje.
+  for (const draft of intent.entries) {
+    // Casts `as FinanceEntryType` / `as number`: nesta task `toIntent` nunca
+    // emite null nesses campos; a Task 2 os remove ao introduzir a pergunta.
 
-  // 4.5 Lançamento PJ pertence a uma unidade. Se a account tem mais de uma e a
-  // mensagem não deixou claro qual, pergunta antes de gravar. PF é sempre
-  // consolidado (workspace_id null).
-  let workspaceId: string | null = null
-  if (intent.type === 'pj') {
-    const units = await listAccountUnits(supabase, accountId)
-    const resolved = resolveUnit(units, intent.workspaceHint)
-    if (resolved.status === 'one') {
-      workspaceId = resolved.unit.id
-    } else {
-      await setPendingFinanceSession(supabase, accountId, senderPhone, {
-        kind: 'choose_workspace',
-        entry: {
-          type: 'pj',
-          direction: intent.direction,
-          description: intent.description,
-          amount: intent.amount,
-          category: pair.categoryName,
-          category_id: pair.categoryId,
-          subcategory_id: pair.subcategoryId,
-          raw_message: messageText,
-        },
-      })
-      await sendFinanceReply(
-        senderPhone,
-        buildChooseWorkspaceMessage(units, intent.direction, intent.description, intent.amount)
-      )
-      return
+    // 4. Categorizar. A interpretação por linguagem natural já traz a
+    // categoria; só o caminho dos atalhos precisa desta chamada extra.
+    // Sempre resolvemos nome -> id contra a árvore da conta.
+    let pair = resolveCategoryPair(categoryTree, draft.type, draft.category, draft.subcategory, draft.direction)
+    if (!pair.categoryId && draft.description) {
+      const guess = await categorizeEntry(draft.description, draft.type as FinanceEntryType, draft.direction, categoryTree)
+      pair = resolveCategoryPair(categoryTree, draft.type, guess.categoryName, guess.subcategoryName, draft.direction)
     }
-  }
 
-  // 5. Salvar no banco + confirmar
-  await persistEntryAndConfirm(supabase, {
-    accountId,
-    senderPhone,
-    userId: membership.user_id,
-    type: intent.type,
-    direction: intent.direction,
-    description: intent.description,
-    amount: intent.amount,
-    categoryName: pair.categoryName,
-    categoryId: pair.categoryId,
-    subcategoryId: pair.subcategoryId,
-    workspaceId,
-    rawMessage: messageText,
-    today,
-  })
+    // 4.5 Lançamento PJ pertence a uma unidade. Se a account tem mais de uma e a
+    // mensagem não deixou claro qual, pergunta antes de gravar. PF é sempre
+    // consolidado (workspace_id null).
+    let workspaceId: string | null = null
+    if (draft.type === 'pj') {
+      const units = await listAccountUnits(supabase, accountId)
+      const resolved = resolveUnit(units, draft.workspaceHint)
+      if (resolved.status === 'one') {
+        workspaceId = resolved.unit.id
+      } else {
+        await setPendingFinanceSession(supabase, accountId, senderPhone, {
+          kind: 'choose_workspace',
+          entry: {
+            type: 'pj',
+            direction: draft.direction,
+            description: draft.description,
+            amount: draft.amount as number,
+            category: pair.categoryName,
+            category_id: pair.categoryId,
+            subcategory_id: pair.subcategoryId,
+            raw_message: messageText,
+          },
+        })
+        await sendFinanceReply(
+          senderPhone,
+          buildChooseWorkspaceMessage(units, draft.direction, draft.description, draft.amount as number)
+        )
+        return
+      }
+    }
+
+    // 5. Salvar no banco + confirmar
+    await persistEntryAndConfirm(supabase, {
+      accountId,
+      senderPhone,
+      userId: membership.user_id,
+      type: draft.type as FinanceEntryType,
+      direction: draft.direction,
+      description: draft.description,
+      amount: draft.amount as number,
+      categoryName: pair.categoryName,
+      categoryId: pair.categoryId,
+      subcategoryId: pair.subcategoryId,
+      workspaceId,
+      rawMessage: messageText,
+      today,
+    })
+  }
 }
 
 // Insere o lançamento e responde com a confirmação + total do mês. Usado tanto

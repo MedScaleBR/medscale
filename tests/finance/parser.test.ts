@@ -8,31 +8,39 @@ describe('parseCommand', () => {
   })
 
   it('/pf com descrição e valor — despesa (direction out)', () => {
-    expect(parseCommand('/pf Netflix 35')).toEqual({
-      kind: 'entry', type: 'pf', direction: 'out',
-      description: 'Netflix', amount: 35, category: null, subcategory: null, workspaceHint: null,
-    })
+    const intent = parseCommand('/pf Netflix 35')
+    expect(intent).toMatchObject({ kind: 'entry' })
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries).toEqual([
+      { type: 'pf', direction: 'out', description: 'Netflix', amount: 35, category: null, subcategory: null, workspaceHint: null },
+    ])
   })
 
   it('/pj com valor decimal com vírgula, sem descrição', () => {
-    expect(parseCommand('/pj 3500,50')).toEqual({
-      kind: 'entry', type: 'pj', direction: 'out',
-      description: null, amount: 3500.5, category: null, subcategory: null, workspaceHint: null,
-    })
+    const intent = parseCommand('/pj 3500,50')
+    expect(intent).toMatchObject({ kind: 'entry' })
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries).toEqual([
+      { type: 'pj', direction: 'out', description: null, amount: 3500.5, category: null, subcategory: null, workspaceHint: null },
+    ])
   })
 
   it('/pf+ registra receita (direction in)', () => {
-    expect(parseCommand('/pf+ Aluguel recebido 3000')).toEqual({
-      kind: 'entry', type: 'pf', direction: 'in',
-      description: 'Aluguel recebido', amount: 3000, category: null, subcategory: null, workspaceHint: null,
-    })
+    const intent = parseCommand('/pf+ Aluguel recebido 3000')
+    expect(intent).toMatchObject({ kind: 'entry' })
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries).toEqual([
+      { type: 'pf', direction: 'in', description: 'Aluguel recebido', amount: 3000, category: null, subcategory: null, workspaceHint: null },
+    ])
   })
 
   it('/pj+ sem descrição', () => {
-    expect(parseCommand('/pj+ 3000')).toEqual({
-      kind: 'entry', type: 'pj', direction: 'in',
-      description: null, amount: 3000, category: null, subcategory: null, workspaceHint: null,
-    })
+    const intent = parseCommand('/pj+ 3000')
+    expect(intent).toMatchObject({ kind: 'entry' })
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries).toEqual([
+      { type: 'pj', direction: 'in', description: null, amount: 3000, category: null, subcategory: null, workspaceHint: null },
+    ])
   })
 
   it('/resumo pf e /resumo pj — despesa (direction out)', () => {
@@ -54,10 +62,12 @@ describe('parseCommand', () => {
   })
 
   it('case-insensitive e com R$/espaços', () => {
-    expect(parseCommand('/PF+ R$ 100')).toEqual({
-      kind: 'entry', type: 'pf', direction: 'in',
-      description: null, amount: 100, category: null, subcategory: null, workspaceHint: null,
-    })
+    const intent = parseCommand('/PF+ R$ 100')
+    expect(intent).toMatchObject({ kind: 'entry' })
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries).toEqual([
+      { type: 'pf', direction: 'in', description: null, amount: 100, category: null, subcategory: null, workspaceHint: null },
+    ])
     expect(parseCommand('/RESUMO PJ+')).toEqual({
       kind: 'query', type: 'pj', direction: 'in', category: null, subcategory: null, month: null, workspace: null,
     })

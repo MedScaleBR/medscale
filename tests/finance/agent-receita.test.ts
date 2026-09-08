@@ -77,8 +77,10 @@ describe('registrar receita', () => {
   it('linguagem natural "recebi 3000 de aluguel" grava direction=in com categoria de receita', async () => {
     financeConfig()
     h.intent = {
-      kind: 'entry', type: 'pf', direction: 'in', description: 'Aluguel recebido', amount: 3000,
-      category: 'Salário / Pró-labore', subcategory: null, workspaceHint: null,
+      kind: 'entry',
+      entries: [
+        { type: 'pf', direction: 'in', description: 'Aluguel recebido', amount: 3000, category: 'Salário / Pró-labore', subcategory: null, workspaceHint: null },
+      ],
     }
     const { processFinancialMessage } = await import('@/lib/finance/agent')
     await processFinancialMessage(PARAMS.patientPhone, 'recebi 3000 de aluguel')
@@ -107,8 +109,10 @@ describe('registrar receita', () => {
   it('receita PJ com 2 unidades pergunta qual unidade em vez de gravar direto', async () => {
     financeConfig()
     h.intent = {
-      kind: 'entry', type: 'pj', direction: 'in', description: 'Consulta particular', amount: 500,
-      category: 'Consultas particulares', subcategory: null, workspaceHint: null,
+      kind: 'entry',
+      entries: [
+        { type: 'pj', direction: 'in', description: 'Consulta particular', amount: 500, category: 'Consultas particulares', subcategory: null, workspaceHint: null },
+      ],
     }
     const { processFinancialMessage } = await import('@/lib/finance/agent')
     await processFinancialMessage(PARAMS.patientPhone, 'recebi 500 de consulta particular')

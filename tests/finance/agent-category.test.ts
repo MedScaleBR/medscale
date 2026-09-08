@@ -69,8 +69,10 @@ describe('processFinancialMessage — categorias', () => {
   it('grava category_id e subcategory_id resolvidos da árvore, com o nome como snapshot', async () => {
     financeConfig()
     h.intent = {
-      kind: 'entry', type: 'pf', direction: 'out', description: 'Escola do João', amount: 200,
-      category: 'Filhos', subcategory: 'Escola', workspaceHint: null,
+      kind: 'entry',
+      entries: [
+        { type: 'pf', direction: 'out', description: 'Escola do João', amount: 200, category: 'Filhos', subcategory: 'Escola', workspaceHint: null },
+      ],
     }
     const { processFinancialMessage } = await import('@/lib/finance/agent')
     await processFinancialMessage(PARAMS.patientPhone, 'gastei 200 na escola do joão')
@@ -86,8 +88,10 @@ describe('processFinancialMessage — categorias', () => {
   it('cai no categorizeEntry quando a interpretação não trouxe categoria, e ainda resolve id', async () => {
     financeConfig()
     h.intent = {
-      kind: 'entry', type: 'pf', direction: 'out', description: 'material escolar do joão', amount: 90,
-      category: null, subcategory: null, workspaceHint: null,
+      kind: 'entry',
+      entries: [
+        { type: 'pf', direction: 'out', description: 'material escolar do joão', amount: 90, category: null, subcategory: null, workspaceHint: null },
+      ],
     }
     h.categorize = { categoryName: 'Filhos', subcategoryName: 'Escola' }
     const { processFinancialMessage } = await import('@/lib/finance/agent')
