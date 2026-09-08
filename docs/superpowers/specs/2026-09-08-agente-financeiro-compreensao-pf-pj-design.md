@@ -50,10 +50,13 @@ sério de agente financeiro** — não é para virar um chatbot de conversa fiad
 
 ### Tool `registrar_intencao` — campos por lançamento viram array
 
-Os campos hoje no topo — `tipo`, `descricao`, `valor`, `categoria`,
-`subcategoria`, `unidade`, `direcao` — movem para dentro de cada item de
-`lancamentos[]`. Continuam no topo: `intencao`, `mes`, `paciente`, `horario`,
-`forma_pagamento` (consulta / confirmar_pagamento não têm array).
+Para **lançamento**, os campos que descrevem um gasto/receita — `tipo`,
+`descricao`, `valor`, `categoria`, `subcategoria`, `unidade`, `direcao` —
+movem para dentro de cada item de `lancamentos[]`. Os campos do topo
+(`tipo`, `categoria`, `subcategoria`, `unidade`, `direcao`, `mes`) **ficam**
+e continuam sendo o que `consulta` lê — o caminho de consulta não muda.
+`paciente`, `horario`, `forma_pagamento` (confirmar_pagamento) também ficam
+no topo.
 
 ```jsonc
 {
@@ -77,15 +80,18 @@ Os campos hoje no topo — `tipo`, `descricao`, `valor`, `categoria`,
 ```
 
 - `strict: true` continua. Cada objeto de `lancamentos` tem seu próprio
-  `required` (todas as 7 chaves) e `additionalProperties: false`. `lancamentos`
+  `required` (as 7 chaves) e `additionalProperties: false`. `lancamentos`
   entra em `required` no topo (array vazio é válido no schema; o `toIntent`
   trata array vazio + `intencao: 'lancamento'` como `unknown`).
-- Fora de `intencao: 'lancamento'`, o modelo devolve `lancamentos: []`. Para
-  `consulta`, os campos de filtro (`tipo`, `categoria`, `subcategoria`,
-  `unidade`, `direcao`) vêm em `lancamentos[0]` **ou** permanecem lidos do topo?
-  → **Decisão:** consulta lê de `lancamentos[0]` quando presente, senão trata
-  como consulta ampla. Mantém um só lugar por conceito. `toIntent` faz esse
-  mapeamento.
+- Fora de `intencao: 'lancamento'`, o modelo devolve `lancamentos: []` e usa
+  os campos de filtro do topo, exatamente como hoje. `toIntent` para
+  `consulta` e `confirmar_pagamento` **não muda** — lê do topo. Só o ramo
+  `lancamento` do `toIntent` passa a iterar `lancamentos[]`. Isso mantém o
+  caminho de consulta (o mais sensível a regressão) intocado.
+- Duplicação de `tipo`/`categoria`/`subcategoria`/`unidade`/`direcao` entre o
+  topo e os itens é aceitável: o prompt diz explicitamente "lançamento → só
+  em `lancamentos[]`; consulta → só no topo", e são objetos de intenção
+  diferentes.
 
 ### Prompt do sistema — buckets de PF/PJ
 
