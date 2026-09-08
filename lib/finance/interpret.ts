@@ -195,7 +195,10 @@ Regras:
 - Em "consulta", se o médico citar um assunto (ex: "assinaturas", "aluguel"), mapeie para a categoria EXATA da lista certa (despesa ou receita, conforme a direcao). Se não citar, categoria = null.
 - Em "lancamento", nunca invente valor: se a mensagem não tiver um número claro, use intencao "desconhecido".
 - A mensagem pode conter mais de um lançamento (ex.: "gastei 35 no ifood e 50 no uber"). Devolva um item em "lancamentos" para cada gasto ou receita. Use "desconhecido" apenas quando não dá para identificar nenhum lançamento.
-- Na dúvida entre pf e pj num lançamento, escolha pelo contexto clínico: sala, equipamento, funcionário, imposto e receita de consulta são pj; o resto é pf.`
+- Classifique cada lançamento em "tipo":
+  - pf: gasto/receita pessoal do médico. Ex.: iFood, mercado, streaming, farmácia, escola dos filhos, viagem, salário/pró-labore, aluguel que ELE recebe, investimentos.
+  - pj: da clínica. Ex.: "escritório", sala/consultório, equipamento médico, material de consultório, secretária/funcionário, sistema/CRM da clínica, imposto da clínica, receita de consulta/procedimento.
+  - null: genuinamente ambíguo — dá para ser pessoal ou da clínica e a mensagem não decide (ex.: aluguel, energia, água, internet, telefone, carro, contador, seguro, sem nada no texto apontando para um lado). NÃO chute; devolva null e o agente pergunta.`
 }
 
 // Interpreta linguagem natural. Só é chamada quando parseCommand não
@@ -235,8 +238,8 @@ function toIntent(input: IntentToolInput, raw: string): FinanceIntent {
           return { kind: 'unknown', raw }
         }
         drafts.push({
-          // Sem tipo explícito, PF é o padrão menos danoso (gasto pessoal é o caso comum).
-          type: item.tipo ?? 'pf',
+          // null = ambíguo; o agente pergunta PF ou PJ antes de gravar.
+          type: item.tipo,
           direction: item.direcao === 'entrada' ? 'in' : 'out',
           description: item.descricao?.trim() || null,
           amount: item.valor,

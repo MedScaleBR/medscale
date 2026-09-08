@@ -185,3 +185,25 @@ describe('interpretMessage — múltiplos lançamentos', () => {
     expect(system).not.toContain('use "desconhecido" — o registro é de um por vez')
   })
 })
+
+describe('interpretMessage — PF/PJ ambíguo retorna null', () => {
+  it('tipo null no item passa como type null (não vira pf)', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({
+        lancamentos: [{ tipo: null, descricao: 'aluguel', valor: 2600, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' }],
+      })
+    )
+    const intent = await interpretMessage('gastei 2600 no aluguel', '2026-09-04', TREE)
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries[0].type).toBeNull()
+  })
+
+  it('prompt tem os três buckets pf/pj/null e não tem o tiebreak clínico antigo', async () => {
+    createMock.mockResolvedValue(toolResponse({}))
+    await interpretMessage('x', '2026-09-04', TREE)
+    const system = createMock.mock.calls[0][0].system as string
+    expect(system).toContain('genuinamente ambíguo')
+    expect(system).toContain('NÃO chute')
+    expect(system).not.toContain('escolha pelo contexto clínico')
+  })
+})
