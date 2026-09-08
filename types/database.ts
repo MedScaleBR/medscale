@@ -11,7 +11,7 @@ export type AppointmentStatus = 'agendado' | 'confirmado' | 'realizado' | 'cance
 export type ConversationStatus = 'open' | 'resolved' | 'handoff'
 export type MessageRole = 'user' | 'assistant' | 'system'
 export type AvailabilityExceptionType = 'blocked' | 'extra'
-export type WaitlistStatus = 'waiting' | 'scheduled' | 'cancelled'
+export type WaitlistStatus = 'waiting' | 'scheduled' | 'cancelled' | 'expired'
 export type RevenueStatus = 'previsto' | 'confirmado' | 'cancelado'
 // Ciclo de receita automático (ver prompts/CICLO_RECEITA_COMO_FUNCIONA.md).
 export type RevenuePaymentStatus = 'pending' | 'realized' | 'paid' | 'cancelled' | 'refunded'
@@ -506,6 +506,9 @@ export interface Database {
           preferred_days: string[] | null
           preferred_times: string[] | null
           notes: string | null
+          desired_date: string | null
+          desired_time: string | null
+          source: string
           status: WaitlistStatus
           notified_at: string | null
           created_at: string

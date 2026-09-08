@@ -29,12 +29,14 @@ const STATUS_LABEL: Record<WaitlistStatus, string> = {
   waiting: 'Aguardando',
   scheduled: 'Agendado',
   cancelled: 'Cancelado',
+  expired: 'Expirada',
 }
 
 const STATUS_STYLE: Record<WaitlistStatus, string> = {
   waiting: 'bg-[var(--cyan-10)] text-[var(--cyan-dark)]',
   scheduled: 'bg-green-100 text-green-700',
   cancelled: 'bg-[var(--navy-06)] text-[var(--navy)]',
+  expired: 'bg-[var(--navy-06)] text-[var(--navy)]',
 }
 
 const EMPTY_FORM = { patient_name: '', patient_phone: '', notes: '' }
