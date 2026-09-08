@@ -194,7 +194,7 @@ Regras:
 - Em "lancamento" ou "consulta" com direcao entrada, use as listas de RECEITA acima para "categoria"; com direcao saida, use as listas de DESPESA. Nunca misture as duas.
 - Em "consulta", se o médico citar um assunto (ex: "assinaturas", "aluguel"), mapeie para a categoria EXATA da lista certa (despesa ou receita, conforme a direcao). Se não citar, categoria = null.
 - Em "lancamento", nunca invente valor: se a mensagem não tiver um número claro, use intencao "desconhecido".
-- Se a mensagem misturar vários gastos/receitas de uma vez, use "desconhecido" — o registro é de um por vez.
+- A mensagem pode conter mais de um lançamento (ex.: "gastei 35 no ifood e 50 no uber"). Devolva um item em "lancamentos" para cada gasto ou receita. Use "desconhecido" apenas quando não dá para identificar nenhum lançamento.
 - Na dúvida entre pf e pj num lançamento, escolha pelo contexto clínico: sala, equipamento, funcionário, imposto e receita de consulta são pj; o resto é pf.`
 }
 

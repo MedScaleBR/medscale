@@ -161,3 +161,27 @@ describe('interpretMessage — prompt do sistema', () => {
     expect(tool.input_schema.properties.direcao).toBeDefined()
   })
 })
+
+describe('interpretMessage — múltiplos lançamentos', () => {
+  it('mensagem com dois gastos vira dois itens em entries', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({
+        lancamentos: [
+          { tipo: 'pf', descricao: 'iFood', valor: 35, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' },
+          { tipo: 'pf', descricao: 'Uber', valor: 50, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' },
+        ],
+      })
+    )
+    const intent = await interpretMessage('gastei 35 no ifood e 50 no uber', '2026-09-04', TREE)
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries.map((e) => e.description)).toEqual(['iFood', 'Uber'])
+  })
+
+  it('prompt instrui um item por gasto e não manda usar desconhecido para vários', async () => {
+    createMock.mockResolvedValue(toolResponse({}))
+    await interpretMessage('x', '2026-09-04', TREE)
+    const system = createMock.mock.calls[0][0].system as string
+    expect(system).toMatch(/um item .*para cada|mais de um lançamento/i)
+    expect(system).not.toContain('use "desconhecido" — o registro é de um por vez')
+  })
+})
