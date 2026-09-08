@@ -72,6 +72,13 @@ no topo.
       "direcao": "entrada" | "saida" | null
     }
   ],
+  // Campos do topo — lidos SÓ em "consulta" (filtros) e "confirmar_pagamento".
+  // Em "lancamento" ficam nulos e o agente nunca os lê.
+  "tipo": "pf" | "pj" | null,
+  "categoria": "string | null",
+  "subcategoria": "string | null",
+  "unidade": "string | null",
+  "direcao": "entrada" | "saida" | null,
   "mes": "string | null",
   "paciente": "string | null",
   "horario": "string | null",
@@ -285,7 +292,9 @@ misturar PF e PJ, uma linha de total por combinação. Sem chamada de LLM
 - Prompt do sistema contém os três buckets (pf / pj / null) e **não** contém a
   regra antiga de tiebreak clínico.
 - `intencao: 'lancamento'` com `lancamentos: []` → `unknown`.
-- Consulta continua lendo filtros de `lancamentos[0]`.
+- Consulta continua lendo os filtros do **topo** da ferramenta (`tipo`,
+  `categoria`, `subcategoria`, `unidade`, `direcao`, `mes`) — nunca de
+  `lancamentos[]`, que fica `[]` fora de `lancamento`.
 
 **`agent-entry-batch.test.ts`** (novo) + ajustes em `agent-category.test.ts`
 - Dois itens prontos → 2 `insert` em `finance_entries` + **uma**
@@ -321,6 +330,26 @@ de pj, e texto que não casa → `null`.
 - testes acima
 
 Sem migração. Sem mudança de env var. Sem mudança nas rotas web / API.
+
+## Desvios deliberados na implementação
+
+Coisas que o código entregue faz diferente do que este design descrevia. Foram
+decisões tomadas na implementação, não descuidos:
+
+- **`BATCH_CANCEL` em vez de `NEGATIVE` para desistir do lote.** O design dizia
+  `NEGATIVE.test(text)` → descarta `current` + `queue`. Não serve: `NEGATIVE`
+  existe para a confirmação de pagamento, onde a pergunta é sim/não, e casa
+  qualquer coisa que comece com "não". As perguntas do lote são abertas ("PF ou
+  PJ?", "quanto foi?"), então "não sei" é não-resposta — e com `NEGATIVE`
+  destruiria um lote que o médico ainda quer. `BATCH_CANCEL` (`agent.ts`) só
+  cancela com "não" isolado ou com verbo de desistência ("deixa", "esquece",
+  "cancela"). A repergunta ainda avisa qual é a palavra de saída.
+- **`direction` entra em `buildChooseTypeMessage` / `buildAskAmountMessage`.**
+  O design assinava esses builders só com `(desc, amount)` / `(desc)`. As duas
+  perguntas são feitas antes de qualquer coisa olhar a direção, então uma
+  receita ambígua ("recebi 500 de consulta particular") seria chamada de
+  "gasto" logo na pergunta. Os builders recebem `direction` e escolhem
+  "A receita de …" ou "O gasto com …".
 
 ## Fase posterior (costura deixada pronta)
 

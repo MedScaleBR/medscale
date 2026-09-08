@@ -9,9 +9,9 @@ export type FinanceEntry = {
   workspace_id: string | null
   recorded_by_phone: string
   type: FinanceEntryType
-  // Entrada (receita) ou saída (despesa). Lançamento manual da tela e do
-  // agente é sempre 'out'; 'in' vem do cadastro de receita ou do espelho do
-  // ciclo de receita (ver revenue_entry_id).
+  // Entrada (receita) ou saída (despesa). O agente produz as duas ("gastei 35"
+  // → 'out', "recebi 3000" / `/pf+` → 'in'), assim como a tela; 'in' também vem
+  // do espelho do ciclo de receita (ver revenue_entry_id).
   direction: 'in' | 'out'
   description: string | null
   amount: number
@@ -30,11 +30,13 @@ export type FinanceEntry = {
   created_at: string
 }
 
-// Um lançamento (gasto ou receita) extraído de uma mensagem. Uma mensagem
-// pode citar mais de um; hoje o fluxo processa 1 por vez.
+// Um lançamento (gasto ou receita) extraído de uma mensagem. Uma mensagem pode
+// citar mais de um, e o agente drena todos: o que está completo é gravado, o
+// primeiro incompleto estaciona o resto numa pergunta ao owner.
 export interface EntryDraft {
-  // null quando a mensagem não deixa claro PF ou PJ. O agente ainda trata
-  // null como 'pf' (padrão menos danoso); a Task 2 passa a perguntar.
+  // null quando a mensagem não deixa claro PF ou PJ. O agente nunca chuta:
+  // com type null ele pergunta "pessoal (PF) ou da clínica (PJ)?" e só grava
+  // depois da resposta.
   type: FinanceEntryType | null
   // Entrada (receita) ou saída (despesa). Atalho `/pf`/`/pj` e "gastei X" →
   // 'out'; `/pf+`/`/pj+` e "recebi X" → 'in'.
@@ -57,8 +59,8 @@ export interface EntryDraft {
 // ou de linguagem natural (interpret.ts, via Claude). Os dois produzem este
 // mesmo tipo, então o agente executa um caminho só.
 export type FinanceIntent =
-  // `entries` sempre tem ≥ 1 item quando `kind === 'entry'`. Hoje o agente
-  // consome só o primeiro (1 lançamento por mensagem).
+  // `entries` sempre tem ≥ 1 item quando `kind === 'entry'` e pode ter vários
+  // (uma mensagem citando dois gastos). O agente drena a lista inteira.
   | { kind: 'entry'; entries: EntryDraft[] }
   // `type: null` = PF e PJ juntos; `category: null` = todas; `month: null` = mês atual.
   // `workspace: null` = consolidado (todas as unidades). `direction` segue a
