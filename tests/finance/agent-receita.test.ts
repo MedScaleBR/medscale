@@ -120,7 +120,9 @@ describe('registrar receita', () => {
     expect(state.supabase.callsTo('finance_entries', 'insert')).toHaveLength(0)
     const upsert = state.supabase.callsTo('finance_sessions', 'upsert')[0]
     const pending = (upsert.payload as Record<string, unknown>).pending_entry as Record<string, unknown>
-    expect((pending.entry as Record<string, unknown>).direction).toBe('in')
+    expect(pending.kind).toBe('entry_batch')
+    expect(pending.awaiting).toBe('unit')
+    expect((pending.current as Record<string, unknown>).direction).toBe('in')
   })
 
   it('resposta escolhendo a unidade persiste a receita PJ pendente com direction=in', async () => {
@@ -129,12 +131,15 @@ describe('registrar receita', () => {
         select: {
           data: {
             pending_entry: {
-              kind: 'choose_workspace',
-              entry: {
+              kind: 'entry_batch',
+              awaiting: 'unit',
+              rawMessage: 'recebi 500 de consulta particular',
+              current: {
                 type: 'pj', direction: 'in', description: 'Consulta particular', amount: 500,
-                category: 'Consultas particulares', category_id: 'rec', subcategory_id: null,
-                raw_message: 'recebi 500 de consulta particular',
+                category: 'Consultas particulares', subcategory: null, workspaceHint: null,
+                categoryId: 'rec', subcategoryId: null,
               },
+              queue: [],
             },
             last_message_at: new Date().toISOString(),
           },

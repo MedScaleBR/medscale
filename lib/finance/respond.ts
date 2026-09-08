@@ -215,6 +215,52 @@ export function buildWorkspaceNotMatchedMessage(units: { name: string }[]): stri
   return `Não reconheci essa unidade. Escolha uma:\n${list}`
 }
 
+// ── Lançamento incompleto: PF ou PJ? Quanto foi? ──────────────────────────
+
+// Casa a resposta do owner à pergunta "PF ou PJ?". pj é checado primeiro para
+// "minha clínica" não cair em pf pelo "minha".
+export function parseEntryType(text: string): 'pf' | 'pj' | null {
+  const t = text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim()
+  if (/\b(pj|clinica|empresa|cnpj|consultorio|escritorio|juridica)\b/.test(t)) return 'pj'
+  if (/\b(pf|pessoal|pessoa fisica|fisica|meu|minha|particular)\b/.test(t)) return 'pf'
+  return null
+}
+
+export function buildChooseTypeMessage(description: string | null, amount: number | null): string {
+  const desc = description ?? 'esse lançamento'
+  const valor = amount != null ? ` (${formatBRL(amount)})` : ''
+  return `O gasto com ${desc}${valor} é pessoal (PF) ou da clínica (PJ)?`
+}
+
+export function buildAskAmountMessage(description: string | null): string {
+  const desc = description ? `com ${description}` : 'desse lançamento'
+  return `Quanto foi o gasto ${desc}? Me manda só o valor, ex: 35.`
+}
+
+// Total do mês de um bucket (tipo + direção) depois de gravar um lote.
+export type BatchTotal = { type: FinanceEntryType; direction: 'in' | 'out'; total: number }
+
+// Confirmação determinística de vários lançamentos de uma vez. Ao contrário de
+// buildConfirmationMessage (1 lançamento, redigida pelo modelo), aqui a lista
+// precisa ser fiel item a item — o médico confere o que entrou.
+export function buildBatchConfirmationMessage(entries: FinanceEntry[], totals: BatchTotal[]): string {
+  const linhas = entries.map((e) => {
+    const t = e.type === 'pf' ? 'PF' : 'PJ'
+    const d = e.direction === 'in' ? 'receita' : 'despesa'
+    return `• ${e.description ?? 'Sem descrição'} — ${formatBRL(e.amount)} (${t}, ${d})`
+  })
+  const totaisLinhas = totals.map((tt) => {
+    const t = tt.type === 'pf' ? 'PF' : 'PJ'
+    const d = tt.direction === 'in' ? 'Receitas' : 'Despesas'
+    return `${d} ${t} em ${monthLabel(null)}: ${formatBRL(tt.total)}`
+  })
+  return `Registrei ${entries.length} lançamentos:\n${linhas.join('\n')}\n${totaisLinhas.join('\n')}`
+}
+
 function describeMatch(m: AppointmentPaymentMatch): string {
   const parts = [m.patientName]
   if (m.time) parts.push(`às ${m.time}`)
