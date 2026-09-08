@@ -230,15 +230,34 @@ export function parseEntryType(text: string): 'pf' | 'pj' | null {
   return null
 }
 
-export function buildChooseTypeMessage(description: string | null, amount: number | null): string {
-  const desc = description ?? 'esse lançamento'
+// A direção é obrigatória porque as duas perguntas do lançamento incompleto
+// (tipo e valor) são feitas antes de qualquer coisa olhar para ela: sem isso o
+// agente chamaria de "gasto" um "recebi 500 de consulta particular".
+export function buildChooseTypeMessage(
+  description: string | null,
+  amount: number | null,
+  direction: 'in' | 'out'
+): string {
   const valor = amount != null ? ` (${formatBRL(amount)})` : ''
-  return `O gasto com ${desc}${valor} é pessoal (PF) ou da clínica (PJ)?`
+  const alvo =
+    direction === 'in'
+      ? description
+        ? `A receita de ${description}`
+        : 'A receita desse lançamento'
+      : `O gasto com ${description ?? 'esse lançamento'}`
+  return `${alvo}${valor} é pessoal (PF) ou da clínica (PJ)?`
 }
 
-export function buildAskAmountMessage(description: string | null): string {
-  const desc = description ? `com ${description}` : 'desse lançamento'
-  return `Quanto foi o gasto ${desc}? Me manda só o valor, ex: 35.`
+export function buildAskAmountMessage(description: string | null, direction: 'in' | 'out'): string {
+  const pergunta =
+    direction === 'in'
+      ? description
+        ? `Quanto você recebeu de ${description}?`
+        : 'Quanto você recebeu?'
+      : description
+        ? `Quanto foi o gasto com ${description}?`
+        : 'Quanto foi esse gasto?'
+  return `${pergunta} Me manda só o valor, ex: 35.`
 }
 
 // Total do mês de um bucket (tipo + direção) depois de gravar um lote.

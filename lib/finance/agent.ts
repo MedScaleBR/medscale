@@ -126,6 +126,15 @@ export function resolveUnit(
 const AFFIRMATIVE = /^(s|sim|isso|isso mesmo|exato|é isso|e isso|confirmo|confirma|confirmar|pode confirmar|ok|ta|tá|👍|isso ai|isso aí)\b/i
 const NEGATIVE = /^(n|nao|não|cancela|cancelar|deixa|esquece|errado|não era|nao era|para|pare)\b/i
 
+// Desistência do lote de lançamentos. NEGATIVE não serve aqui: ele existe para
+// a confirmação de pagamento, onde a pergunta é sim/não, e casa qualquer coisa
+// que comece com "não". As perguntas do lote são abertas ("PF ou PJ?",
+// "quanto foi?"), então "não sei" é não-resposta e não pode descartar o lote.
+// Por isso o "não" isolado cancela, mas "não ..." só cancela com verbo de
+// desistência.
+const BATCH_CANCEL =
+  /^(n|nao|não)$|^(cancela|cancelar|deixa|esquece|esquecer|para|pare|nao quero|não quero|nada disso)\b/i
+
 function parsePaymentMethod(text: string): RevenuePaymentMethod | null {
   const t = text
     .normalize('NFD')
@@ -143,10 +152,28 @@ function parsePaymentMethod(text: string): RevenuePaymentMethod | null {
 // Resposta do owner à pergunta "quanto foi?". Só o número (com "R$"/"reais"
 // opcionais) conta — qualquer outra coisa devolve null para o agente perguntar
 // de novo, em vez de gravar um valor adivinhado.
-function parseAmount(text: string): number | null {
-  const m = text.replace(/\s/g, '').match(/r?\$?([\d]+(?:[.,]\d{1,2})?)(?:reais?)?$/i)
+//
+// Ancorado nas duas pontas: sem o `^`, "foi tipo 40" casaria pelo final e o
+// ponto de milhar de "1.200" seria lido como decimal (200). A primeira
+// alternativa é o formato pt-BR agrupado (1.200 / 3.450,90); a segunda é o
+// número simples, onde um ponto só pode ser decimal (12.50), porque grupo de
+// milhar tem sempre 3 dígitos.
+const AMOUNT_RE = /^r?\$?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?:reais?)?$/
+const GROUPED_RE = /^\d{1,3}(?:\.\d{3})+$/
+
+export function parseAmount(text: string): number | null {
+  const m = text.replace(/\s/g, '').toLowerCase().match(AMOUNT_RE)
   if (!m) return null
-  const n = parseFloat(m[1].replace(',', '.'))
+
+  // "1.200,50" -> "1200.50"; "1.200" -> "1200"; "12.50" fica como está.
+  const raw = m[1]
+  const normalized = raw.includes(',')
+    ? raw.replace(/\./g, '').replace(',', '.')
+    : GROUPED_RE.test(raw)
+      ? raw.replace(/\./g, '')
+      : raw
+
+  const n = parseFloat(normalized)
   return isFinite(n) && n > 0 ? n : null
 }
 
@@ -490,14 +517,25 @@ async function persistAndConfirm(
     await sendFinanceReply(ctx.senderPhone, `Erro ao registrar o lançamento. Tente novamente.`)
     return
   }
+
+  // Falha parcial: confirmar só o que entrou faria o médico acreditar que o
+  // resto entrou também. O que se perdeu vai junto da confirmação.
+  const perdidos = drafts.length - saved.length
+  const aviso =
+    perdidos === 0
+      ? ''
+      : perdidos === 1
+        ? '\nUm lançamento não foi registrado — me manda de novo.'
+        : `\n${perdidos} lançamentos não foram registrados — me manda de novo.`
+
   if (saved.length === 1) {
     const total = await monthTotalFor(ctx.accountId, saved[0].type, saved[0].direction)
-    await sendFinanceReply(ctx.senderPhone, await buildConfirmationMessage(saved[0], total))
+    await sendFinanceReply(ctx.senderPhone, (await buildConfirmationMessage(saved[0], total)) + aviso)
     return
   }
   await sendFinanceReply(
     ctx.senderPhone,
-    buildBatchConfirmationMessage(saved, await batchTotals(ctx.accountId, saved))
+    buildBatchConfirmationMessage(saved, await batchTotals(ctx.accountId, saved)) + aviso
   )
 }
 
@@ -531,6 +569,13 @@ async function drainEntryQueue(
   ctx: EntryCtx,
   drafts: PendingDraft[]
 ): Promise<void> {
+  // O interpretador entendeu "lançamento" mas não extraiu nenhum — silêncio
+  // total deixaria o médico achando que registrou.
+  if (drafts.length === 0) {
+    await sendFinanceReply(ctx.senderPhone, buildUnknownMessage())
+    return
+  }
+
   const ready: PendingDraft[] = []
   const queue = [...drafts]
 
@@ -546,12 +591,20 @@ async function drainEntryQueue(
         'type',
         draft,
         queue,
-        buildChooseTypeMessage(draft.description, draft.amount)
+        buildChooseTypeMessage(draft.description, draft.amount, draft.direction)
       )
       return
     }
     if (draft.amount == null) {
-      await parkAndAsk(supabase, ctx, ready, 'amount', draft, queue, buildAskAmountMessage(draft.description))
+      await parkAndAsk(
+        supabase,
+        ctx,
+        ready,
+        'amount',
+        draft,
+        queue,
+        buildAskAmountMessage(draft.description, draft.direction)
+      )
       return
     }
 
@@ -735,8 +788,18 @@ async function handlePendingEntryBatch(
     .eq('phone', senderPhone)
     .maybeSingle()
 
-  const pending = fsession?.pending_entry as PendingEntryBatch | null | undefined
-  if (!pending || pending.kind !== 'entry_batch') return false
+  const raw = fsession?.pending_entry as { kind?: string } | null | undefined
+
+  // Pendência do formato antigo (`choose_workspace`, anterior ao entry_batch),
+  // gravada antes do deploy: nenhum handler sabe mais lê-la, então limpa e
+  // deixa a mensagem ser interpretada do zero em vez de ficar presa na linha.
+  if (raw?.kind === 'choose_workspace') {
+    await clearPendingFinanceSession(supabase, senderPhone)
+    return false
+  }
+
+  if (!raw || raw.kind !== 'entry_batch') return false
+  const pending = raw as unknown as PendingEntryBatch
 
   // Expirou — limpa e deixa a mensagem seguir o fluxo normal.
   if (
@@ -748,42 +811,66 @@ async function handlePendingEntryBatch(
   }
 
   const text = messageText.trim()
-  if (NEGATIVE.test(text)) {
-    await clearPendingFinanceSession(supabase, senderPhone)
-    await sendFinanceReply(senderPhone, 'Ok, não registrei o restante. Me chama de novo quando quiser.')
-    return true
-  }
-
   const ctx: EntryCtx = { accountId, senderPhone, userId, categoryTree, rawMessage: pending.rawMessage, today }
   const current = pending.current
 
+  // A resposta é interpretada ANTES do cancelamento: "não sei" e "não, é da
+  // clínica" começam com "não" e casariam com NEGATIVE, descartando um lote
+  // que o médico ainda quer. Só o que não se parece com resposta alguma é
+  // tratado como desistência.
   if (pending.awaiting === 'type') {
     const t = parseEntryType(text)
-    if (!t) {
-      await sendFinanceReply(senderPhone, buildChooseTypeMessage(current.description, current.amount))
+    if (t) {
+      current.type = t
+      current.categoryId = undefined // força re-resolver categoria com o tipo certo
+    } else if (BATCH_CANCEL.test(text)) {
+      return cancelPendingBatch(supabase, senderPhone)
+    } else {
+      await sendFinanceReply(
+        senderPhone,
+        buildChooseTypeMessage(current.description, current.amount, current.direction)
+      )
       return true
     }
-    current.type = t
-    current.categoryId = undefined // força re-resolver categoria com o tipo certo
   } else if (pending.awaiting === 'amount') {
     const valor = parseAmount(text)
-    if (valor == null) {
+    if (valor != null) {
+      current.amount = valor
+    } else if (BATCH_CANCEL.test(text)) {
+      return cancelPendingBatch(supabase, senderPhone)
+    } else {
       await sendFinanceReply(senderPhone, 'Não peguei o valor. Me manda só o número, ex: 35.')
       return true
     }
-    current.amount = valor
   } else {
     const units = await listAccountUnits(supabase, accountId)
     const resolved = resolveUnit(units, text)
-    if (resolved.status !== 'one') {
+    if (resolved.status === 'one') {
+      current.workspaceId = resolved.unit.id
+    } else if (BATCH_CANCEL.test(text)) {
+      return cancelPendingBatch(supabase, senderPhone)
+    } else {
       await sendFinanceReply(senderPhone, buildWorkspaceNotMatchedMessage(units))
       return true
     }
-    current.workspaceId = resolved.unit.id
   }
 
   await clearPendingFinanceSession(supabase, senderPhone)
   await drainEntryQueue(supabase, ctx, [current, ...pending.queue])
+  return true
+}
+
+// Desistência do lote parado. O texto não pode dar a entender que algo entrou:
+// no caso de um único lançamento estacionado, nada entrou.
+async function cancelPendingBatch(
+  supabase: ReturnType<typeof createAdminClient>,
+  senderPhone: string
+): Promise<true> {
+  await clearPendingFinanceSession(supabase, senderPhone)
+  await sendFinanceReply(
+    senderPhone,
+    'Ok, não registrei o que estava pendente. Me chama de novo quando quiser.'
+  )
   return true
 }
 
