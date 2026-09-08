@@ -4,6 +4,7 @@ import {
   buildHelpMessage,
   buildChooseTypeMessage,
   buildAskAmountMessage,
+  buildUnknownMessage,
   type QueryFilters,
 } from '@/lib/finance/respond'
 
@@ -91,5 +92,15 @@ describe('buildHelpMessage', () => {
     expect(help).toContain('/pj+')
     expect(help).toContain('/resumo pf+')
     expect(help.toLowerCase()).toContain('recebi')
+  })
+})
+
+describe('buildUnknownMessage', () => {
+  it('sério mas com um exemplo concreto e a saída de consulta', () => {
+    const m = buildUnknownMessage()
+    expect(m).toMatch(/almoço|aluguel/)
+    expect(m.toLowerCase()).toContain('quanto gastei')
+    expect(m).not.toContain('Não consegui entender')
+    expect(m).not.toContain('*') // sem markdown
   })
 })

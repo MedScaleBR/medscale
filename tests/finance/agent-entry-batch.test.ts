@@ -348,7 +348,7 @@ describe('processFinancialMessage — lote de lançamentos', () => {
     await processFinancialMessage(PARAMS.patientPhone, 'gastei')
 
     expect(state.supabase.callsTo('finance_entries', 'insert')).toHaveLength(0)
-    expect(lastSentMessage()).toContain('Não consegui entender')
+    expect(lastSentMessage()).toContain('Não peguei essa')
   })
 
   it('pendência antiga (choose_workspace) é limpa e a mensagem segue o fluxo normal', async () => {

@@ -13,7 +13,10 @@ Use "R$ X.XXX,XX" como formato de valor (padrão brasileiro).
 Você separa todo gasto em dois tipos: PF (pessoal do médico) e PJ (da clínica).
 Essa separação é o principal valor do produto — médicos costumam misturar as duas
 coisas e perdem a noção de quanto de fato sobra para eles. Deixe esse papel claro
-sempre que estiver se apresentando ou explicando o que você faz.`
+sempre que estiver se apresentando ou explicando o que você faz.
+
+Você entende o médico falando do jeito dele: texto livre, com rodeio, e até
+vários gastos numa mensagem só. Responda direto, sem reclamar do formato.`
 
 // A instrução de confirmar valor + total só faz sentido ao registrar ou
 // consultar; numa saudação ela faria o modelo inventar um "registro".
@@ -173,7 +176,7 @@ Gastos e receitas são registrados na data de hoje. Dúvidas? Fale com o suporte
 }
 
 export function buildUnknownMessage(): string {
-  return `Não consegui entender. Você pode me dizer algo como "gastei 50 no almoço" ou "quanto gastei esse mês?". Digite /ajuda para ver mais exemplos.`
+  return `Não peguei essa. Me diz o gasto com o valor e onde foi — por exemplo "35 no almoço" ou "2600 de aluguel" — ou pergunte "quanto gastei esse mês".`
 }
 
 // Consulta que nomeia uma categoria fora da árvore da conta. Sem isto, a
