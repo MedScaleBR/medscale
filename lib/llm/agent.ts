@@ -19,6 +19,7 @@ import {
   trackAppointmentBookedByBot,
   trackHandoffTriggered,
   trackUnsupportedMessageReceived,
+  trackWaitlistPatientAddedByBot,
 } from '@/lib/analytics/posthog-server'
 import type { Database } from '@/types/database'
 
@@ -250,13 +251,15 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   // 1.1 Unidades da account + nome da account (a Maria pergunta a unidade).
   const [allUnits, { data: account }] = await Promise.all([
     getAccountUnits(accountId),
-    supabase.from('accounts').select('name').eq('id', accountId).single(),
+    supabase.from('accounts').select('name, modules').eq('id', accountId).single(),
   ])
   if (allUnits.length === 0) {
     console.warn(`account ${accountId} sem unidades ativas — Maria não tem onde agendar`)
     return
   }
   const accountName = account?.name ?? 'nossa clínica'
+  const accountModules = (account as { modules?: unknown })?.modules
+  const waitlistEnabled = Array.isArray(accountModules) && accountModules.includes('waitlist')
   const units = allUnits
   const allUnitById = new Map(units.map((u) => [u.id, u]))
   const multiUnit = units.length > 1
@@ -390,6 +393,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     isFirstMessage,
     upcomingAppointments,
     currentUnitName: currentUnitId ? (allUnitById.get(currentUnitId)?.name ?? null) : null,
+    waitlistEnabled,
   })
 
   const claudeMessages = (history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
@@ -518,6 +522,16 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
             source: 'bot',
           })
 
+          // Paciente que estava na lista de espera e acabou de agendar sai da lista.
+          if (patient?.id) {
+            await supabase
+              .from('waitlist')
+              .update({ status: 'scheduled' })
+              .eq('workspace_id', bookingUnitId)
+              .eq('patient_id', patient.id)
+              .eq('status', 'waiting')
+          }
+
           await trackAppointmentBookedByBot(accountId, {
             workspace_id: bookingUnitId,
             account_id: accountId,
@@ -576,6 +590,59 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     } else {
       console.warn(`Cancelamento (id ${apptId}) não encontrou consulta para paciente ${patient.id} na account ${accountId}.`)
       cancellationFailed = true
+    }
+  }
+
+  // Lista de espera — a Maria emite LISTA_ESPERA quando o paciente, sem vaga
+  // no dia que queria, opta por ser avisado em vez de escolher outro horário.
+  // Nunca junto de um agendamento confirmado; ignorado se o módulo waitlist
+  // não estiver ativo na account.
+  if (markers.waitlistDesired && waitlistEnabled && !markers.confirmedDate && patient) {
+    const waitlistUnitId =
+      (markers.unitId && allUnitById.has(markers.unitId) ? markers.unitId : null) ??
+      currentUnitId ??
+      (units.length === 1 ? units[0].id : null)
+
+    if (waitlistUnitId) {
+      const { data: existing } = await supabase
+        .from('waitlist')
+        .select('id')
+        .eq('workspace_id', waitlistUnitId)
+        .eq('patient_phone', patientPhone)
+        .eq('desired_date', markers.waitlistDesired.date)
+        .eq('status', 'waiting')
+        .maybeSingle()
+
+      if (existing) {
+        await supabase
+          .from('waitlist')
+          .update({
+            patient_id: patient.id,
+            patient_name: patient.full_name ?? 'Paciente',
+            desired_time: markers.waitlistDesired.time,
+          })
+          .eq('id', existing.id)
+      } else {
+        const { error: waitlistError } = await supabase.from('waitlist').insert({
+          workspace_id: waitlistUnitId,
+          account_id: accountId,
+          patient_id: patient.id,
+          patient_name: patient.full_name ?? 'Paciente',
+          patient_phone: patientPhone,
+          desired_date: markers.waitlistDesired.date,
+          desired_time: markers.waitlistDesired.time,
+          source: 'bot',
+          status: 'waiting',
+        })
+        if (waitlistError) {
+          console.error('waitlist insert (bot) falhou', waitlistError)
+        } else {
+          await trackWaitlistPatientAddedByBot(accountId, {
+            workspace_id: waitlistUnitId,
+            account_id: accountId,
+          })
+        }
+      }
     }
   }
 

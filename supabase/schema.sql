@@ -500,8 +500,12 @@ create table public.waitlist (
   preferred_days  text[],                             -- ['segunda','quarta']
   preferred_times text[],                             -- ['manha','tarde']
   notes           text,
+  desired_date    date,                               -- dia exato que o paciente pediu (entrada da Maria)
+  desired_time    time,                               -- horário exato, se o paciente nomeou um
+  source          text not null default 'manual'
+                  check (source in ('manual','bot')),
   status          text not null default 'waiting'
-                  check (status in ('waiting','scheduled','cancelled')),
+                  check (status in ('waiting','scheduled','cancelled','expired')),
   notified_at     timestamptz,                        -- último aviso de vaga (cron/waitlist)
   created_at      timestamptz not null default now()
 );
@@ -728,6 +732,9 @@ create index idx_messages_conversation       on public.messages(conversation_id,
 create index idx_availability_workspace      on public.availability_rules(workspace_id, day_of_week);
 create index idx_availability_exc_workspace  on public.availability_exceptions(workspace_id, date);
 create index idx_waitlist_workspace          on public.waitlist(workspace_id, status);
+create unique index uq_waitlist_active_desired on public.waitlist(workspace_id, patient_phone, desired_date)
+  where status = 'waiting' and desired_date is not null;
+create index idx_waitlist_desired            on public.waitlist(desired_date, status) where desired_date is not null;
 create index idx_revenue_workspace           on public.revenue_entries(workspace_id, entry_date);
 create index idx_revenue_appointment         on public.revenue_entries(appointment_id);
 create index idx_revenue_payment_status      on public.revenue_entries(workspace_id, payment_status, due_date);

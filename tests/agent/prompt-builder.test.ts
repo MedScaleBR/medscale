@@ -249,3 +249,21 @@ describe('buildDynamicSystemPrompt — seções opcionais e regras clínicas', (
     expect(build({ specialty: null })).toContain('Especialidade: Medicina Geral')
   })
 })
+
+describe('buildDynamicSystemPrompt — lista de espera', () => {
+  it('não menciona LISTA_ESPERA quando o módulo está desligado (default)', () => {
+    expect(build()).not.toContain('LISTA_ESPERA')
+  })
+
+  it('instrui a perguntar entre outro horário e a lista de espera quando habilitado', () => {
+    const p = build({}, { waitlistEnabled: true })
+    expect(p).toContain('lista de espera')
+    expect(p).toContain('LISTA_ESPERA: AAAA-MM-DD')
+    expect(p).toContain('nunca deve sair junto de AGENDAMENTO_CONFIRMADO')
+  })
+
+  it('sempre ordena as alternativas pela proximidade ao horário pedido', () => {
+    expect(build()).toContain('proximidade ao horário')
+    expect(build({}, { waitlistEnabled: true })).toContain('proximidade ao horário')
+  })
+})
