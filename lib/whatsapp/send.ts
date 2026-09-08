@@ -141,3 +141,56 @@ export async function sendWaitlistTemplate({
 
   return response.json()
 }
+
+interface SendWaitlistSpecificParams {
+  to: string
+  phoneNumberId: string
+  token: string
+  patientName: string
+  workspaceName: string
+  slot: string // "quarta-feira, 16/09 às 15:00" | "quarta-feira, 16/09 — 14:00, 15:30"
+}
+
+// Aviso de vaga para quem entrou na lista de espera pela Maria — nomeia o
+// dia/horário específico que a pessoa queria. Template aprovado pela Meta.
+export async function sendWaitlistSpecificTemplate({
+  to,
+  phoneNumberId,
+  token,
+  patientName,
+  workspaceName,
+  slot,
+}: SendWaitlistSpecificParams) {
+  const url = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to,
+      type: 'template',
+      template: {
+        name: 'waitlist_slot_specific',
+        language: { code: 'pt_BR' },
+        components: [
+          {
+            type: 'body',
+            parameters: [
+              { type: 'text', text: patientName },
+              { type: 'text', text: workspaceName },
+              { type: 'text', text: slot },
+            ],
+          },
+        ],
+      },
+    }),
+  })
+
+  if (!response.ok) {
+    const error = await response.json()
+    throw new Error(`WhatsApp API error: ${JSON.stringify(error)}`)
+  }
+
+  return response.json()
+}
