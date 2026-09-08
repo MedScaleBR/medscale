@@ -130,6 +130,14 @@ export function trackWaitlistPatientNotified(distinctId: string, props: BaseProp
   })
 }
 
+export function trackWaitlistPatientAddedByBot(accountId: string, props: BaseProps) {
+  return captureServer({
+    distinctId: accountId,
+    event: 'waitlist_patient_added_by_bot',
+    properties: { ...props, ...NO_PERSON },
+  })
+}
+
 // --- Transcrições (pipeline) --------------------------------------
 
 export function trackTranscriptionCompleted(

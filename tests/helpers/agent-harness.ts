@@ -78,7 +78,7 @@ export const CONVERSATION = { id: 'c1', status: 'open', bot_paused: false, archi
 // unidades vêm dos mocks de @/lib/bot/config (getBotConfig / getAccountUnits).
 export function defaultSupabaseConfig(): SupabaseMockConfig {
   return {
-    accounts: { select: { data: { name: 'Clínica Teste' } } },
+    accounts: { select: { data: { name: 'Clínica Teste', modules: [] } } },
     patients: { select: { data: { ...PATIENT } }, insert: { data: { ...PATIENT } }, update: { data: null } },
     conversations: { select: { data: { ...CONVERSATION } }, insert: { data: { ...CONVERSATION } }, update: { data: null } },
     // Histórico: só a mensagem que o paciente acabou de mandar (primeira troca).
