@@ -41,6 +41,11 @@ const STATUS_STYLE: Record<WaitlistStatus, string> = {
 
 const EMPTY_FORM = { patient_name: '', patient_phone: '', notes: '' }
 
+function formatDesired(date: string, time: string | null): string {
+  const [, m, d] = date.split('-')
+  return `${d}/${m}${time ? ` às ${time.slice(0, 5)}` : ''}`
+}
+
 export function WaitlistClient({ initialEntries }: { initialEntries: WaitlistEntry[] }) {
   const [entries, setEntries] = useState(initialEntries)
   const [open, setOpen] = useState(false)
@@ -115,7 +120,15 @@ export function WaitlistClient({ initialEntries }: { initialEntries: WaitlistEnt
             <tbody>
               {entries.map((e) => (
                 <tr key={e.id} className="border-b border-[var(--navy-06)] last:border-0">
-                  <td className="px-5 py-3 font-medium text-gray-900">{e.patient_name}</td>
+                  <td className="px-5 py-3 font-medium text-gray-900">
+                    {e.patient_name}
+                    {(e.desired_date || e.source === 'bot') && (
+                      <span className="mt-0.5 block text-xs font-normal text-gray-400">
+                        {e.desired_date ? `Quer ${formatDesired(e.desired_date, e.desired_time)}` : ''}
+                        {e.source === 'bot' ? `${e.desired_date ? ' · ' : ''}via WhatsApp` : ''}
+                      </span>
+                    )}
+                  </td>
                   <td className="px-5 py-3 text-gray-600">{e.patient_phone}</td>
                   <td className="px-5 py-3 text-gray-600">{e.notes ?? '—'}</td>
                   <td className="px-5 py-3">
