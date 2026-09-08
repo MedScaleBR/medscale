@@ -29,7 +29,11 @@ const LANCAMENTO_ITEM = {
     unidade: { type: ['string', 'null'], description: 'Nome (ou trecho) da unidade/clínica, se o médico citar. null se não citar.' },
     direcao: {
       anyOf: [{ type: 'string', enum: ['entrada', 'saida'] }, { type: 'null' }],
-      description: 'entrada = o médico RECEBEU dinheiro. saida = o médico GASTOU. null é tratado como saida.',
+      description:
+        'entrada = o médico RECEBEU dinheiro. saida = o médico GASTOU. null é tratado como saida. ' +
+        'Paciente pagando uma consulta NÃO é lançamento — é confirmar_pagamento, mesmo quando o ' +
+        'médico diz "recebi" ("recebi da Ana", "recebi 500 da consulta da Ana"): nesse caso ' +
+        'devolva lancamentos: [] e use a intenção confirmar_pagamento.',
     },
   },
   required: ['tipo', 'descricao', 'valor', 'categoria', 'subcategoria', 'unidade', 'direcao'],
@@ -189,7 +193,7 @@ Categorias de despesa em pj: ${byDirection(tree.pj, 'out')}
 Categorias de receita em pj: ${byDirection(tree.pj, 'in')}
 
 Regras:
-- "confirmar_pagamento" é sobre um PACIENTE que pagou uma consulta ("o João pagou", "recebi da Ana"), não sobre um gasto ou receita do médico. Extraia o nome do paciente em "paciente"; o horário em "horario" se ele disser; a forma de pagamento em "forma_pagamento" se ele disser.
+- "confirmar_pagamento" é sobre um PACIENTE que pagou uma consulta ("o João pagou", "recebi da Ana"), não sobre um gasto ou receita do médico. Extraia o nome do paciente em "paciente"; o horário em "horario" se ele disser; a forma de pagamento em "forma_pagamento" se ele disser. Nunca devolva isso como "lancamento" com direcao entrada, mesmo que a receita de consulta caiba no tipo pj — o pagamento de consulta passa pelo fluxo de confirmação e é registrado por ele.
 - "direcao" = entrada quando o médico RECEBEU dinheiro (ex: "recebi 500 de aluguel", "entrou um pix de 200", "quanto recebi esse mês"); saida quando ele GASTOU (ex: "gastei 50", "paguei 3500", "quanto gastei"). Se não estiver claro, use saida.
 - Em "lancamento" ou "consulta" com direcao entrada, use as listas de RECEITA acima para "categoria"; com direcao saida, use as listas de DESPESA. Nunca misture as duas.
 - Em "consulta", se o médico citar um assunto (ex: "assinaturas", "aluguel"), mapeie para a categoria EXATA da lista certa (despesa ou receita, conforme a direcao). Se não citar, categoria = null.

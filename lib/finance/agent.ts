@@ -12,6 +12,7 @@ import {
   buildChooseTypeMessage,
   buildAskAmountMessage,
   parseEntryType,
+  parseAmount,
   buildQueryMessage,
   buildSmalltalkMessage,
   buildUndoMessage,
@@ -135,6 +136,11 @@ const NEGATIVE = /^(n|nao|não|cancela|cancelar|deixa|esquece|errado|não era|na
 const BATCH_CANCEL =
   /^(n|nao|não)$|^(cancela|cancelar|deixa|esquece|esquecer|para|pare|nao quero|não quero|nada disso)\b/i
 
+// Enquanto o lote está estacionado, toda resposta que não parseia é consumida
+// pela repergunta — sem dizer a palavra de saída, o owner não tem como saber
+// que existe uma. Vai só nas reperguntas: a primeira pergunta é a normal.
+const BATCH_ESCAPE_HINT = ' Se quiser deixar esse lançamento de lado, responda "deixa".'
+
 function parsePaymentMethod(text: string): RevenuePaymentMethod | null {
   const t = text
     .normalize('NFD')
@@ -147,34 +153,6 @@ function parsePaymentMethod(text: string): RevenuePaymentMethod | null {
   if (/\bdinheiro\b|especie|espécie/.test(t)) return 'dinheiro'
   if (/transfer|\bted\b|\bdoc\b/.test(t)) return 'transferencia'
   return null
-}
-
-// Resposta do owner à pergunta "quanto foi?". Só o número (com "R$"/"reais"
-// opcionais) conta — qualquer outra coisa devolve null para o agente perguntar
-// de novo, em vez de gravar um valor adivinhado.
-//
-// Ancorado nas duas pontas: sem o `^`, "foi tipo 40" casaria pelo final e o
-// ponto de milhar de "1.200" seria lido como decimal (200). A primeira
-// alternativa é o formato pt-BR agrupado (1.200 / 3.450,90); a segunda é o
-// número simples, onde um ponto só pode ser decimal (12.50), porque grupo de
-// milhar tem sempre 3 dígitos.
-const AMOUNT_RE = /^r?\$?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?:reais?)?$/
-const GROUPED_RE = /^\d{1,3}(?:\.\d{3})+$/
-
-export function parseAmount(text: string): number | null {
-  const m = text.replace(/\s/g, '').toLowerCase().match(AMOUNT_RE)
-  if (!m) return null
-
-  // "1.200,50" -> "1200.50"; "1.200" -> "1200"; "12.50" fica como está.
-  const raw = m[1]
-  const normalized = raw.includes(',')
-    ? raw.replace(/\./g, '').replace(',', '.')
-    : GROUPED_RE.test(raw)
-      ? raw.replace(/\./g, '')
-      : raw
-
-  const n = parseFloat(normalized)
-  return isFinite(n) && n > 0 ? n : null
 }
 
 export async function processFinancialMessage(senderPhone: string, messageText: string): Promise<void> {
@@ -514,7 +492,14 @@ async function persistAndConfirm(
   }
 
   if (saved.length === 0) {
-    await sendFinanceReply(ctx.senderPhone, `Erro ao registrar o lançamento. Tente novamente.`)
+    // Plural conforme o que se tentou gravar — dizer "o lançamento" depois de
+    // três faz o médico achar que dois entraram.
+    await sendFinanceReply(
+      ctx.senderPhone,
+      drafts.length === 1
+        ? `Erro ao registrar o lançamento. Tente novamente.`
+        : `Erro ao registrar os lançamentos. Tente novamente.`
+    )
     return
   }
 
@@ -801,7 +786,12 @@ async function handlePendingEntryBatch(
   if (!raw || raw.kind !== 'entry_batch') return false
   const pending = raw as unknown as PendingEntryBatch
 
-  // Expirou — limpa e deixa a mensagem seguir o fluxo normal.
+  // Expirou — limpa e deixa a mensagem seguir o fluxo normal. O lote é
+  // descartado em silêncio de propósito: 30 min depois, a mensagem quase
+  // certamente é outro assunto, e ressuscitar a pergunta antiga confundiria
+  // mais do que ajudaria. Note que uma repergunta (resposta que não parseou)
+  // não renova `last_message_at` — assim um laço travado se encerra sozinho
+  // no TTL contado desde a última pergunta que o agente de fato estacionou.
   if (
     fsession?.last_message_at &&
     Date.now() - new Date(fsession.last_message_at).getTime() > PENDING_TTL_MS
@@ -828,7 +818,7 @@ async function handlePendingEntryBatch(
     } else {
       await sendFinanceReply(
         senderPhone,
-        buildChooseTypeMessage(current.description, current.amount, current.direction)
+        buildChooseTypeMessage(current.description, current.amount, current.direction) + BATCH_ESCAPE_HINT
       )
       return true
     }
@@ -839,7 +829,10 @@ async function handlePendingEntryBatch(
     } else if (BATCH_CANCEL.test(text)) {
       return cancelPendingBatch(supabase, senderPhone)
     } else {
-      await sendFinanceReply(senderPhone, 'Não peguei o valor. Me manda só o número, ex: 35.')
+      await sendFinanceReply(
+        senderPhone,
+        'Não peguei o valor. Me manda só o número, ex: 35.' + BATCH_ESCAPE_HINT
+      )
       return true
     }
   } else {
@@ -850,7 +843,7 @@ async function handlePendingEntryBatch(
     } else if (BATCH_CANCEL.test(text)) {
       return cancelPendingBatch(supabase, senderPhone)
     } else {
-      await sendFinanceReply(senderPhone, buildWorkspaceNotMatchedMessage(units))
+      await sendFinanceReply(senderPhone, buildWorkspaceNotMatchedMessage(units) + BATCH_ESCAPE_HINT)
       return true
     }
   }

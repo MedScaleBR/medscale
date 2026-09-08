@@ -1,11 +1,8 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect } from 'vitest'
 
-// agent.ts arrasta supabase/whatsapp/anthropic no import — mockados para o
-// teste da função pura parseAmount não tocar nada externo.
-vi.mock('@/lib/supabase/server', () => ({ createAdminClient: () => ({}), createClient: async () => ({}) }))
-vi.mock('@/lib/whatsapp/send', () => ({ sendWhatsAppMessage: vi.fn() }))
-
-import { parseAmount } from '@/lib/finance/agent'
+// parseAmount vive em respond.ts, junto das outras helpers puras de resposta —
+// importá-la não arrasta supabase nem o cliente do WhatsApp.
+import { parseAmount } from '@/lib/finance/respond'
 
 describe('parseAmount', () => {
   it.each([

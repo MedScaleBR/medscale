@@ -162,6 +162,24 @@ describe('interpretMessage — prompt do sistema', () => {
     expect(system).toContain('Categorias de receita em pj: Consultas particulares')
   })
 
+  // Com "receita de consulta/procedimento" no balde pj e vários itens em
+  // lancamentos[] como normal, "recebi 500 da consulta da Ana" corre o risco de
+  // voltar como lancamento pj/entrada — pulando a confirmação de pagamento e
+  // duplicando com o espelho do ciclo de receita.
+  it('a guarda de "recebi da Ana" está no schema do item e nas regras', async () => {
+    createMock.mockResolvedValue(toolResponse({}))
+    await interpretMessage('recebi 500 da consulta da Ana', '2026-09-04', TREE)
+    const call = createMock.mock.calls[0][0]
+    const itemDirecao = call.tools[0].input_schema.properties.lancamentos.items.properties.direcao
+      .description as string
+    expect(itemDirecao).toContain('confirmar_pagamento')
+    expect(itemDirecao).toContain('recebi da Ana')
+    // A mesma regra continua no prompt do sistema.
+    const system = call.system as string
+    expect(system).toContain('confirmar_pagamento')
+    expect(system).toContain('recebi da Ana')
+  })
+
   it('a ferramenta exige o campo direcao', async () => {
     createMock.mockResolvedValue(toolResponse({}))
     await interpretMessage('recebi 3000 de aluguel', '2026-09-04', TREE)

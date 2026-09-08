@@ -220,17 +220,59 @@ export function buildWorkspaceNotMatchedMessage(units: { name: string }[]): stri
 
 // ── Lançamento incompleto: PF ou PJ? Quanto foi? ──────────────────────────
 
+// Uma resposta negada abre com "não" e cita justamente o balde que NÃO é:
+// "não é da clínica" tem "clinica" no texto e casaria com pj. Como a
+// alternância não entende negação, o texto que começa em "não" não decide
+// nada — devolve null e o agente pergunta de novo.
+//
+// A vírgula é a exceção: "não, é da clínica" nega uma pergunta anterior e
+// então afirma o balde. Aí o resto da frase vale.
+const NEGATED_ANSWER_RE = /^nao(?!,)/
+
 // Casa a resposta do owner à pergunta "PF ou PJ?". pj é checado primeiro para
 // "minha clínica" não cair em pf pelo "minha".
+//
+// "particular" fica de fora de propósito: neste domínio "consulta particular"
+// é receita da clínica (PJ), então a palavra sozinha apontaria para o balde
+// errado. Sem ela, "particular" repergunta em vez de chutar.
 export function parseEntryType(text: string): 'pf' | 'pj' | null {
   const t = text
     .normalize('NFD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
     .trim()
+  if (NEGATED_ANSWER_RE.test(t)) return null
   if (/\b(pj|clinica|empresa|cnpj|consultorio|escritorio|juridica)\b/.test(t)) return 'pj'
-  if (/\b(pf|pessoal|pessoa fisica|fisica|meu|minha|particular)\b/.test(t)) return 'pf'
+  if (/\b(pf|pessoal|pessoa fisica|fisica|meu|minha)\b/.test(t)) return 'pf'
   return null
+}
+
+// Resposta do owner à pergunta "quanto foi?". Só o número (com "R$"/"reais"
+// opcionais) conta — qualquer outra coisa devolve null para o agente perguntar
+// de novo, em vez de gravar um valor adivinhado.
+//
+// Ancorado nas duas pontas: sem o `^`, "foi tipo 40" casaria pelo final e o
+// ponto de milhar de "1.200" seria lido como decimal (200). A primeira
+// alternativa é o formato pt-BR agrupado (1.200 / 3.450,90); a segunda é o
+// número simples, onde um ponto só pode ser decimal (12.50), porque grupo de
+// milhar tem sempre 3 dígitos.
+const AMOUNT_RE = /^r?\$?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?:reais?)?$/
+const GROUPED_RE = /^\d{1,3}(?:\.\d{3})+$/
+
+export function parseAmount(text: string): number | null {
+  const m = text.replace(/\s/g, '').toLowerCase().match(AMOUNT_RE)
+  if (!m) return null
+
+  // "1.200,50" -> "1200.50"; "1.200" -> "1200"; "12.50" fica como está.
+  const raw = m[1]
+  const normalized = raw.includes(',')
+    ? raw.replace(/\./g, '').replace(',', '.')
+    : GROUPED_RE.test(raw)
+      ? raw.replace(/\./g, '')
+      : raw
+
+  const n = parseFloat(normalized)
+  return isFinite(n) && n > 0 ? n : null
 }
 
 // A direção é obrigatória porque as duas perguntas do lançamento incompleto

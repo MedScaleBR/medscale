@@ -181,6 +181,129 @@ describe('processFinancialMessage — lote de lançamentos', () => {
     expect(msgs[1]).toContain('pessoal (PF) ou da clínica (PJ)')
   })
 
+  // Um item que só o interpretador viu não existe em lugar nenhum além do
+  // pending_entry — se ele não for para a `queue` do registro estacionado, some.
+  it('o item ainda não olhado entra na queue do pending estacionado', async () => {
+    financeConfig()
+    h.intent = {
+      kind: 'entry',
+      entries: [
+        { type: null, direction: 'out', description: 'aluguel', amount: 2600, category: null, subcategory: null, workspaceHint: null },
+        { type: 'pf', direction: 'out', description: 'Uber', amount: 50, category: null, subcategory: null, workspaceHint: null },
+      ],
+    }
+    const { processFinancialMessage } = await import('@/lib/finance/agent')
+    await processFinancialMessage(PARAMS.patientPhone, 'gastei 2600 no aluguel e 50 no uber')
+
+    const up = state.supabase.callsTo('finance_sessions', 'upsert').at(-1)
+    const pending = (up?.payload as { pending_entry: { current: unknown; queue: unknown[] } }).pending_entry
+    expect(pending.current).toMatchObject({ description: 'aluguel', type: null })
+    expect(pending.queue).toHaveLength(1)
+    expect(pending.queue[0]).toMatchObject({ description: 'Uber', type: 'pf', amount: 50 })
+  })
+
+  it('respondido o tipo, o item estacionado E o da queue são gravados e confirmados juntos', async () => {
+    financeConfig()
+    h.intent = {
+      kind: 'entry',
+      entries: [
+        { type: null, direction: 'out', description: 'aluguel', amount: 2600, category: null, subcategory: null, workspaceHint: null },
+        { type: 'pf', direction: 'out', description: 'Uber', amount: 50, category: null, subcategory: null, workspaceHint: null },
+      ],
+    }
+    const { processFinancialMessage } = await import('@/lib/finance/agent')
+    await processFinancialMessage(PARAMS.patientPhone, 'gastei 2600 no aluguel e 50 no uber')
+    expect(state.supabase.callsTo('finance_entries', 'insert')).toHaveLength(0)
+
+    // O owner responde "pessoal" — o lote inteiro volta ao laço de drenagem.
+    applyPendingFromLastUpsert()
+    await processFinancialMessage(PARAMS.patientPhone, 'pessoal')
+
+    const ins = state.supabase.callsTo('finance_entries', 'insert')
+    expect(ins).toHaveLength(2)
+    expect(ins.map((c) => (c.payload as { description: string }).description)).toEqual(['aluguel', 'Uber'])
+    const msg = lastSentMessage() ?? ''
+    expect(msg).toContain('Registrei 2 lançamentos')
+    expect(msg).toContain('aluguel')
+    expect(msg).toContain('Uber')
+  })
+
+  // batchTotals consulta um total por bucket (tipo + direção) distinto: um lote
+  // PF + PJ tem que render duas linhas de total, não uma nem quatro.
+  it('lote PF + PJ confirma com uma linha de total por bucket', async () => {
+    financeConfig()
+    h.intent = {
+      kind: 'entry',
+      entries: [
+        { type: 'pf', direction: 'out', description: 'iFood', amount: 35, category: null, subcategory: null, workspaceHint: null },
+        { type: 'pj', direction: 'out', description: 'Material', amount: 400, category: null, subcategory: null, workspaceHint: null },
+      ],
+    }
+    const { processFinancialMessage } = await import('@/lib/finance/agent')
+    await processFinancialMessage(PARAMS.patientPhone, 'gastei 35 no ifood e 400 em material da clínica')
+
+    expect(state.supabase.callsTo('finance_entries', 'insert')).toHaveLength(2)
+    const msg = lastSentMessage() ?? ''
+    const totais = msg.split('\n').filter((l) => /^(Despesas|Receitas) (PF|PJ) em /.test(l))
+    expect(totais).toHaveLength(2)
+    expect(totais.some((l) => l.startsWith('Despesas PF'))).toBe(true)
+    expect(totais.some((l) => l.startsWith('Despesas PJ'))).toBe(true)
+  })
+
+  it('lote inteiro que falha no insert avisa no plural', async () => {
+    financeConfig({
+      finance_entries: {
+        select: { data: [] },
+        insert: { data: null, error: { message: 'boom' } },
+      },
+    })
+    h.intent = {
+      kind: 'entry',
+      entries: [
+        { type: 'pf', direction: 'out', description: 'iFood', amount: 35, category: null, subcategory: null, workspaceHint: null },
+        { type: 'pf', direction: 'out', description: 'Uber', amount: 50, category: null, subcategory: null, workspaceHint: null },
+      ],
+    }
+    const { processFinancialMessage } = await import('@/lib/finance/agent')
+    await processFinancialMessage(PARAMS.patientPhone, 'gastei 35 no ifood e 50 no uber')
+
+    expect(lastSentMessage()).toContain('Erro ao registrar os lançamentos')
+  })
+
+  // O lote expirado é descartado em silêncio: 30 minutos depois, a mensagem
+  // quase certamente é outro assunto, não a resposta à pergunta.
+  it('lote expirado não consome a mensagem — ela segue para a interpretação', async () => {
+    financeConfig({
+      finance_sessions: {
+        select: {
+          data: {
+            pending_entry: {
+              kind: 'entry_batch', awaiting: 'type', rawMessage: 'gastei 2600 no aluguel',
+              current: { type: null, direction: 'out', description: 'aluguel', amount: 2600, category: null, subcategory: null, workspaceHint: null },
+              queue: [],
+            },
+            last_message_at: new Date(Date.now() - 31 * 60 * 1000).toISOString(),
+          },
+        },
+        upsert: { data: null }, update: { data: null },
+      },
+    })
+    h.intent = {
+      kind: 'entry',
+      entries: [{ type: 'pf', direction: 'out', description: 'iFood', amount: 35, category: null, subcategory: null, workspaceHint: null }],
+    }
+    const { processFinancialMessage } = await import('@/lib/finance/agent')
+    await processFinancialMessage(PARAMS.patientPhone, 'gastei 35 no ifood')
+
+    // A pendência foi limpa…
+    const clear = state.supabase.callsTo('finance_sessions', 'update')[0]
+    expect((clear?.payload as { pending_entry: unknown })?.pending_entry).toBeNull()
+    // …e a mensagem foi interpretada do zero, não lida como resposta de tipo.
+    const ins = state.supabase.callsTo('finance_entries', 'insert')
+    expect(ins).toHaveLength(1)
+    expect((ins[0].payload as { description: string }).description).toBe('iFood')
+  })
+
   it('valor faltando pergunta o valor e depois grava', async () => {
     financeConfig({
       finance_sessions: {
@@ -225,6 +348,33 @@ describe('processFinancialMessage — lote de lançamentos', () => {
 
     expect(state.supabase.callsTo('finance_entries', 'insert')).toHaveLength(0)
     expect(lastSentMessage()).toContain('Me manda só o número')
+    // Sem a dica, a única saída do laço é uma palavra que ninguém contou.
+    expect(lastSentMessage()).toContain('responda "deixa"')
+  })
+
+  it('unidade não reconhecida repergunta com a dica de saída', async () => {
+    financeConfig({
+      workspaces: { select: { data: [{ id: 'w1', name: 'Unidade A' }, { id: 'w2', name: 'Unidade B' }] } },
+      finance_sessions: {
+        select: {
+          data: {
+            pending_entry: {
+              kind: 'entry_batch', awaiting: 'unit', rawMessage: 'gastei 400 em material',
+              current: { type: 'pj', direction: 'out', description: 'material', amount: 400, category: null, subcategory: null, workspaceHint: null, categoryId: null, subcategoryId: null },
+              queue: [],
+            },
+            last_message_at: new Date().toISOString(),
+          },
+        },
+        upsert: { data: null }, update: { data: null },
+      },
+    })
+    const { processFinancialMessage } = await import('@/lib/finance/agent')
+    await processFinancialMessage(PARAMS.patientPhone, 'a do centro talvez')
+
+    expect(state.supabase.callsTo('finance_entries', 'insert')).toHaveLength(0)
+    expect(lastSentMessage()).toContain('Não reconheci essa unidade')
+    expect(lastSentMessage()).toContain('responda "deixa"')
   })
 
   it('PJ multi-unidade encadeia a pergunta de unidade depois do tipo', async () => {
@@ -336,6 +486,9 @@ describe('processFinancialMessage — lote de lançamentos', () => {
     await processFinancialMessage(PARAMS.patientPhone, 'não sei')
 
     expect(lastSentMessage()).toContain('pessoal (PF) ou da clínica (PJ)')
+    // Repergunta, mas dizendo como sair — senão toda resposta que não parseia
+    // é consumida sem o owner saber que existe uma saída.
+    expect(lastSentMessage()).toContain('responda "deixa"')
     // A pendência continua de pé — "não sei" é não-resposta, não desistência.
     expect(state.supabase.callsTo('finance_sessions', 'update')).toHaveLength(0)
     expect(state.supabase.callsTo('finance_entries', 'insert')).toHaveLength(0)
