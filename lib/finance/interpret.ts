@@ -193,7 +193,7 @@ Regras:
 - "direcao" = entrada quando o médico RECEBEU dinheiro (ex: "recebi 500 de aluguel", "entrou um pix de 200", "quanto recebi esse mês"); saida quando ele GASTOU (ex: "gastei 50", "paguei 3500", "quanto gastei"). Se não estiver claro, use saida.
 - Em "lancamento" ou "consulta" com direcao entrada, use as listas de RECEITA acima para "categoria"; com direcao saida, use as listas de DESPESA. Nunca misture as duas.
 - Em "consulta", se o médico citar um assunto (ex: "assinaturas", "aluguel"), mapeie para a categoria EXATA da lista certa (despesa ou receita, conforme a direcao). Se não citar, categoria = null.
-- Em "lancamento", nunca invente valor: se a mensagem não tiver um número claro, use intencao "desconhecido".
+- Em "lancamento", nunca invente valor. Se um lançamento tem o que foi gasto mas não um número claro, devolva esse item com "valor": null — o agente pergunta o valor. Só use "desconhecido" quando não há nenhum lançamento identificável.
 - A mensagem pode conter mais de um lançamento (ex.: "gastei 35 no ifood e 50 no uber"). Devolva um item em "lancamentos" para cada gasto ou receita. Use "desconhecido" apenas quando não dá para identificar nenhum lançamento.
 - Classifique cada lançamento em "tipo":
   - pf: gasto/receita pessoal do médico. Ex.: iFood, mercado, streaming, farmácia, escola dos filhos, viagem, salário/pró-labore, aluguel que ELE recebe, investimentos.
@@ -233,16 +233,18 @@ function toIntent(input: IntentToolInput, raw: string): FinanceIntent {
     case 'lancamento': {
       const drafts: EntryDraft[] = []
       for (const item of input.lancamentos) {
-        // Task 1: comportamento de hoje — sem número claro, a mensagem inteira é unknown.
-        if (typeof item.valor !== 'number' || !isFinite(item.valor) || item.valor <= 0) {
-          return { kind: 'unknown', raw }
-        }
+        const amount =
+          typeof item.valor === 'number' && isFinite(item.valor) && item.valor > 0 ? item.valor : null
+        const description = item.descricao?.trim() || null
+        // Sem valor E sem descrição não há o que perguntar nem o que gravar.
+        if (amount == null && description == null) continue
         drafts.push({
           // null = ambíguo; o agente pergunta PF ou PJ antes de gravar.
           type: item.tipo,
           direction: item.direcao === 'entrada' ? 'in' : 'out',
-          description: item.descricao?.trim() || null,
-          amount: item.valor,
+          description,
+          // amount null = descrição sem número; o agente pergunta "quanto foi?".
+          amount,
           // Aproveita a categoria/subcategoria que este mesmo passo já deduziu,
           // evitando uma segunda chamada ao modelo (categorizeEntry). Passa os
           // NOMES adiante — o agente resolve nome->id contra a árvore e valida.

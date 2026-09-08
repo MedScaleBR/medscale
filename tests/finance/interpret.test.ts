@@ -77,11 +77,20 @@ describe('interpretMessage — direction', () => {
     expect(intent.entries[0]).toMatchObject({ type: 'pf', direction: 'out', amount: 50, description: 'Mercado' })
   })
 
-  it('lancamento sem valor claro (com descrição) vira unknown — comportamento de hoje', async () => {
+  it('lancamento sem valor claro mas com descrição vira entry com amount null', async () => {
     createMock.mockResolvedValue(
       toolResponse({ lancamentos: [{ ...ITEM, descricao: 'Mercado', valor: null, direcao: 'saida' }] })
     )
     const intent = await interpretMessage('comprei umas coisas no mercado', '2026-09-04', TREE)
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries[0]).toMatchObject({ description: 'Mercado', amount: null })
+  })
+
+  it('lancamento sem valor claro E sem descrição vira unknown', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({ lancamentos: [{ ...ITEM, descricao: null, valor: null, direcao: 'saida' }] })
+    )
+    const intent = await interpretMessage('comprei umas coisas', '2026-09-04', TREE)
     expect(intent).toMatchObject({ kind: 'unknown' })
   })
 
@@ -205,5 +214,42 @@ describe('interpretMessage — PF/PJ ambíguo retorna null', () => {
     expect(system).toContain('genuinamente ambíguo')
     expect(system).toContain('NÃO chute')
     expect(system).not.toContain('escolha pelo contexto clínico')
+  })
+})
+
+describe('interpretMessage — valor faltando vira amount null', () => {
+  it('descrição sem valor vira item com amount null', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({
+        lancamentos: [{ tipo: 'pf', descricao: 'almoço', valor: null, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' }],
+      })
+    )
+    const intent = await interpretMessage('paguei o almoço', '2026-09-04', TREE)
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries[0]).toMatchObject({ description: 'almoço', amount: null })
+  })
+
+  it('item sem descrição e sem valor é descartado; nada sobra → unknown', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({
+        lancamentos: [{ tipo: 'pf', descricao: null, valor: null, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' }],
+      })
+    )
+    const intent = await interpretMessage('gastei um dinheiro aí', '2026-09-04', TREE)
+    expect(intent.kind).toBe('unknown')
+  })
+
+  it('num lote, o item sem valor não derruba o item completo', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({
+        lancamentos: [
+          { tipo: 'pf', descricao: 'iFood', valor: 35, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' },
+          { tipo: 'pf', descricao: 'estacionamento', valor: null, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' },
+        ],
+      })
+    )
+    const intent = await interpretMessage('35 no ifood e o estacionamento', '2026-09-04', TREE)
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries.map((e) => [e.description, e.amount])).toEqual([['iFood', 35], ['estacionamento', null]])
   })
 })
