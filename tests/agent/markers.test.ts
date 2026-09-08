@@ -137,6 +137,26 @@ describe('parseMarkers — parsing puro dos marcadores de controle', () => {
     expect(parsed.handoffRequested).toBe(false)
     expect(parsed.messageForPatient).toBe('Claro! Qual dia fica melhor pra você?')
   })
+
+  it('extrai só a data quando LISTA_ESPERA vem sem horário', () => {
+    const parsed = parseMarkers('Beleza, te aviso se vagar.\nLISTA_ESPERA: 2026-09-16')
+    expect(parsed.waitlistDesired).toEqual({ date: '2026-09-16', time: null })
+  })
+
+  it('extrai data e horário quando LISTA_ESPERA vem com horário', () => {
+    const parsed = parseMarkers('Te aviso!\nLISTA_ESPERA: 2026-09-16T15:00-03:00')
+    expect(parsed.waitlistDesired).toEqual({ date: '2026-09-16', time: '15:00' })
+  })
+
+  it('remove a linha LISTA_ESPERA da mensagem enviada ao paciente', () => {
+    const parsed = parseMarkers('Te aviso se abrir vaga.\nLISTA_ESPERA: 2026-09-16T15:00-03:00')
+    expect(parsed.messageForPatient).toBe('Te aviso se abrir vaga.')
+    expect(parsed.messageForPatient).not.toContain('LISTA_ESPERA')
+  })
+
+  it('devolve waitlistDesired null quando não há marcador', () => {
+    expect(parseMarkers('Oi, tudo bem?').waitlistDesired).toBeNull()
+  })
 })
 
 describe('processIncomingMessage — ações disparadas pelos marcadores', () => {

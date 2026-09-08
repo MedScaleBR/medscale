@@ -25,6 +25,13 @@ export const PROCEDURE_ID_MARKER =
 export const UNIT_ID_MARKER =
   /UNIDADE_ID:\s*([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/
 
+// Lista de espera — a Maria emite quando o paciente, sem vaga no dia que
+// queria, opta por ser avisado. Aceita data pura ou data+hora com offset de
+// São Paulo (mesmo padrão do CONFIRMATION_MARKER). Grupo 1 = AAAA-MM-DD,
+// grupo 2 = HH:mm (opcional).
+export const WAITLIST_MARKER =
+  /LISTA_ESPERA:\s*(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2})(?::\d{2})?-03:00)?/
+
 export const HANDOFF_MARKER = '[HANDOFF]'
 
 export interface ParsedMarkers {
@@ -40,6 +47,8 @@ export interface ParsedMarkers {
   unitId: string | null
   /** Nome completo informado pelo paciente, já com trim, ou null. */
   patientName: string | null
+  /** Dia (e horário, se o paciente nomeou um) que o paciente quer esperar, ou null. */
+  waitlistDesired: { date: string; time: string | null } | null
   /** O Claude sinalizou transferência para atendimento humano. */
   handoffRequested: boolean
   /**
@@ -58,6 +67,7 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
   const procedureMatch = rawMessage.match(PROCEDURE_ID_MARKER)
   const unitMatch = rawMessage.match(UNIT_ID_MARKER)
   const nameMatch = rawMessage.match(PATIENT_NAME_MARKER)
+  const waitlistMatch = rawMessage.match(WAITLIST_MARKER)
 
   const confirmedSlot = confirmMatch?.[1] ?? null
   const confirmedDate = confirmedSlot ? new Date(confirmedSlot) : null
@@ -70,6 +80,7 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
     .replace(PROCEDURE_ID_MARKER, '')
     .replace(UNIT_ID_MARKER, '')
     .replace(PATIENT_NAME_MARKER, '')
+    .replace(WAITLIST_MARKER, '')
     .trim()
 
   return {
@@ -79,6 +90,7 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
     procedureId: procedureMatch?.[1] ?? null,
     unitId: unitMatch?.[1] ?? null,
     patientName,
+    waitlistDesired: waitlistMatch ? { date: waitlistMatch[1], time: waitlistMatch[2] ?? null } : null,
     handoffRequested: cleanedMessage.includes(HANDOFF_MARKER),
     cleanedMessage,
     messageForPatient: cleanedMessage.replace(HANDOFF_MARKER, '').trim(),
