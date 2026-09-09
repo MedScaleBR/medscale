@@ -37,7 +37,7 @@ export function MobileDrawerContent({ session, accounts, onNavigate }: MobileDra
         onNavigate={onNavigate}
       />
 
-      <div className="border-t border-[var(--w10)] px-3 py-3">
+      <div className="border-t border-[var(--w10)] px-3 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
         <button
           onClick={logout}
           className="flex w-full items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium text-[var(--w70)] transition-colors hover:bg-[var(--w10)] hover:text-white"
