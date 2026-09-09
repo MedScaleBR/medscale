@@ -2,6 +2,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 import type { DashboardStats } from '@/lib/types'
 import { summarizeRevenueEntries } from '@/lib/revenue/summary'
+import { getDashboardForecast } from '@/lib/revenue/dashboard-forecast'
 
 // workspaceIds: uma workspace (visão normal) ou várias (visão consolidada,
 // ver WorkspaceTabs no dashboard) — todas já vêm filtradas por RLS/sessão.
@@ -14,7 +15,7 @@ export async function getDashboardStats(
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
   const today = now.toISOString().split('T')[0]
 
-  const [appts, revenue, noshow, todayAppts, campaigns] = await Promise.all([
+  const [appts, revenue, noshow, todayAppts, campaigns, revenueForecast] = await Promise.all([
     supabase
       .from('appointments')
       .select('id, source, workspace_id', { count: 'exact' })
@@ -52,6 +53,7 @@ export async function getDashboardStats(
       .select('channel, spend, leads, clicks, impressions')
       .in('workspace_id', workspaceIds)
       .gte('period_start', today.slice(0, 7) + '-01'),
+    getDashboardForecast(supabase, workspaceIds, now),
   ])
 
   const totalAppts = appts.count ?? 0
@@ -86,6 +88,7 @@ export async function getDashboardStats(
   }))
 
   return {
+    revenueForecast,
     appointments: { total: totalAppts, bot: botAppts, manual: totalAppts - botAppts },
     revenue: {
       total: revTotals.projected,

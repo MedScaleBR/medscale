@@ -5,6 +5,7 @@ import { getDashboardStats } from '@/lib/dashboard'
 import { KpiCard } from '@/components/dashboard/KpiCard'
 import { AgendaHoje } from '@/components/dashboard/AgendaHoje'
 import { RevenueChart } from '@/components/dashboard/RevenueChart'
+import { RevenueForecast } from '@/components/dashboard/RevenueForecast'
 import { NoShowMeter } from '@/components/dashboard/NoShowMeter'
 import { TrafficTable } from '@/components/dashboard/TrafficTable'
 import { WorkspaceTabs } from '@/components/dashboard/WorkspaceTabs'
@@ -68,6 +69,8 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           barColor={stats.noShow.rate >= 15 ? 'red' : 'cyan'}
         />
       </div>
+
+      <RevenueForecast forecast={stats.revenueForecast} />
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
