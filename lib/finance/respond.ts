@@ -13,7 +13,10 @@ Use "R$ X.XXX,XX" como formato de valor (padrão brasileiro).
 Você separa todo gasto em dois tipos: PF (pessoal do médico) e PJ (da clínica).
 Essa separação é o principal valor do produto — médicos costumam misturar as duas
 coisas e perdem a noção de quanto de fato sobra para eles. Deixe esse papel claro
-sempre que estiver se apresentando ou explicando o que você faz.`
+sempre que estiver se apresentando ou explicando o que você faz.
+
+Você entende o médico falando do jeito dele: texto livre, com rodeio, e até
+vários gastos numa mensagem só. Responda direto, sem reclamar do formato.`
 
 // A instrução de confirmar valor + total só faz sentido ao registrar ou
 // consultar; numa saudação ela faria o modelo inventar um "registro".
@@ -173,7 +176,7 @@ Gastos e receitas são registrados na data de hoje. Dúvidas? Fale com o suporte
 }
 
 export function buildUnknownMessage(): string {
-  return `Não consegui entender. Você pode me dizer algo como "gastei 50 no almoço" ou "quanto gastei esse mês?". Digite /ajuda para ver mais exemplos.`
+  return `Não peguei essa. Me diz o gasto com o valor e onde foi — por exemplo "35 no almoço" ou "2600 de aluguel" — ou pergunte "quanto gastei esse mês".`
 }
 
 // Consulta que nomeia uma categoria fora da árvore da conta. Sem isto, a
@@ -213,6 +216,113 @@ export function buildChooseWorkspaceMessage(
 export function buildWorkspaceNotMatchedMessage(units: { name: string }[]): string {
   const list = units.map((u, i) => `${i + 1}. ${u.name}`).join('\n')
   return `Não reconheci essa unidade. Escolha uma:\n${list}`
+}
+
+// ── Lançamento incompleto: PF ou PJ? Quanto foi? ──────────────────────────
+
+// Uma resposta negada abre com "não" e cita justamente o balde que NÃO é:
+// "não é da clínica" tem "clinica" no texto e casaria com pj. Como a
+// alternância não entende negação, o texto que começa em "não" não decide
+// nada — devolve null e o agente pergunta de novo.
+//
+// A vírgula é a exceção: "não, é da clínica" nega uma pergunta anterior e
+// então afirma o balde. Aí o resto da frase vale.
+const NEGATED_ANSWER_RE = /^nao(?!,)/
+
+// Casa a resposta do owner à pergunta "PF ou PJ?". pj é checado primeiro para
+// "minha clínica" não cair em pf pelo "minha".
+//
+// "particular" fica de fora de propósito: neste domínio "consulta particular"
+// é receita da clínica (PJ), então a palavra sozinha apontaria para o balde
+// errado. Sem ela, "particular" repergunta em vez de chutar.
+export function parseEntryType(text: string): 'pf' | 'pj' | null {
+  const t = text
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toLowerCase()
+    .trim()
+  if (NEGATED_ANSWER_RE.test(t)) return null
+  if (/\b(pj|clinica|empresa|cnpj|consultorio|escritorio|juridica)\b/.test(t)) return 'pj'
+  if (/\b(pf|pessoal|pessoa fisica|fisica|meu|minha)\b/.test(t)) return 'pf'
+  return null
+}
+
+// Resposta do owner à pergunta "quanto foi?". Só o número (com "R$"/"reais"
+// opcionais) conta — qualquer outra coisa devolve null para o agente perguntar
+// de novo, em vez de gravar um valor adivinhado.
+//
+// Ancorado nas duas pontas: sem o `^`, "foi tipo 40" casaria pelo final e o
+// ponto de milhar de "1.200" seria lido como decimal (200). A primeira
+// alternativa é o formato pt-BR agrupado (1.200 / 3.450,90); a segunda é o
+// número simples, onde um ponto só pode ser decimal (12.50), porque grupo de
+// milhar tem sempre 3 dígitos.
+const AMOUNT_RE = /^r?\$?(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)(?:reais?)?$/
+const GROUPED_RE = /^\d{1,3}(?:\.\d{3})+$/
+
+export function parseAmount(text: string): number | null {
+  const m = text.replace(/\s/g, '').toLowerCase().match(AMOUNT_RE)
+  if (!m) return null
+
+  // "1.200,50" -> "1200.50"; "1.200" -> "1200"; "12.50" fica como está.
+  const raw = m[1]
+  const normalized = raw.includes(',')
+    ? raw.replace(/\./g, '').replace(',', '.')
+    : GROUPED_RE.test(raw)
+      ? raw.replace(/\./g, '')
+      : raw
+
+  const n = parseFloat(normalized)
+  return isFinite(n) && n > 0 ? n : null
+}
+
+// A direção é obrigatória porque as duas perguntas do lançamento incompleto
+// (tipo e valor) são feitas antes de qualquer coisa olhar para ela: sem isso o
+// agente chamaria de "gasto" um "recebi 500 de consulta particular".
+export function buildChooseTypeMessage(
+  description: string | null,
+  amount: number | null,
+  direction: 'in' | 'out'
+): string {
+  const valor = amount != null ? ` (${formatBRL(amount)})` : ''
+  const alvo =
+    direction === 'in'
+      ? description
+        ? `A receita de ${description}`
+        : 'A receita desse lançamento'
+      : `O gasto com ${description ?? 'esse lançamento'}`
+  return `${alvo}${valor} é pessoal (PF) ou da clínica (PJ)?`
+}
+
+export function buildAskAmountMessage(description: string | null, direction: 'in' | 'out'): string {
+  const pergunta =
+    direction === 'in'
+      ? description
+        ? `Quanto você recebeu de ${description}?`
+        : 'Quanto você recebeu?'
+      : description
+        ? `Quanto foi o gasto com ${description}?`
+        : 'Quanto foi esse gasto?'
+  return `${pergunta} Me manda só o valor, ex: 35.`
+}
+
+// Total do mês de um bucket (tipo + direção) depois de gravar um lote.
+export type BatchTotal = { type: FinanceEntryType; direction: 'in' | 'out'; total: number }
+
+// Confirmação determinística de vários lançamentos de uma vez. Ao contrário de
+// buildConfirmationMessage (1 lançamento, redigida pelo modelo), aqui a lista
+// precisa ser fiel item a item — o médico confere o que entrou.
+export function buildBatchConfirmationMessage(entries: FinanceEntry[], totals: BatchTotal[]): string {
+  const linhas = entries.map((e) => {
+    const t = e.type === 'pf' ? 'PF' : 'PJ'
+    const d = e.direction === 'in' ? 'receita' : 'despesa'
+    return `• ${e.description ?? 'Sem descrição'} — ${formatBRL(e.amount)} (${t}, ${d})`
+  })
+  const totaisLinhas = totals.map((tt) => {
+    const t = tt.type === 'pf' ? 'PF' : 'PJ'
+    const d = tt.direction === 'in' ? 'Receitas' : 'Despesas'
+    return `${d} ${t} em ${monthLabel(null)}: ${formatBRL(tt.total)}`
+  })
+  return `Registrei ${entries.length} lançamentos:\n${linhas.join('\n')}\n${totaisLinhas.join('\n')}`
 }
 
 function describeMatch(m: AppointmentPaymentMatch): string {

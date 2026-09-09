@@ -21,34 +21,40 @@ const TREE: FinanceCategoryTree = {
   ],
 }
 
-interface ToolInput {
-  intencao: 'lancamento' | 'consulta' | 'confirmar_pagamento' | 'desfazer' | 'ajuda' | 'conversa' | 'desconhecido'
+interface LancamentoItem {
   tipo: 'pf' | 'pj' | null
   descricao: string | null
   valor: number | null
   categoria: string | null
   subcategoria: string | null
-  mes: string | null
   unidade: string | null
+  direcao: 'entrada' | 'saida' | null
+}
+
+interface ToolInput {
+  intencao: 'lancamento' | 'consulta' | 'confirmar_pagamento' | 'desfazer' | 'ajuda' | 'conversa' | 'desconhecido'
+  lancamentos: LancamentoItem[]
+  tipo: 'pf' | 'pj' | null
+  categoria: string | null
+  subcategoria: string | null
+  unidade: string | null
+  direcao: 'entrada' | 'saida' | null
+  mes: string | null
   paciente: string | null
   horario: string | null
   forma_pagamento: string | null
-  direcao: 'entrada' | 'saida' | null
+}
+
+const ITEM: LancamentoItem = {
+  tipo: 'pf', descricao: 'Mercado', valor: 50,
+  categoria: null, subcategoria: null, unidade: null, direcao: 'saida',
 }
 
 const BASE_INPUT: ToolInput = {
   intencao: 'lancamento',
-  tipo: 'pf',
-  descricao: 'Aluguel recebido',
-  valor: 3000,
-  categoria: null,
-  subcategoria: null,
-  mes: null,
-  unidade: null,
-  paciente: null,
-  horario: null,
-  forma_pagamento: null,
-  direcao: 'entrada',
+  lancamentos: [ { ...ITEM } ],
+  tipo: null, categoria: null, subcategoria: null, unidade: null, direcao: null,
+  mes: null, paciente: null, horario: null, forma_pagamento: null,
 }
 
 function toolResponse(overrides: Partial<ToolInput>) {
@@ -60,27 +66,67 @@ function toolResponse(overrides: Partial<ToolInput>) {
 beforeEach(() => createMock.mockReset())
 
 describe('interpretMessage — direction', () => {
+  it('lancamento vira entry com um item em entries[]', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({ lancamentos: [{ ...ITEM, descricao: 'Mercado', valor: 50, direcao: 'saida' }] })
+    )
+    const intent = await interpretMessage('gastei 50 no mercado', '2026-09-04', TREE)
+    expect(intent).toMatchObject({ kind: 'entry' })
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries).toHaveLength(1)
+    expect(intent.entries[0]).toMatchObject({ type: 'pf', direction: 'out', amount: 50, description: 'Mercado' })
+  })
+
+  it('lancamento sem valor claro mas com descrição vira entry com amount null', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({ lancamentos: [{ ...ITEM, descricao: 'Mercado', valor: null, direcao: 'saida' }] })
+    )
+    const intent = await interpretMessage('comprei umas coisas no mercado', '2026-09-04', TREE)
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries[0]).toMatchObject({ description: 'Mercado', amount: null })
+  })
+
+  it('lancamento sem valor claro E sem descrição vira unknown', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({ lancamentos: [{ ...ITEM, descricao: null, valor: null, direcao: 'saida' }] })
+    )
+    const intent = await interpretMessage('comprei umas coisas', '2026-09-04', TREE)
+    expect(intent).toMatchObject({ kind: 'unknown' })
+  })
+
   it('lancamento com direcao=entrada vira entry direction=in', async () => {
-    createMock.mockResolvedValue(toolResponse({ direcao: 'entrada' }))
+    createMock.mockResolvedValue(
+      toolResponse({ lancamentos: [{ ...ITEM, descricao: 'Aluguel recebido', valor: 3000, direcao: 'entrada' }] })
+    )
     const intent = await interpretMessage('recebi 3000 de aluguel', '2026-09-04', TREE)
-    expect(intent).toMatchObject({ kind: 'entry', direction: 'in', amount: 3000 })
+    expect(intent).toMatchObject({ kind: 'entry' })
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries[0]).toMatchObject({ direction: 'in', amount: 3000 })
   })
 
   it('lancamento com direcao=saida vira entry direction=out', async () => {
-    createMock.mockResolvedValue(toolResponse({ direcao: 'saida', descricao: 'Mercado', valor: 50 }))
+    createMock.mockResolvedValue(
+      toolResponse({ lancamentos: [{ ...ITEM, descricao: 'Mercado', valor: 50, direcao: 'saida' }] })
+    )
     const intent = await interpretMessage('gastei 50 no mercado', '2026-09-04', TREE)
-    expect(intent).toMatchObject({ kind: 'entry', direction: 'out', amount: 50 })
+    expect(intent).toMatchObject({ kind: 'entry' })
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries[0]).toMatchObject({ direction: 'out', amount: 50 })
   })
 
   it('lancamento com direcao null vira entry direction=out (default)', async () => {
-    createMock.mockResolvedValue(toolResponse({ direcao: null }))
+    createMock.mockResolvedValue(
+      toolResponse({ lancamentos: [{ ...ITEM, descricao: null, valor: 30, direcao: null }] })
+    )
     const intent = await interpretMessage('30 mercado', '2026-09-04', TREE)
-    expect(intent).toMatchObject({ kind: 'entry', direction: 'out' })
+    expect(intent).toMatchObject({ kind: 'entry' })
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries[0]).toMatchObject({ direction: 'out' })
   })
 
   it('consulta com direcao=entrada vira query direction=in', async () => {
     createMock.mockResolvedValue(
-      toolResponse({ intencao: 'consulta', direcao: 'entrada', descricao: null, valor: null })
+      toolResponse({ intencao: 'consulta', direcao: 'entrada', lancamentos: [] })
     )
     const intent = await interpretMessage('quanto recebi esse mês', '2026-09-04', TREE)
     expect(intent).toMatchObject({ kind: 'query', direction: 'in' })
@@ -88,7 +134,7 @@ describe('interpretMessage — direction', () => {
 
   it('consulta com direcao=saida vira query direction=out', async () => {
     createMock.mockResolvedValue(
-      toolResponse({ intencao: 'consulta', direcao: 'saida', descricao: null, valor: null })
+      toolResponse({ intencao: 'consulta', direcao: 'saida', lancamentos: [] })
     )
     const intent = await interpretMessage('quanto gastei esse mês', '2026-09-04', TREE)
     expect(intent).toMatchObject({ kind: 'query', direction: 'out' })
@@ -97,7 +143,7 @@ describe('interpretMessage — direction', () => {
   it('confirmar_pagamento não carrega direction (não é entry/query)', async () => {
     createMock.mockResolvedValue(
       toolResponse({
-        intencao: 'confirmar_pagamento', direcao: 'entrada', paciente: 'João', descricao: null, valor: null,
+        intencao: 'confirmar_pagamento', direcao: 'entrada', paciente: 'João', lancamentos: [],
       })
     )
     const intent = await interpretMessage('o João pagou a consulta', '2026-09-04', TREE)
@@ -116,11 +162,112 @@ describe('interpretMessage — prompt do sistema', () => {
     expect(system).toContain('Categorias de receita em pj: Consultas particulares')
   })
 
+  // Com "receita de consulta/procedimento" no balde pj e vários itens em
+  // lancamentos[] como normal, "recebi 500 da consulta da Ana" corre o risco de
+  // voltar como lancamento pj/entrada — pulando a confirmação de pagamento e
+  // duplicando com o espelho do ciclo de receita.
+  it('a guarda de "recebi da Ana" está no schema do item e nas regras', async () => {
+    createMock.mockResolvedValue(toolResponse({}))
+    await interpretMessage('recebi 500 da consulta da Ana', '2026-09-04', TREE)
+    const call = createMock.mock.calls[0][0]
+    const itemDirecao = call.tools[0].input_schema.properties.lancamentos.items.properties.direcao
+      .description as string
+    expect(itemDirecao).toContain('confirmar_pagamento')
+    expect(itemDirecao).toContain('recebi da Ana')
+    // A mesma regra continua no prompt do sistema.
+    const system = call.system as string
+    expect(system).toContain('confirmar_pagamento')
+    expect(system).toContain('recebi da Ana')
+  })
+
   it('a ferramenta exige o campo direcao', async () => {
     createMock.mockResolvedValue(toolResponse({}))
     await interpretMessage('recebi 3000 de aluguel', '2026-09-04', TREE)
     const tool = createMock.mock.calls[0][0].tools[0]
     expect(tool.input_schema.required).toContain('direcao')
     expect(tool.input_schema.properties.direcao).toBeDefined()
+  })
+})
+
+describe('interpretMessage — múltiplos lançamentos', () => {
+  it('mensagem com dois gastos vira dois itens em entries', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({
+        lancamentos: [
+          { tipo: 'pf', descricao: 'iFood', valor: 35, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' },
+          { tipo: 'pf', descricao: 'Uber', valor: 50, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' },
+        ],
+      })
+    )
+    const intent = await interpretMessage('gastei 35 no ifood e 50 no uber', '2026-09-04', TREE)
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries.map((e) => e.description)).toEqual(['iFood', 'Uber'])
+  })
+
+  it('prompt instrui um item por gasto e não manda usar desconhecido para vários', async () => {
+    createMock.mockResolvedValue(toolResponse({}))
+    await interpretMessage('x', '2026-09-04', TREE)
+    const system = createMock.mock.calls[0][0].system as string
+    expect(system).toMatch(/um item .*para cada|mais de um lançamento/i)
+    expect(system).not.toContain('use "desconhecido" — o registro é de um por vez')
+  })
+})
+
+describe('interpretMessage — PF/PJ ambíguo retorna null', () => {
+  it('tipo null no item passa como type null (não vira pf)', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({
+        lancamentos: [{ tipo: null, descricao: 'aluguel', valor: 2600, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' }],
+      })
+    )
+    const intent = await interpretMessage('gastei 2600 no aluguel', '2026-09-04', TREE)
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries[0].type).toBeNull()
+  })
+
+  it('prompt tem os três buckets pf/pj/null e não tem o tiebreak clínico antigo', async () => {
+    createMock.mockResolvedValue(toolResponse({}))
+    await interpretMessage('x', '2026-09-04', TREE)
+    const system = createMock.mock.calls[0][0].system as string
+    expect(system).toContain('genuinamente ambíguo')
+    expect(system).toContain('NÃO chute')
+    expect(system).not.toContain('escolha pelo contexto clínico')
+  })
+})
+
+describe('interpretMessage — valor faltando vira amount null', () => {
+  it('descrição sem valor vira item com amount null', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({
+        lancamentos: [{ tipo: 'pf', descricao: 'almoço', valor: null, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' }],
+      })
+    )
+    const intent = await interpretMessage('paguei o almoço', '2026-09-04', TREE)
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries[0]).toMatchObject({ description: 'almoço', amount: null })
+  })
+
+  it('item sem descrição e sem valor é descartado; nada sobra → unknown', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({
+        lancamentos: [{ tipo: 'pf', descricao: null, valor: null, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' }],
+      })
+    )
+    const intent = await interpretMessage('gastei um dinheiro aí', '2026-09-04', TREE)
+    expect(intent.kind).toBe('unknown')
+  })
+
+  it('num lote, o item sem valor não derruba o item completo', async () => {
+    createMock.mockResolvedValue(
+      toolResponse({
+        lancamentos: [
+          { tipo: 'pf', descricao: 'iFood', valor: 35, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' },
+          { tipo: 'pf', descricao: 'estacionamento', valor: null, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' },
+        ],
+      })
+    )
+    const intent = await interpretMessage('35 no ifood e o estacionamento', '2026-09-04', TREE)
+    if (intent.kind !== 'entry') throw new Error('esperava entry')
+    expect(intent.entries.map((e) => [e.description, e.amount])).toEqual([['iFood', 35], ['estacionamento', null]])
   })
 })

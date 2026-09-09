@@ -5,9 +5,14 @@ import { parseCommand } from './parser'
 import { interpretMessage } from './interpret'
 import { categorizeEntry } from './categorize'
 import { ensureFinanceCategories } from './provision'
-import { getFinanceCategoryTree, resolveCategoryPair } from './categories'
+import { getFinanceCategoryTree, resolveCategoryPair, type FinanceCategoryTree } from './categories'
 import {
   buildConfirmationMessage,
+  buildBatchConfirmationMessage,
+  buildChooseTypeMessage,
+  buildAskAmountMessage,
+  parseEntryType,
+  parseAmount,
   buildQueryMessage,
   buildSmalltalkMessage,
   buildUndoMessage,
@@ -26,6 +31,7 @@ import {
   buildChooseWorkspaceMessage,
   buildWorkspaceNotMatchedMessage,
   type QueryFilters,
+  type BatchTotal,
 } from './respond'
 import { normalizeName } from './appointment-payment'
 import {
@@ -34,7 +40,7 @@ import {
   summarizeAccountToday,
   type AppointmentPaymentMatch,
 } from './appointment-payment'
-import type { FinanceEntry } from './types'
+import type { EntryDraft, FinanceEntry, FinanceEntryType } from './types'
 import type { RevenuePaymentMethod } from '@/types/database'
 
 // Confirmação de pagamento de consulta pendente de "sim" do owner, guardada
@@ -45,21 +51,32 @@ interface PendingPaymentConfirm {
   method: RevenuePaymentMethod | null
   match: AppointmentPaymentMatch
 }
-// Lançamento PJ aguardando o owner dizer a unidade, guardado em
-// finance_sessions.pending_entry entre as duas mensagens.
-interface PendingChooseWorkspace {
-  kind: 'choose_workspace'
-  entry: {
-    type: 'pj'
-    direction: 'in' | 'out'
-    description: string | null
-    amount: number
-    // `category` (texto) é o snapshot do nome; os ids resolvem a árvore.
-    category: string | null
-    category_id: string | null
-    subcategory_id: string | null
-    raw_message: string
-  }
+// Um lançamento em trânsito: o EntryDraft do interpretador mais os ids já
+// resolvidos. `categoryId` ausente (undefined) = categoria ainda não resolvida;
+// null = resolvida e não encontrada. Serializado em finance_sessions.
+type PendingDraft = {
+  type: FinanceEntryType | null
+  direction: 'in' | 'out'
+  description: string | null
+  amount: number | null
+  category: string | null
+  subcategory: string | null
+  workspaceHint: string | null
+  categoryId?: string | null
+  subcategoryId?: string | null
+  workspaceId?: string | null
+}
+
+// Lote de lançamentos parado numa pergunta ao owner (tipo, valor ou unidade),
+// guardado em finance_sessions.pending_entry entre as duas mensagens.
+// `current` é o lançamento sobre o qual é a pergunta; `queue` é o que ainda
+// não foi olhado. O que já estava pronto foi gravado antes de perguntar.
+interface PendingEntryBatch {
+  kind: 'entry_batch'
+  awaiting: 'type' | 'amount' | 'unit'
+  rawMessage: string
+  current: PendingDraft
+  queue: PendingDraft[]
 }
 
 const PENDING_TTL_MS = 30 * 60 * 1000
@@ -109,6 +126,20 @@ export function resolveUnit(
 
 const AFFIRMATIVE = /^(s|sim|isso|isso mesmo|exato|é isso|e isso|confirmo|confirma|confirmar|pode confirmar|ok|ta|tá|👍|isso ai|isso aí)\b/i
 const NEGATIVE = /^(n|nao|não|cancela|cancelar|deixa|esquece|errado|não era|nao era|para|pare)\b/i
+
+// Desistência do lote de lançamentos. NEGATIVE não serve aqui: ele existe para
+// a confirmação de pagamento, onde a pergunta é sim/não, e casa qualquer coisa
+// que comece com "não". As perguntas do lote são abertas ("PF ou PJ?",
+// "quanto foi?"), então "não sei" é não-resposta e não pode descartar o lote.
+// Por isso o "não" isolado cancela, mas "não ..." só cancela com verbo de
+// desistência.
+const BATCH_CANCEL =
+  /^(n|nao|não)$|^(cancela|cancelar|deixa|esquece|esquecer|para|pare|nao quero|não quero|nada disso)\b/i
+
+// Enquanto o lote está estacionado, toda resposta que não parseia é consumida
+// pela repergunta — sem dizer a palavra de saída, o owner não tem como saber
+// que existe uma. Vai só nas reperguntas: a primeira pergunta é a normal.
+const BATCH_ESCAPE_HINT = ' Se quiser deixar esse lançamento de lado, responda "deixa".'
 
 function parsePaymentMethod(text: string): RevenuePaymentMethod | null {
   const t = text
@@ -198,8 +229,19 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
   await ensureFinanceCategories(supabase, accountId)
   const categoryTree = await getFinanceCategoryTree(supabase, accountId)
 
-  // 2.5 Há um lançamento PJ esperando o owner dizer a unidade?
-  if (await handlePendingChooseWorkspace(supabase, accountId, senderPhone, messageText, membership.user_id)) return
+  const today = new Date().toISOString().split('T')[0]
+
+  // 2.5 Há um lote de lançamentos esperando o owner responder tipo/valor/unidade?
+  const batchConsumed = await handlePendingEntryBatch(
+    supabase,
+    accountId,
+    senderPhone,
+    messageText,
+    membership.user_id,
+    categoryTree,
+    today
+  )
+  if (batchConsumed) return
 
   // 2.6 Há uma confirmação de pagamento de consulta esperando o "sim" do owner?
   // (ciclo de receita — fluxo de duas mensagens, ver PendingPaymentConfirm)
@@ -207,7 +249,6 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
 
   // 3. Entender a mensagem. Atalho com barra primeiro (instantâneo e sem
   // custo); só o que não for comando vai para o Claude interpretar.
-  const today = new Date().toISOString().split('T')[0]
   const shortcut = parseCommand(messageText)
   const intent = shortcut.kind === 'unknown' ? await interpretMessage(messageText, today, categoryTree) : shortcut
 
@@ -295,67 +336,51 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
     return
   }
 
-  // 4. Categorizar. A interpretação por linguagem natural já traz a
-  // categoria; só o caminho dos atalhos precisa desta chamada extra.
-  // Sempre resolvemos nome -> id contra a árvore da conta.
-  let pair = resolveCategoryPair(categoryTree, intent.type, intent.category, intent.subcategory, intent.direction)
-  if (!pair.categoryId && intent.description) {
-    const guess = await categorizeEntry(intent.description, intent.type, intent.direction, categoryTree)
-    pair = resolveCategoryPair(categoryTree, intent.type, guess.categoryName, guess.subcategoryName, intent.direction)
-  }
-
-  // 4.5 Lançamento PJ pertence a uma unidade. Se a account tem mais de uma e a
-  // mensagem não deixou claro qual, pergunta antes de gravar. PF é sempre
-  // consolidado (workspace_id null).
-  let workspaceId: string | null = null
-  if (intent.type === 'pj') {
-    const units = await listAccountUnits(supabase, accountId)
-    const resolved = resolveUnit(units, intent.workspaceHint)
-    if (resolved.status === 'one') {
-      workspaceId = resolved.unit.id
-    } else {
-      await setPendingFinanceSession(supabase, accountId, senderPhone, {
-        kind: 'choose_workspace',
-        entry: {
-          type: 'pj',
-          direction: intent.direction,
-          description: intent.description,
-          amount: intent.amount,
-          category: pair.categoryName,
-          category_id: pair.categoryId,
-          subcategory_id: pair.subcategoryId,
-          raw_message: messageText,
-        },
-      })
-      await sendFinanceReply(
-        senderPhone,
-        buildChooseWorkspaceMessage(units, intent.direction, intent.description, intent.amount)
-      )
-      return
-    }
-  }
-
-  // 5. Salvar no banco + confirmar
-  await persistEntryAndConfirm(supabase, {
+  // 4. Registrar. Uma mensagem pode trazer vários lançamentos e qualquer um
+  // deles pode estar incompleto — quem cuida disso é o laço de drenagem.
+  const entryCtx: EntryCtx = {
     accountId,
     senderPhone,
     userId: membership.user_id,
-    type: intent.type,
-    direction: intent.direction,
-    description: intent.description,
-    amount: intent.amount,
-    categoryName: pair.categoryName,
-    categoryId: pair.categoryId,
-    subcategoryId: pair.subcategoryId,
-    workspaceId,
+    categoryTree,
     rawMessage: messageText,
     today,
-  })
+  }
+  await drainEntryQueue(supabase, entryCtx, intent.entries.map(toPendingDraft))
 }
 
-// Insere o lançamento e responde com a confirmação + total do mês. Usado tanto
-// no fluxo direto quanto depois de o owner escolher a unidade (PJ).
-async function persistEntryAndConfirm(
+// O que o laço de drenagem precisa saber e que não muda de lançamento para
+// lançamento dentro da mesma mensagem.
+interface EntryCtx {
+  accountId: string
+  senderPhone: string
+  userId: string
+  categoryTree: FinanceCategoryTree
+  rawMessage: string
+  today: string
+}
+
+function toPendingDraft(d: EntryDraft): PendingDraft {
+  return { ...d }
+}
+
+// Resolve categoria (nome -> id, com fallback no categorizeEntry) uma vez que o
+// tipo é conhecido. Muta o draft.
+async function resolveDraftCategory(ctx: EntryCtx, d: PendingDraft): Promise<void> {
+  if (d.type == null || d.categoryId !== undefined) return
+  let pair = resolveCategoryPair(ctx.categoryTree, d.type, d.category, d.subcategory, d.direction)
+  if (!pair.categoryId && d.description) {
+    const guess = await categorizeEntry(d.description, d.type, d.direction, ctx.categoryTree)
+    pair = resolveCategoryPair(ctx.categoryTree, d.type, guess.categoryName, guess.subcategoryName, d.direction)
+  }
+  d.category = pair.categoryName
+  d.categoryId = pair.categoryId
+  d.subcategoryId = pair.subcategoryId
+}
+
+// Insere o lançamento e devolve a linha gravada (null em caso de erro). Não
+// responde nada — quem confirma é persistAndConfirm, que sabe se foi 1 ou N.
+async function persistEntry(
   supabase: ReturnType<typeof createAdminClient>,
   args: {
     accountId: string
@@ -373,7 +398,7 @@ async function persistEntryAndConfirm(
     rawMessage: string
     today: string
   }
-): Promise<void> {
+): Promise<FinanceEntry | null> {
   const { data: entry, error } = await supabase
     .from('finance_entries')
     .insert({
@@ -393,10 +418,7 @@ async function persistEntryAndConfirm(
     .select('*')
     .single()
 
-  if (error || !entry) {
-    await sendFinanceReply(args.senderPhone, `Erro ao registrar o lançamento. Tente novamente.`)
-    return
-  }
+  if (error || !entry) return null
 
   await trackFinanceEntryCreatedViaWhatsApp(args.userId, {
     account_id: args.accountId,
@@ -404,9 +426,18 @@ async function persistEntryAndConfirm(
     amount: entry.amount,
   })
 
-  const monthEntries = await getEntries(args.accountId, {
-    type: args.type,
-    direction: args.direction,
+  return entry
+}
+
+// Total do mês atual de um bucket (type + direction), account-wide.
+async function monthTotalFor(
+  accountId: string,
+  type: FinanceEntry['type'],
+  direction: 'in' | 'out'
+): Promise<number> {
+  const rows = await getEntries(accountId, {
+    type,
+    direction,
     category: null,
     categoryId: null,
     subcategoryId: null,
@@ -414,10 +445,188 @@ async function persistEntryAndConfirm(
     workspaceId: null,
     unitLabel: null,
   })
-  const monthTotal = monthEntries.reduce((s, e) => s + e.amount, 0)
+  return rows.reduce((s, e) => s + e.amount, 0)
+}
 
-  const response = await buildConfirmationMessage(entry, monthTotal)
-  await sendFinanceReply(args.senderPhone, response)
+// Um total por bucket distinto do lote — sem repetir a consulta quando dois
+// lançamentos caem no mesmo (type, direction).
+async function batchTotals(accountId: string, entries: FinanceEntry[]): Promise<BatchTotal[]> {
+  const seen = new Map<string, BatchTotal>()
+  for (const e of entries) {
+    const key = `${e.type}:${e.direction}`
+    if (seen.has(key)) continue
+    seen.set(key, { type: e.type, direction: e.direction, total: await monthTotalFor(accountId, e.type, e.direction) })
+  }
+  return [...seen.values()]
+}
+
+// Grava os lançamentos já completos e responde uma única confirmação: a do
+// modelo quando é um só, a determinística em lote quando são vários.
+async function persistAndConfirm(
+  supabase: ReturnType<typeof createAdminClient>,
+  ctx: EntryCtx,
+  drafts: PendingDraft[]
+): Promise<void> {
+  // Nada a gravar (mensagem sem lançamento algum) não é erro — só não há o que
+  // responder aqui.
+  if (drafts.length === 0) return
+
+  const saved: FinanceEntry[] = []
+  for (const d of drafts) {
+    const entry = await persistEntry(supabase, {
+      accountId: ctx.accountId,
+      senderPhone: ctx.senderPhone,
+      userId: ctx.userId,
+      type: d.type as FinanceEntry['type'],
+      direction: d.direction,
+      description: d.description,
+      amount: d.amount as number,
+      categoryName: d.category ?? null,
+      categoryId: d.categoryId ?? null,
+      subcategoryId: d.subcategoryId ?? null,
+      workspaceId: d.workspaceId ?? null,
+      rawMessage: ctx.rawMessage,
+      today: ctx.today,
+    })
+    if (entry) saved.push(entry)
+  }
+
+  if (saved.length === 0) {
+    // Plural conforme o que se tentou gravar — dizer "o lançamento" depois de
+    // três faz o médico achar que dois entraram.
+    await sendFinanceReply(
+      ctx.senderPhone,
+      drafts.length === 1
+        ? `Erro ao registrar o lançamento. Tente novamente.`
+        : `Erro ao registrar os lançamentos. Tente novamente.`
+    )
+    return
+  }
+
+  // Falha parcial: confirmar só o que entrou faria o médico acreditar que o
+  // resto entrou também. O que se perdeu vai junto da confirmação.
+  const perdidos = drafts.length - saved.length
+  const aviso =
+    perdidos === 0
+      ? ''
+      : perdidos === 1
+        ? '\nUm lançamento não foi registrado — me manda de novo.'
+        : `\n${perdidos} lançamentos não foram registrados — me manda de novo.`
+
+  if (saved.length === 1) {
+    const total = await monthTotalFor(ctx.accountId, saved[0].type, saved[0].direction)
+    await sendFinanceReply(ctx.senderPhone, (await buildConfirmationMessage(saved[0], total)) + aviso)
+    return
+  }
+  await sendFinanceReply(
+    ctx.senderPhone,
+    buildBatchConfirmationMessage(saved, await batchTotals(ctx.accountId, saved)) + aviso
+  )
+}
+
+// Grava o que já está pronto, guarda o resto e faz a pergunta. Gravar antes de
+// perguntar é deliberado: se o owner nunca responder, o que dava para registrar
+// já está registrado.
+async function parkAndAsk(
+  supabase: ReturnType<typeof createAdminClient>,
+  ctx: EntryCtx,
+  ready: PendingDraft[],
+  awaiting: PendingEntryBatch['awaiting'],
+  current: PendingDraft,
+  queue: PendingDraft[],
+  question: string
+): Promise<void> {
+  if (ready.length > 0) await persistAndConfirm(supabase, ctx, ready)
+  await setPendingFinanceSession(supabase, ctx.accountId, ctx.senderPhone, {
+    kind: 'entry_batch',
+    awaiting,
+    rawMessage: ctx.rawMessage,
+    current,
+    queue,
+  })
+  await sendFinanceReply(ctx.senderPhone, question)
+}
+
+// Drena a fila de lançamentos. O primeiro item que precisa de resposta do owner
+// estaciona o resto e pergunta; o que já está pronto é gravado + confirmado antes.
+async function drainEntryQueue(
+  supabase: ReturnType<typeof createAdminClient>,
+  ctx: EntryCtx,
+  drafts: PendingDraft[]
+): Promise<void> {
+  // O interpretador entendeu "lançamento" mas não extraiu nenhum — silêncio
+  // total deixaria o médico achando que registrou.
+  if (drafts.length === 0) {
+    await sendFinanceReply(ctx.senderPhone, buildUnknownMessage())
+    return
+  }
+
+  const ready: PendingDraft[] = []
+  const queue = [...drafts]
+
+  while (queue.length > 0) {
+    const draft = queue.shift() as PendingDraft
+    await resolveDraftCategory(ctx, draft)
+
+    if (draft.type == null) {
+      await parkAndAsk(
+        supabase,
+        ctx,
+        ready,
+        'type',
+        draft,
+        queue,
+        buildChooseTypeMessage(draft.description, draft.amount, draft.direction)
+      )
+      return
+    }
+    if (draft.amount == null) {
+      await parkAndAsk(
+        supabase,
+        ctx,
+        ready,
+        'amount',
+        draft,
+        queue,
+        buildAskAmountMessage(draft.description, draft.direction)
+      )
+      return
+    }
+
+    // Lançamento PJ pertence a uma unidade. Se a account tem mais de uma e a
+    // mensagem não deixou claro qual, pergunta antes de gravar. PF é sempre
+    // consolidado (workspace_id null).
+    //
+    // `workspaceId` já preenchido = o owner acabou de responder a pergunta da
+    // unidade; resolver de novo pelo workspaceHint (nulo) jogaria a escolha
+    // fora e perguntaria em loop.
+    if (draft.type === 'pj') {
+      if (draft.workspaceId == null) {
+        const units = await listAccountUnits(supabase, ctx.accountId)
+        const resolved = resolveUnit(units, draft.workspaceHint)
+        if (resolved.status === 'one') {
+          draft.workspaceId = resolved.unit.id
+        } else {
+          await parkAndAsk(
+            supabase,
+            ctx,
+            ready,
+            'unit',
+            draft,
+            queue,
+            buildChooseWorkspaceMessage(units, draft.direction, draft.description, draft.amount)
+          )
+          return
+        }
+      }
+    } else {
+      draft.workspaceId = null
+    }
+
+    ready.push(draft)
+  }
+
+  await persistAndConfirm(supabase, ctx, ready)
 }
 
 // Apaga o lançamento mais recente da account. Existe porque o registro por
@@ -531,7 +740,7 @@ async function setPendingFinanceSession(
   supabase: ReturnType<typeof createAdminClient>,
   accountId: string,
   senderPhone: string,
-  pending: PendingPaymentConfirm | PendingChooseWorkspace
+  pending: PendingPaymentConfirm | PendingEntryBatch
 ): Promise<void> {
   await supabase.from('finance_sessions').upsert(
     {
@@ -544,14 +753,19 @@ async function setPendingFinanceSession(
   )
 }
 
-// Trata a mensagem quando há um lançamento PJ aguardando a escolha da unidade.
-// Retorna true se a mensagem foi consumida aqui.
-async function handlePendingChooseWorkspace(
+// Trata a mensagem quando há um lote de lançamentos aguardando a resposta do
+// owner (tipo, valor ou unidade). Retorna true se a mensagem foi consumida
+// aqui. Com a resposta em mãos, o lote volta para o mesmo laço de drenagem —
+// então uma resposta pode desembocar na pergunta seguinte (ex: "PJ" leva à
+// pergunta da unidade).
+async function handlePendingEntryBatch(
   supabase: ReturnType<typeof createAdminClient>,
   accountId: string,
   senderPhone: string,
   messageText: string,
-  userId: string
+  userId: string,
+  categoryTree: FinanceCategoryTree,
+  today: string
 ): Promise<boolean> {
   const { data: fsession } = await supabase
     .from('finance_sessions')
@@ -559,10 +773,25 @@ async function handlePendingChooseWorkspace(
     .eq('phone', senderPhone)
     .maybeSingle()
 
-  const pending = fsession?.pending_entry as PendingChooseWorkspace | null | undefined
-  if (!pending || pending.kind !== 'choose_workspace') return false
+  const raw = fsession?.pending_entry as { kind?: string } | null | undefined
 
-  // Expirou — limpa e deixa a mensagem seguir o fluxo normal.
+  // Pendência do formato antigo (`choose_workspace`, anterior ao entry_batch),
+  // gravada antes do deploy: nenhum handler sabe mais lê-la, então limpa e
+  // deixa a mensagem ser interpretada do zero em vez de ficar presa na linha.
+  if (raw?.kind === 'choose_workspace') {
+    await clearPendingFinanceSession(supabase, senderPhone)
+    return false
+  }
+
+  if (!raw || raw.kind !== 'entry_batch') return false
+  const pending = raw as unknown as PendingEntryBatch
+
+  // Expirou — limpa e deixa a mensagem seguir o fluxo normal. O lote é
+  // descartado em silêncio de propósito: 30 min depois, a mensagem quase
+  // certamente é outro assunto, e ressuscitar a pergunta antiga confundiria
+  // mais do que ajudaria. Note que uma repergunta (resposta que não parseou)
+  // não renova `last_message_at` — assim um laço travado se encerra sozinho
+  // no TTL contado desde a última pergunta que o agente de fato estacionou.
   if (
     fsession?.last_message_at &&
     Date.now() - new Date(fsession.last_message_at).getTime() > PENDING_TTL_MS
@@ -572,36 +801,69 @@ async function handlePendingChooseWorkspace(
   }
 
   const text = messageText.trim()
-  if (NEGATIVE.test(text)) {
-    await clearPendingFinanceSession(supabase, senderPhone)
-    await sendFinanceReply(senderPhone, 'Ok, não registrei nada. Me chama de novo quando quiser.')
-    return true
-  }
+  const ctx: EntryCtx = { accountId, senderPhone, userId, categoryTree, rawMessage: pending.rawMessage, today }
+  const current = pending.current
 
-  const units = await listAccountUnits(supabase, accountId)
-  const resolved = resolveUnit(units, text)
-  if (resolved.status !== 'one') {
-    await sendFinanceReply(senderPhone, buildWorkspaceNotMatchedMessage(units))
-    return true
+  // A resposta é interpretada ANTES do cancelamento: "não sei" e "não, é da
+  // clínica" começam com "não" e casariam com NEGATIVE, descartando um lote
+  // que o médico ainda quer. Só o que não se parece com resposta alguma é
+  // tratado como desistência.
+  if (pending.awaiting === 'type') {
+    const t = parseEntryType(text)
+    if (t) {
+      current.type = t
+      current.categoryId = undefined // força re-resolver categoria com o tipo certo
+    } else if (BATCH_CANCEL.test(text)) {
+      return cancelPendingBatch(supabase, senderPhone)
+    } else {
+      await sendFinanceReply(
+        senderPhone,
+        buildChooseTypeMessage(current.description, current.amount, current.direction) + BATCH_ESCAPE_HINT
+      )
+      return true
+    }
+  } else if (pending.awaiting === 'amount') {
+    const valor = parseAmount(text)
+    if (valor != null) {
+      current.amount = valor
+    } else if (BATCH_CANCEL.test(text)) {
+      return cancelPendingBatch(supabase, senderPhone)
+    } else {
+      await sendFinanceReply(
+        senderPhone,
+        'Não peguei o valor. Me manda só o número, ex: 35.' + BATCH_ESCAPE_HINT
+      )
+      return true
+    }
+  } else {
+    const units = await listAccountUnits(supabase, accountId)
+    const resolved = resolveUnit(units, text)
+    if (resolved.status === 'one') {
+      current.workspaceId = resolved.unit.id
+    } else if (BATCH_CANCEL.test(text)) {
+      return cancelPendingBatch(supabase, senderPhone)
+    } else {
+      await sendFinanceReply(senderPhone, buildWorkspaceNotMatchedMessage(units) + BATCH_ESCAPE_HINT)
+      return true
+    }
   }
 
   await clearPendingFinanceSession(supabase, senderPhone)
-  const today = new Date().toISOString().split('T')[0]
-  await persistEntryAndConfirm(supabase, {
-    accountId,
+  await drainEntryQueue(supabase, ctx, [current, ...pending.queue])
+  return true
+}
+
+// Desistência do lote parado. O texto não pode dar a entender que algo entrou:
+// no caso de um único lançamento estacionado, nada entrou.
+async function cancelPendingBatch(
+  supabase: ReturnType<typeof createAdminClient>,
+  senderPhone: string
+): Promise<true> {
+  await clearPendingFinanceSession(supabase, senderPhone)
+  await sendFinanceReply(
     senderPhone,
-    userId,
-    type: 'pj',
-    direction: pending.entry.direction,
-    description: pending.entry.description,
-    amount: pending.entry.amount,
-    categoryName: pending.entry.category,
-    categoryId: pending.entry.category_id,
-    subcategoryId: pending.entry.subcategory_id,
-    workspaceId: resolved.unit.id,
-    rawMessage: pending.entry.raw_message,
-    today,
-  })
+    'Ok, não registrei o que estava pendente. Me chama de novo quando quiser.'
+  )
   return true
 }
 

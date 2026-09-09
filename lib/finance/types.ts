@@ -9,9 +9,9 @@ export type FinanceEntry = {
   workspace_id: string | null
   recorded_by_phone: string
   type: FinanceEntryType
-  // Entrada (receita) ou saída (despesa). Lançamento manual da tela e do
-  // agente é sempre 'out'; 'in' vem do cadastro de receita ou do espelho do
-  // ciclo de receita (ver revenue_entry_id).
+  // Entrada (receita) ou saída (despesa). O agente produz as duas ("gastei 35"
+  // → 'out', "recebi 3000" / `/pf+` → 'in'), assim como a tela; 'in' também vem
+  // do espelho do ciclo de receita (ver revenue_entry_id).
   direction: 'in' | 'out'
   description: string | null
   amount: number
@@ -30,29 +30,38 @@ export type FinanceEntry = {
   created_at: string
 }
 
+// Um lançamento (gasto ou receita) extraído de uma mensagem. Uma mensagem pode
+// citar mais de um, e o agente drena todos: o que está completo é gravado, o
+// primeiro incompleto estaciona o resto numa pergunta ao owner.
+export interface EntryDraft {
+  // null quando a mensagem não deixa claro PF ou PJ. O agente nunca chuta:
+  // com type null ele pergunta "pessoal (PF) ou da clínica (PJ)?" e só grava
+  // depois da resposta.
+  type: FinanceEntryType | null
+  // Entrada (receita) ou saída (despesa). Atalho `/pf`/`/pj` e "gastei X" →
+  // 'out'; `/pf+`/`/pj+` e "recebi X" → 'in'.
+  direction: 'in' | 'out'
+  // O que foi comprado/recebido, curto (ex: "Netflix", "Aluguel"). null se não der.
+  description: string | null
+  // Valor em reais, positivo. null quando a mensagem não traz um número claro.
+  amount: number | null
+  // Nome da categoria deduzido (linguagem natural) ou null (atalhos). O agente
+  // resolve nome -> id contra a árvore da conta.
+  category: string | null
+  // Nome da subcategoria deduzido (linguagem natural) ou null. Mesma lógica.
+  subcategory: string | null
+  // Trecho do nome da unidade mencionado na mensagem (PJ). O agente resolve
+  // contra as unidades reais da account; null = não mencionou.
+  workspaceHint: string | null
+}
+
 // O que o owner quis dizer, venha de um comando com barra (parser.ts, regex)
 // ou de linguagem natural (interpret.ts, via Claude). Os dois produzem este
 // mesmo tipo, então o agente executa um caminho só.
 export type FinanceIntent =
-  // `category` vem preenchida quando a interpretação por linguagem natural
-  // já deduziu uma categoria válida; null (caminho dos atalhos) faz o agente
-  // categorizar num passo à parte. `subcategory` segue a mesma lógica.
-  | {
-      kind: 'entry'
-      type: FinanceEntryType
-      // Entrada (receita) ou saída (despesa). Atalho `/pf`/`/pj` e "gastei
-      // X" → 'out'; `/pf+`/`/pj+` e "recebi X" → 'in'.
-      direction: 'in' | 'out'
-      description: string | null
-      amount: number
-      category: string | null
-      // Nome da subcategoria deduzido (linguagem natural) ou null. O agente
-      // resolve nome -> id contra a árvore da conta.
-      subcategory: string | null
-      // Trecho do nome da unidade mencionado na mensagem (PJ). O agente
-      // resolve contra as unidades reais da account; null = não mencionou.
-      workspaceHint: string | null
-    }
+  // `entries` sempre tem ≥ 1 item quando `kind === 'entry'` e pode ter vários
+  // (uma mensagem citando dois gastos). O agente drena a lista inteira.
+  | { kind: 'entry'; entries: EntryDraft[] }
   // `type: null` = PF e PJ juntos; `category: null` = todas; `month: null` = mês atual.
   // `workspace: null` = consolidado (todas as unidades). `direction` segue a
   // mesma lógica do `entry`: sem menção clara na mensagem, 'out' (mantém o
