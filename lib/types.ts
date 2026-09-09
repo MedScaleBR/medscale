@@ -1,4 +1,5 @@
 import type { AppointmentSource, AppointmentStatus, AppointmentType } from '@/types/database'
+import type { RevenueForecast } from '@/lib/revenue/forecast'
 
 export interface TodayAgendaItem {
   id: string
@@ -23,6 +24,7 @@ export interface WorkspaceBreakdown {
 }
 
 export interface DashboardStats {
+  revenueForecast: RevenueForecast | null
   appointments: { total: number; bot: number; manual: number }
   // Ciclo de receita: projected = tudo não-cancelado; realized = consultas que
   // aconteceram; received = pagamento confirmado. `confirmed` e `total` são
