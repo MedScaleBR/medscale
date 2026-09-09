@@ -22,3 +22,14 @@
   font-weight: 500;
   color: var(--navy);
 }
+
+/* No mobile a semana tem 7 colunas de ~35px — encolhe o cabeçalho para o
+   rótulo curto ("06 dom") caber sem cortar. */
+@media (max-width: 767px) {
+  .rbc-header {
+    padding: 6px 1px;
+    font-size: 9px;
+    line-height: 1.2;
+    letter-spacing: -0.03em;
+  }
+}

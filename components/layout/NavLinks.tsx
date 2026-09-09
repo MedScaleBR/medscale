@@ -5,6 +5,7 @@ import { usePathname } from 'next/navigation'
 import { cn } from '@/lib/utils'
 import type { ModuleSlug } from '@/lib/session/context'
 import type { MembershipRole } from '@/types/database'
+import { MODULE_ROUTES, isModuleVisible } from '@/lib/nav/tabs'
 import {
   LayoutDashboard,
   CalendarDays,
@@ -26,25 +27,29 @@ interface NavItem {
   icon: typeof LayoutDashboard
 }
 
-// Slug do módulo → rota real do app. Rotas que já existiam antes do modelo
-// multi-tenant mantêm o nome de sempre (/bot, /trafego) — só as três novas
-// (locations, schedule, waitlist) seguem os nomes sugeridos pelo módulo de
-// multi-tenant, já que não havia rota anterior para preservar.
-export const MODULE_NAV: Record<ModuleSlug, NavItem> = {
-  dashboard: { label: 'Meu painel', href: '/dashboard', icon: LayoutDashboard },
-  agenda: { label: 'Minha agenda', href: '/agenda', icon: CalendarDays },
-  conversations: { label: 'Conversas', href: '/bot', icon: MessageCircle },
-  locations: { label: 'Meus locais', href: '/locais', icon: MapPin },
-  schedule: { label: 'Meu expediente', href: '/expediente', icon: Clock },
-  waitlist: { label: 'Lista de espera', href: '/lista-espera', icon: Hourglass },
-  campaigns: { label: 'Atribuição', href: '/trafego', icon: TrendingUp },
-  patients: { label: 'Meus pacientes', href: '/pacientes', icon: Users },
-  settings: { label: 'Configuração', href: '/configuracoes', icon: Settings },
-  transcriptions: { label: 'Transcrições', href: '/transcricoes', icon: FileAudio },
-  finance: { label: 'Financeiro', href: '/finance', icon: Wallet },
-  // Ciclo de receita + histórico de entradas numa tela só (/ciclo-receita).
-  revenue_cycle: { label: 'Ciclo de receita', href: '/ciclo-receita', icon: Receipt },
+// Slug do módulo → ícone. Rota e rótulo vêm de MODULE_ROUTES (lib/nav/tabs.ts);
+// aqui só juntamos o componente de ícone para montar MODULE_NAV.
+const MODULE_ICONS: Record<ModuleSlug, typeof LayoutDashboard> = {
+  dashboard: LayoutDashboard,
+  agenda: CalendarDays,
+  conversations: MessageCircle,
+  locations: MapPin,
+  schedule: Clock,
+  waitlist: Hourglass,
+  campaigns: TrendingUp,
+  patients: Users,
+  settings: Settings,
+  transcriptions: FileAudio,
+  finance: Wallet,
+  revenue_cycle: Receipt,
 }
+
+export const MODULE_NAV: Record<ModuleSlug, NavItem> = Object.fromEntries(
+  (Object.keys(MODULE_ROUTES) as ModuleSlug[]).map((slug) => [
+    slug,
+    { ...MODULE_ROUTES[slug], icon: MODULE_ICONS[slug] },
+  ]),
+) as Record<ModuleSlug, NavItem>
 
 // Agrupamento fixo da navegação por categoria. A ordem dos grupos e dos
 // módulos dentro deles independe da ordem em accountModules/userModules.
@@ -67,15 +72,8 @@ export const NAV_GROUPS: NavGroup[] = [
 // Ordem fixa de exibição, derivada de NAV_GROUPS (achatada).
 export const NAV_ORDER: ModuleSlug[] = NAV_GROUPS.flatMap((g) => g.modules)
 
-// Módulos visíveis só para owner, mesmo quando ativos no account — dado
-// financeiro (finance_entries pessoal) que não deve aparecer a admin/member
-// convidados, mesmo com module_overrides liberando.
-const OWNER_ONLY_MODULES: ModuleSlug[] = ['finance']
-
-// Módulos que exigem no mínimo papel admin — a recepção confirma pagamentos
-// no ciclo de receita, mas member não acessa (os totais continuam só do owner,
-// gate feito na própria página).
-const ADMIN_MIN_MODULES: ModuleSlug[] = ['revenue_cycle']
+// OWNER_ONLY_MODULES ('finance') e ADMIN_MIN_MODULES ('revenue_cycle') e a
+// regra isModuleVisible vivem em lib/nav/tabs.ts — importados no topo.
 
 // Módulos que um owner pode restringir por pessoa via module_overrides —
 // exclui os sempre-ativos (ALWAYS_ON_MODULES) e os exclusivos de owner
@@ -99,10 +97,7 @@ interface NavLinksProps {
 
 export function NavLinks({ userModules, role, className, onNavigate }: NavLinksProps) {
   const pathname = usePathname()
-  const isVisible = (slug: ModuleSlug) =>
-    userModules.includes(slug) &&
-    (role === 'owner' || !OWNER_ONLY_MODULES.includes(slug)) &&
-    (role !== 'member' || !ADMIN_MIN_MODULES.includes(slug))
+  const isVisible = (slug: ModuleSlug) => isModuleVisible(slug, userModules, role)
 
   const groups = NAV_GROUPS.map((group) => ({
     label: group.label,

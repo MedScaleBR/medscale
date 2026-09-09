@@ -257,7 +257,8 @@ export function RevenueClient({
         {initialEntries.length === 0 ? (
           <p className="py-12 text-center text-sm text-gray-400">Nenhuma entrada no período.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[640px] text-sm">
               <thead>
                 <tr className="border-b border-[var(--navy-06)] bg-[var(--navy-06)]/40 text-left text-xs text-gray-400">
@@ -305,6 +306,53 @@ export function RevenueClient({
               </tbody>
             </table>
           </div>
+
+          <ul className="divide-y divide-[var(--navy-06)] md:hidden">
+            {initialEntries.map((e) => (
+              <li key={e.id} className="px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm font-medium text-gray-900">{patientName(e)}</span>
+                  <span className="shrink-0 text-sm font-medium text-gray-900">
+                    {formatBRL(Number(e.amount))}
+                  </span>
+                </div>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500">
+                  <span>{formatDate(e.entry_date)}</span>
+                  {e.procedure_name && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span>{e.procedure_name}</span>
+                    </>
+                  )}
+                  {e.payment_method && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span>{PAYMENT_METHOD_LABELS[e.payment_method]}</span>
+                    </>
+                  )}
+                </div>
+                <div className="mt-1.5 flex items-center justify-between gap-2">
+                  <Badge className={`border-none ${PAYMENT_STATUS_LABELS[e.payment_status].style}`}>
+                    {PAYMENT_STATUS_LABELS[e.payment_status].label}
+                  </Badge>
+                  {(e.payment_status === 'pending' || e.payment_status === 'realized') && (
+                    <Button
+                      size="sm"
+                      disabled={busy}
+                      onClick={() => {
+                        setConfirming(e)
+                        setConfirmMethod('pix')
+                      }}
+                      className="bg-[var(--cyan)] text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
+                    >
+                      Confirmar pagamento
+                    </Button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+          </>
         )}
       </div>
 
@@ -333,7 +381,7 @@ export function RevenueClient({
               </Select>
             )}
           </div>
-          <div className="overflow-x-auto">
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full min-w-[420px] text-sm">
               <thead>
                 <tr className="border-b border-[var(--navy-06)] bg-[var(--navy-06)]/40 text-left text-xs text-gray-400">
@@ -353,6 +401,18 @@ export function RevenueClient({
               </tbody>
             </table>
           </div>
+
+          <ul className="divide-y divide-[var(--navy-06)] md:hidden">
+            {filteredConsultations.map((c) => (
+              <li key={c.id} className="px-4 py-3">
+                <div className="flex items-center justify-between gap-2">
+                  <span className="truncate text-sm font-medium text-gray-900">{c.patient_name}</span>
+                  <span className="shrink-0 text-xs text-gray-500">{c.health_plan}</span>
+                </div>
+                <p className="mt-0.5 text-xs text-gray-500">{formatDateTime(c.scheduled_at)}</p>
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 

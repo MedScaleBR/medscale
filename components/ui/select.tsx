@@ -6,7 +6,46 @@ import { Select as SelectPrimitive } from "@base-ui/react/select"
 import { cn } from "@/lib/utils"
 import { ChevronDownIcon, CheckIcon, ChevronUpIcon } from "lucide-react"
 
-const Select = SelectPrimitive.Root
+// Base UI mostra o valor cru no <Select.Value> (um UUID, "all", etc.) até o
+// popup abrir a 1ª vez, a menos que <Select.Root> receba `items`. Aqui a gente
+// deriva `items` das <SelectItem> filhas automaticamente — assim todo Select do
+// app já mostra o rótulo certo na 1ª renderização, sem precisar passar `items`
+// à mão em cada tela. Quem passar `items` explicitamente continua no controle.
+function collectSelectItems(
+  node: React.ReactNode,
+  acc: Record<string, React.ReactNode>
+): void {
+  React.Children.forEach(node, (child) => {
+    if (!React.isValidElement(child)) return
+    const props = child.props as { value?: unknown; children?: React.ReactNode }
+    if (child.type === SelectItem) {
+      if (props.value != null && typeof props.value !== "object") {
+        acc[String(props.value)] = props.children
+      }
+      return
+    }
+    if (props.children != null) collectSelectItems(props.children, acc)
+  })
+}
+
+function Select<Value, Multiple extends boolean | undefined = false>({
+  items,
+  children,
+  ...props
+}: SelectPrimitive.Root.Props<Value, Multiple>) {
+  const derivedItems = React.useMemo(() => {
+    if (items != null) return items
+    const acc: Record<string, React.ReactNode> = {}
+    collectSelectItems(children, acc)
+    return Object.keys(acc).length > 0 ? acc : undefined
+  }, [items, children])
+
+  return (
+    <SelectPrimitive.Root items={derivedItems} {...props}>
+      {children}
+    </SelectPrimitive.Root>
+  )
+}
 
 function SelectGroup({ className, ...props }: SelectPrimitive.Group.Props) {
   return (

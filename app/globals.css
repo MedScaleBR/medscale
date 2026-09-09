@@ -163,3 +163,30 @@
     @apply font-sans;
   }
 }
+
+@layer utilities {
+  /* Preenche a área segura inferior (indicador de home) somando a um valor base. */
+  .pb-safe {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .pb-safe-14 {
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom));
+  }
+  /* Altura da viewport que acompanha as barras dinâmicas do navegador móvel. */
+  .h-dvh {
+    height: 100dvh;
+  }
+}
+
+@layer base {
+  /* Rede de segurança: no mobile, campos com fonte < 16px fazem o iOS dar
+     zoom ao focar. Os componentes ui/input e ui/textarea já usam text-base
+     no mobile; isto cobre <input>/<select>/<textarea> crus. */
+  @media (max-width: 767px) {
+    input,
+    select,
+    textarea {
+      font-size: 16px;
+    }
+  }
+}

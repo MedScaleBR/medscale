@@ -5,6 +5,7 @@ import { SessionProvider } from '@/lib/session/session-context'
 import { PostHogIdentify } from '@/components/analytics/PostHogIdentify'
 import { Sidebar } from '@/components/layout/Sidebar'
 import { Topbar } from '@/components/layout/Topbar'
+import { MobileTabBar } from '@/components/layout/MobileTabBar'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -46,8 +47,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
             session={session}
             accounts={accounts}
           />
-          <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-6">{children}</main>
+          <main className="min-w-0 flex-1 overflow-x-hidden overflow-y-auto p-4 pb-safe-14 md:p-6 md:pb-6">
+            {children}
+          </main>
         </div>
+        <MobileTabBar session={session} accounts={accounts} />
       </div>
     </SessionProvider>
   )

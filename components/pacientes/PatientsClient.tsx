@@ -76,7 +76,8 @@ export function PatientsClient({ initialPatients }: { initialPatients: Patient[]
         {filtered.length === 0 ? (
           <p className="py-12 text-center text-sm text-gray-400">Nenhum paciente encontrado.</p>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[560px] text-sm">
             <thead>
               <tr className="border-b border-[var(--navy-06)] bg-[var(--navy-06)]/40 text-left text-xs text-gray-400">
@@ -114,6 +115,35 @@ export function PatientsClient({ initialPatients }: { initialPatients: Patient[]
             </tbody>
           </table>
           </div>
+
+          <ul className="divide-y divide-[var(--navy-06)] md:hidden">
+            {filtered.map((p) => (
+              <li key={p.id} className="px-4 py-3">
+                <Link href={`/pacientes/${p.id}`} className="block text-sm font-medium text-gray-900">
+                  {p.full_name}
+                </Link>
+                <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500">
+                  <span>{p.phone}</span>
+                  {p.email && (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span className="truncate">{p.email}</span>
+                    </>
+                  )}
+                </div>
+                {p.tags.length > 0 && (
+                  <div className="mt-1.5 flex flex-wrap gap-1">
+                    {p.tags.map((t) => (
+                      <Badge key={t} className="border-none bg-[var(--navy-06)] text-[var(--navy)]">
+                        {t}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+          </>
         )}
       </div>
 

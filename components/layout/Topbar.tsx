@@ -1,8 +1,6 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
-import posthog from 'posthog-js'
-import { createClient } from '@/lib/supabase/client'
+import { usePathname } from 'next/navigation'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import {
   DropdownMenu,
@@ -13,7 +11,8 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { LogOut, Settings } from 'lucide-react'
 import Link from 'next/link'
-import { MobileNav } from './MobileNav'
+import { moduleTitleFromPath } from '@/lib/nav/tabs'
+import { useLogout } from '@/lib/auth/use-logout'
 import type { ActiveSession, AccountSummary } from '@/lib/session/context'
 
 interface TopbarProps {
@@ -24,16 +23,10 @@ interface TopbarProps {
   accounts: AccountSummary[]
 }
 
-export function Topbar({ userName, userEmail, avatarUrl, session, accounts }: TopbarProps) {
-  const router = useRouter()
-
-  const handleLogout = async () => {
-    const supabase = createClient()
-    if (posthog.__loaded) posthog.reset()
-    await supabase.auth.signOut()
-    router.push('/login')
-    router.refresh()
-  }
+export function Topbar({ userName, userEmail, avatarUrl }: TopbarProps) {
+  const pathname = usePathname()
+  const screenTitle = moduleTitleFromPath(pathname)
+  const handleLogout = useLogout()
 
   const initials = userName
     .split(' ')
@@ -43,11 +36,11 @@ export function Topbar({ userName, userEmail, avatarUrl, session, accounts }: To
     .toUpperCase()
 
   return (
-    <header className="flex h-16 items-center border-b border-[var(--navy-06)] bg-white px-6">
-      <MobileNav session={session} accounts={accounts} />
+    <header className="flex h-14 items-center border-b border-[var(--navy-06)] bg-white px-4 md:h-16 md:px-6">
+      <span className="text-base font-semibold text-[var(--navy)] md:hidden">{screenTitle}</span>
       <DropdownMenu>
         <DropdownMenuTrigger className="ml-auto flex items-center gap-3 rounded-lg px-2 py-1.5 outline-none hover:bg-[var(--navy-06)]">
-          <div className="text-right">
+          <div className="hidden text-right md:block">
             <p className="text-sm font-medium text-gray-900">{userName}</p>
             <p className="text-xs text-gray-400">{userEmail}</p>
           </div>

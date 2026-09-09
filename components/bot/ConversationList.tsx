@@ -71,10 +71,10 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar nome ou telefone"
-            className="w-full rounded-full border border-[var(--navy-06)] bg-[var(--navy-06)]/40 py-2 pr-3 pl-9 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[var(--cyan)] focus:bg-white focus:ring-2 focus:ring-[var(--cyan-20)] focus:outline-none"
+            className="w-full rounded-full border border-[var(--navy-06)] bg-[var(--navy-06)]/40 py-2 pr-3 pl-9 text-base text-gray-900 placeholder:text-gray-400 focus:border-[var(--cyan)] focus:bg-white focus:ring-2 focus:ring-[var(--cyan-20)] focus:outline-none md:text-sm"
           />
         </div>
-        <label className="mt-2.5 flex cursor-pointer items-center gap-2 text-xs text-gray-500">
+        <label className="mt-1 flex min-h-11 cursor-pointer items-center gap-2 text-xs text-gray-500">
           <input
             type="checkbox"
             checked={showArchived}
