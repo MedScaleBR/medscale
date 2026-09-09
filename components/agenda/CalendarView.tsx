@@ -1,6 +1,6 @@
 'use client'
 
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useMemo, useState, useSyncExternalStore } from 'react'
 import { Calendar, dateFnsLocalizer, type SlotInfo, type View } from 'react-big-calendar'
 import { format, parse, startOfWeek, getDay } from 'date-fns'
 import { ptBR } from 'date-fns/locale'
@@ -56,6 +56,26 @@ function toDatetimeLocal(date: Date) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+const MOBILE_MQ = '(max-width: 767px)'
+
+// SSR-safe: no servidor devolve false; no cliente acompanha o breakpoint.
+function useIsMobile() {
+  return useSyncExternalStore(
+    (onChange) => {
+      const mq = window.matchMedia(MOBILE_MQ)
+      mq.addEventListener('change', onChange)
+      return () => mq.removeEventListener('change', onChange)
+    },
+    () => window.matchMedia(MOBILE_MQ).matches,
+    () => false
+  )
+}
+
+// No mobile a visão "Semana" tem 7 colunas estreitas — o cabeçalho padrão
+// ("06 domingo") não cabe e corta no meio da palavra. "dd EEEEEE" encurta
+// para "06 dom". Desktop mantém o formato padrão do react-big-calendar.
+const MOBILE_FORMATS = { dayFormat: 'dd EEEEEE' }
+
 interface CalendarViewProps {
   appointments: Appointment[]
   busyBlocks: BusyBlock[]
@@ -83,6 +103,7 @@ export function CalendarView({
 }: CalendarViewProps) {
   const [view, setView] = useState<View>('week')
   const [date, setDate] = useState(new Date())
+  const isMobile = useIsMobile()
   const [modalOpen, setModalOpen] = useState(false)
   const [editing, setEditing] = useState<AppointmentFormValues | undefined>(undefined)
   const [unitFilter, setUnitFilter] = useState<string>(ALL)
@@ -234,6 +255,7 @@ export function CalendarView({
         onSelectEvent={handleSelectEvent}
         messages={MESSAGES}
         culture="pt-BR"
+        formats={isMobile ? MOBILE_FORMATS : undefined}
         eventPropGetter={(event) => {
           const e = event as CalEvent
           if (e.kind === 'busy') {
