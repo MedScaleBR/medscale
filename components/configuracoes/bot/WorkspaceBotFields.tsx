@@ -112,7 +112,7 @@ export function WorkspaceBotFields({
     <div className="space-y-4">
       <p className="text-xs text-gray-400">
         Estes campos variam por unidade — endereço, horário presencial, contato, preço e o
-        atendimento humano. O resto da configuração da Maria (personalidade, convênios, FAQ,
+        atendimento humano. O resto da configuração da Clara (personalidade, convênios, FAQ,
         políticas) vale para todas as unidades.
       </p>
 
@@ -157,7 +157,7 @@ export function WorkspaceBotFields({
             placeholder="Ex: Segunda a sexta das 08h às 17h. Sábados das 08h às 12h."
           />
           <p className="mt-1.5 text-xs text-gray-400">
-            Texto exibido ao paciente — a Maria conversa e agenda 24/7. Quem controla os horários
+            Texto exibido ao paciente — a Clara conversa e agenda 24/7. Quem controla os horários
             reais para agendar é a{' '}
             <a href="/expediente" className="text-[var(--cyan-dark)] hover:underline">
               disponibilidade da unidade

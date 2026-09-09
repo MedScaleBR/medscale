@@ -127,7 +127,7 @@ export function RevenueSettingsClient({
           <div>
             <h2 className="text-sm font-medium text-gray-900">Catálogo de procedimentos</h2>
             <p className="mt-0.5 text-xs text-gray-400">
-              Nome e preço padrão de cada procedimento. Alimenta a agenda, a Maria e o ciclo de receita.
+              Nome e preço padrão de cada procedimento. Alimenta a agenda, a Clara e o ciclo de receita.
             </p>
           </div>
           <Button

@@ -105,7 +105,7 @@ export function requireModule(session: ApiSession, module: ModuleSlug): NextResp
 }
 
 // Exige que o papel do chamador esteja em `roles`. `requireWorkspaceSession` só
-// garante "é membro ativo" — operações privilegiadas (configuração da Maria,
+// garante "é membro ativo" — operações privilegiadas (configuração da Clara,
 // conexão do Google Calendar, etc.) precisam checar o papel explicitamente no
 // servidor, não confiar no gate do frontend.
 export function requireRole(session: ApiSession, roles: MembershipRole[]): NextResponse | null {

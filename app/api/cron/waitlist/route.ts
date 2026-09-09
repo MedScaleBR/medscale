@@ -17,7 +17,7 @@ const SLOT_DURATION_MIN = 30
 // Disparado pelo Supabase pg_cron (ver supabase/cron.sql) uma vez por hora, 15min
 // após o ponto.
 // - Entradas manuais (equipe): vagas em qualquer horário nos próximos DAYS_AHEAD dias.
-// - Entradas da Maria (source 'bot'): só o dia (e horário) que o paciente pediu,
+// - Entradas da Clara (source 'bot'): só o dia (e horário) que o paciente pediu,
 //   avisadas com o template que nomeia o slot.
 // `notified_at` + cooldown de 24h evitam reenviar o aviso enquanto a vaga persistir.
 export async function POST(req: NextRequest) {
@@ -26,7 +26,7 @@ export async function POST(req: NextRequest) {
 
   const supabase = createAdminClient()
 
-  // 1. Expira entradas da Maria cujo dia desejado já passou (fuso São Paulo).
+  // 1. Expira entradas da Clara cujo dia desejado já passou (fuso São Paulo).
   const todaySP = format(new TZDate(new Date(), TZ), 'yyyy-MM-dd')
   await supabase
     .from('waitlist')
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // 4. Entradas da Maria — casa só o dia (e horário) desejado.
+  // 4. Entradas da Clara — casa só o dia (e horário) desejado.
   for (const entry of bot) {
     const workspace = workspaceById.get(entry.workspace_id)
     const conn = connByAccount.get(entry.account_id)

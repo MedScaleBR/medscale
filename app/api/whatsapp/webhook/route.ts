@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
   // para o agente financeiro) — não adianta procurar bot_config pra ele.
   const isFinanceNumber = Boolean(phoneNumberId && phoneNumberId === process.env.FINANCE_PHONE_NUMBER_ID)
 
-  // Encontrar a account pelo phone_number_id (a conexão WhatsApp da Maria vive
+  // Encontrar a account pelo phone_number_id (a conexão WhatsApp da Clara vive
   // em bot_config, uma por account). Precisamos disso já aqui (antes de
   // aceitar/rejeitar a assinatura) porque, no fluxo "número próprio", a
   // assinatura só é validável com o App Secret daquela account.
@@ -110,7 +110,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Log do webhook para debugging. workspace_id fica null: a unidade só é
-  // conhecida depois que a Maria pergunta ao paciente.
+  // conhecida depois que a Clara pergunta ao paciente.
   const { data: webhookLog } = await supabase
     .from('webhook_logs')
     .insert({ workspace_id: null, payload: body })

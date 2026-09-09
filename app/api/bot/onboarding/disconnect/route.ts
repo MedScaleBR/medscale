@@ -4,7 +4,7 @@ import { invalidateBotConfigCache } from '@/lib/bot/config'
 import { requireWorkspaceSession } from '@/lib/session/api'
 
 // Desfaz a conexão com a Meta: limpa as credenciais do WhatsApp da account e
-// desativa a Maria. Não mexe na personalidade/FAQ/handoff — só na conexão.
+// desativa a Clara. Não mexe na personalidade/FAQ/handoff — só na conexão.
 export async function DELETE(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
   if ('error' in result) return result.error

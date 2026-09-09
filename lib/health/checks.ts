@@ -25,10 +25,10 @@ export function checkLlm(): Check {
   return { ok: Boolean(process.env.ANTHROPIC_API_KEY) }
 }
 
-// Maria — conta workspaces com o bot ativo (`is_active = true` no bot_config).
+// Clara — conta workspaces com o bot ativo (`is_active = true` no bot_config).
 // Zero não é necessariamente queda (staging, onboarding incompleto), por isso
 // esse check é só informativo e não entra na rota crítica.
-export async function checkMaria(): Promise<Check & { active_workspaces: number }> {
+export async function checkClara(): Promise<Check & { active_workspaces: number }> {
   try {
     const supabase = createAdminClient()
     const { count, error } = await supabase

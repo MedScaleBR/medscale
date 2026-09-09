@@ -96,7 +96,7 @@ export interface Database {
           city: string | null
           state: string | null
           zip_code: string | null
-          // Campos exibidos pela Maria que variam por unidade (a config do bot
+          // Campos exibidos pela Clara que variam por unidade (a config do bot
           // é única por account — ver bot_config).
           business_hours: string | null
           directions_parking: string | null
@@ -378,7 +378,7 @@ export interface Database {
       conversations: {
         Row: {
           id: string
-          // null até a Maria confirmar a unidade — a conversa é resolvida por
+          // null até a Clara confirmar a unidade — a conversa é resolvida por
           // account + telefone (número único). A unidade real de cada consulta
           // fica em appointments.workspace_id.
           workspace_id: string | null
@@ -860,7 +860,7 @@ export interface Database {
           id: string
           account_id: string
           // Unidade do lançamento. null = consolidado / account-wide (padrão
-          // para PF). Para PJ a Maria financeira pergunta a unidade antes de gravar.
+          // para PF). Para PJ a Clara financeira pergunta a unidade antes de gravar.
           workspace_id: string | null
           recorded_by_phone: string
           type: FinanceEntryType

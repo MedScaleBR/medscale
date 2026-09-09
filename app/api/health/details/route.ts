@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { checkDatabase, checkFinanceAgent, checkLlm, checkMaria } from '@/lib/health/checks'
+import { checkDatabase, checkFinanceAgent, checkLlm, checkClara } from '@/lib/health/checks'
 
 // Panorama completo de todos os checks — consulta manual de diagnostico. NÃO
 // entra no UptimeRobot. Diferente de /api/health (publico), este expoe erro de
@@ -22,12 +22,12 @@ export async function GET() {
   const { data: isAdmin } = await supabase.rpc('is_medscale_admin')
   if (!isAdmin) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
-  const [database, maria] = await Promise.all([checkDatabase(), checkMaria()])
+  const [database, clara] = await Promise.all([checkDatabase(), checkClara()])
 
   const checks = {
     database,
     llm: checkLlm(),
-    maria,
+    clara,
     finance_agent: checkFinanceAgent(),
   }
 

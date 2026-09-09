@@ -27,7 +27,7 @@ account (ver [Papéis, módulos e visibilidade](#papéis-módulos-e-visibilidade
   são sincronizadas com o Google (best-effort) e guardam `gcal_event_id`; um cron de reconciliação
   (`reconcile-calendar`, de hora em hora) cobre o caso de alguém mexer direto no Google Calendar.
 - **Bot WhatsApp / Conversas** (`/bot`, módulo `conversations`) — inbox das conversas conduzidas
-  pela IA (nome fixo "Maria"), com histórico de mensagens, status (`open`/`resolved`/`handoff`) e
+  pela IA (nome fixo "Clara"), com histórico de mensagens, status (`open`/`resolved`/`handoff`) e
   botão de pausar o bot pra assumir manualmente. O agente (`lib/llm/agent.ts`, Claude Sonnet 4.5)
   conversa e agenda **24/7** — não tem "horário do bot" — usando os horários livres reais
   calculados a partir da Agenda. Confirma consulta emitindo um marcador interno

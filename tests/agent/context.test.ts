@@ -102,7 +102,7 @@ describe('processIncomingMessage — montagem de contexto', () => {
         insert: { data: { id: 'p-novo', full_name: 'Paciente' } },
       },
     })
-    state.claudeResponses = ['Olá! Sou a Maria.']
+    state.claudeResponses = ['Olá! Sou a Clara.']
 
     await processIncomingMessage(PARAMS)
 
@@ -211,7 +211,7 @@ describe('processIncomingMessage — montagem de contexto', () => {
     mergeSupabaseConfig({
       messages: { insert: { data: null }, select: { data: [{ role: 'user', content: PARAMS.message }] } },
     })
-    state.claudeResponses = ['Olá! Sou a Maria.']
+    state.claudeResponses = ['Olá! Sou a Clara.']
 
     await processIncomingMessage(PARAMS)
 
@@ -383,7 +383,7 @@ describe('processIncomingMessage — trava de unidade (multi-unidade)', () => {
     state.freeSlots = { '*': ['08:00', '08:30'] }
   })
 
-  it('grava a unidade na conversa assim que a Maria emite UNIDADE_ID', async () => {
+  it('grava a unidade na conversa assim que a Clara emite UNIDADE_ID', async () => {
     const supabase = mergeSupabaseConfig({})
     state.claudeResponses = [`Perfeito, vou te atender na Unidade B.\nUNIDADE_ID: ${UNIT_B.id}`]
 
@@ -414,7 +414,7 @@ describe('processIncomingMessage — trava de unidade (multi-unidade)', () => {
   })
 })
 
-describe('handleUnsupportedMessage — mídia que a Maria não entende', () => {
+describe('handleUnsupportedMessage — mídia que a Clara não entende', () => {
   const unsupportedParams = {
     accountId: PARAMS.accountId,
     patientPhone: PARAMS.patientPhone,

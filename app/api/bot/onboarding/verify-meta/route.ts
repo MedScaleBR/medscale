@@ -7,7 +7,7 @@ import { trackBotWizardCompleted } from '@/lib/analytics/posthog-server'
 
 // Confirma que o Phone Number ID + token colados pelo médico são válidos,
 // consultando a própria Meta Graph API, antes de salvar. A conexão WhatsApp
-// da Maria é única por account (bot_config).
+// da Clara é única por account (bot_config).
 export async function POST(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
   if ('error' in result) return result.error

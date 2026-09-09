@@ -331,7 +331,7 @@ export function BotConfigForm({
             <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Tom de voz e políticas</h3>
             <div className="space-y-4">
               <div>
-                <Label htmlFor="tone_of_voice">Tom de voz da Maria</Label>
+                <Label htmlFor="tone_of_voice">Tom de voz da Clara</Label>
                 <p className="mb-1 text-xs text-gray-400">Como ela deve soar ao conversar com o paciente</p>
                 <Textarea
                   id="tone_of_voice"
@@ -355,7 +355,7 @@ export function BotConfigForm({
                 />
               </div>
               <div>
-                <Label htmlFor="forbidden_actions">Limites adicionais — o que a Maria NUNCA deve fazer</Label>
+                <Label htmlFor="forbidden_actions">Limites adicionais — o que a Clara NUNCA deve fazer</Label>
                 <Textarea
                   id="forbidden_actions"
                   value={form.forbidden_actions}
@@ -370,7 +370,7 @@ export function BotConfigForm({
 
           <section className="mb-6 break-inside-avoid rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
             <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Perguntas frequentes</h3>
-            <p className="mb-3 text-xs text-gray-400">A Maria responde direto com base nessas perguntas e respostas</p>
+            <p className="mb-3 text-xs text-gray-400">A Clara responde direto com base nessas perguntas e respostas</p>
             <FaqInput value={form.faq} onChange={(v) => setForm((f) => ({ ...f, faq: v }))} />
           </section>
 
