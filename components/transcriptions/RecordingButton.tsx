@@ -8,6 +8,7 @@ import { ConsentDialog } from './ConsentDialog'
 import { Mic, Square, Loader2 } from 'lucide-react'
 import { useAnalyticsBase } from '@/lib/session/session-context'
 import { trackRecordingStarted, trackRecordingUploaded } from '@/lib/analytics/posthog'
+import { getRecordingLimitState } from '@/lib/transcriptions/recording-limits'
 
 type RecordingButtonProps = {
   appointmentId?: string
@@ -52,6 +53,7 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
   const [consentOpen, setConsentOpen] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [autoStopped, setAutoStopped] = useState(false)
   const [isSupported] = useState(() => isRecordingSupported())
 
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
@@ -59,6 +61,7 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
   const chunksRef = useRef<Blob[]>([])
   const startedAtRef = useRef<number>(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const autoStopTriggeredRef = useRef(false)
 
   useEffect(() => {
     return () => {
@@ -84,10 +87,20 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
       recorder.start(10_000)
       mediaRecorderRef.current = recorder
       startedAtRef.current = Date.now()
+      autoStopTriggeredRef.current = false
       trackRecordingStarted(analyticsBase)
       setElapsed(0)
+      setAutoStopped(false)
       timerRef.current = setInterval(() => {
-        setElapsed(Math.floor((Date.now() - startedAtRef.current) / 1000))
+        const seconds = Math.floor((Date.now() - startedAtRef.current) / 1000)
+        setElapsed(seconds)
+        // Encerra a gravação sozinha ao bater no teto de duração, seguindo
+        // o mesmo fluxo do botão "Encerrar gravação".
+        if (getRecordingLimitState(seconds).shouldStop && !autoStopTriggeredRef.current) {
+          autoStopTriggeredRef.current = true
+          setAutoStopped(true)
+          void stopRecording()
+        }
       }, 1000)
       setState('recording')
     } catch (err) {
@@ -191,16 +204,32 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
   }
 
   if (state === 'recording') {
+    const limit = getRecordingLimitState(elapsed)
     return (
-      <div className="flex items-center gap-2">
-        <span className="flex items-center gap-1.5 text-sm font-medium text-red-600">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-red-600" />
-          {formatDuration(elapsed)}
-        </span>
-        <Button variant="destructive" onClick={stopRecording} className="gap-2">
-          <Square className="h-4 w-4" />
-          Encerrar gravação
-        </Button>
+      <div className="flex flex-col items-end gap-1">
+        <div className="flex items-center gap-2">
+          <span
+            className={`flex items-center gap-1.5 text-sm font-medium ${
+              limit.showWarning ? 'text-amber-600' : 'text-red-600'
+            }`}
+          >
+            <span
+              className={`h-2 w-2 animate-pulse rounded-full ${
+                limit.showWarning ? 'bg-amber-600' : 'bg-red-600'
+              }`}
+            />
+            {formatDuration(elapsed)}
+          </span>
+          <Button variant="destructive" onClick={stopRecording} className="gap-2">
+            <Square className="h-4 w-4" />
+            Encerrar gravação
+          </Button>
+        </div>
+        {limit.showWarning && (
+          <p className="text-xs text-amber-600">
+            Encerra automaticamente em {formatDuration(limit.secondsUntilStop)}
+          </p>
+        )}
       </div>
     )
   }
@@ -215,7 +244,7 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
         {state === 'uploading' ? (
           <>
             <Loader2 className="h-4 w-4 animate-spin" />
-            Enviando...
+            {autoStopped ? 'Tempo máximo de 30 min atingido — enviando...' : 'Enviando...'}
           </>
         ) : (
           <>
