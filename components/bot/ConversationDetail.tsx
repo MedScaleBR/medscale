@@ -4,7 +4,13 @@ import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
-import { Archive, ArchiveRestore, Lock, Send } from 'lucide-react'
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from '@/components/ui/dropdown-menu'
+import { Archive, ArchiveRestore, ChevronLeft, Lock, MoreVertical, Send } from 'lucide-react'
 import type { MessageRole, ConversationStatus } from '@/types/database'
 import { InitialsAvatar } from './InitialsAvatar'
 
@@ -27,6 +33,7 @@ interface ConversationDetailProps {
   onResolve: () => Promise<void>
   onReactivateBot: () => Promise<void>
   onToggleArchived: (archived: boolean) => Promise<void>
+  onBack?: () => void
 }
 
 const RINGS =
@@ -76,6 +83,7 @@ export function ConversationDetail({
   onResolve,
   onReactivateBot,
   onToggleArchived,
+  onBack,
 }: ConversationDetailProps) {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
@@ -120,8 +128,17 @@ export function ConversationDetail({
   const info = statusInfo(status, botPaused, Boolean(archivedAt))
 
   return (
-    <div key={conversationId} className="flex h-full flex-col bg-white">
-      <div className="flex items-center gap-3 border-b border-[var(--navy-06)] px-5 py-3">
+    <div key={conversationId} className="flex h-dvh flex-col bg-white md:h-full">
+      <div className="flex items-center gap-2 border-b border-[var(--navy-06)] px-4 py-3 md:gap-3 md:px-5">
+        {onBack && (
+          <button
+            onClick={onBack}
+            aria-label="Voltar para a lista"
+            className="-ml-1.5 flex size-9 shrink-0 items-center justify-center rounded-lg text-gray-500 hover:bg-[var(--navy-06)] md:hidden"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+        )}
         <InitialsAvatar label={title} seed={conversationId} />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-[var(--navy)]">{title}</p>
@@ -129,7 +146,9 @@ export function ConversationDetail({
             {patientPhone || 'Sandbox'} · {messages.length} {messages.length === 1 ? 'mensagem' : 'mensagens'}
           </p>
         </div>
-        <div className="ml-auto flex shrink-0 items-center gap-2">
+
+        {/* Ações inline no desktop */}
+        <div className="ml-auto hidden shrink-0 items-center gap-2 md:flex">
           {status !== 'resolved' && (
             <Button variant="outline" size="sm" onClick={onResolve}>
               Marcar como resolvida
@@ -145,6 +164,26 @@ export function ConversationDetail({
             {archivedAt ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
             {archivedAt ? 'Desarquivar' : 'Arquivar'}
           </Button>
+        </div>
+
+        {/* Ações no menu ⋯ no mobile */}
+        <div className="ml-auto shrink-0 md:hidden">
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label="Ações da conversa"
+              className="flex size-11 items-center justify-center rounded-lg text-gray-500 hover:bg-[var(--navy-06)]"
+            >
+              <MoreVertical className="h-5 w-5" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              {status !== 'resolved' && (
+                <DropdownMenuItem onClick={onResolve}>Marcar como resolvida</DropdownMenuItem>
+              )}
+              <DropdownMenuItem onClick={handleToggleArchived} disabled={archiving}>
+                {archivedAt ? 'Desarquivar' : 'Arquivar'}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -187,10 +226,10 @@ export function ConversationDetail({
         })}
       </div>
 
-      <div className="flex flex-wrap items-center gap-x-2 gap-y-1 border-t border-[var(--navy-06)] px-5 py-2.5 text-xs text-gray-500">
+      <div className="flex flex-col gap-1.5 border-t border-[var(--navy-06)] px-4 py-2.5 text-xs text-gray-500 md:flex-row md:flex-wrap md:items-center md:gap-x-2 md:gap-y-1 md:px-5">
         <span
           className={cn(
-            'inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-medium',
+            'inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 font-medium',
             PILL[info.tone]
           )}
         >
@@ -204,7 +243,7 @@ export function ConversationDetail({
             size="sm"
             onClick={handleReactivate}
             disabled={reactivating}
-            className="ml-auto shrink-0 border-amber-300 bg-white text-amber-700 hover:bg-amber-100"
+            className="mt-1 w-full shrink-0 border-amber-300 bg-white text-amber-700 hover:bg-amber-100 md:mt-0 md:ml-auto md:w-auto"
           >
             {reactivating ? 'Reativando...' : 'Reativar bot'}
           </Button>

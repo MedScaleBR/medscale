@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useMemo, useState } from 'react'
+import { cn } from '@/lib/utils'
 import { ConversationList, type ConversationListItem } from './ConversationList'
 import { ConversationDetail, type DetailMessage } from './ConversationDetail'
 import { useAnalyticsBase } from '@/lib/session/session-context'
@@ -14,7 +15,14 @@ export interface ConversationWithMessages extends ConversationListItem {
 export function BotInboxClient({ initialConversations }: { initialConversations: ConversationWithMessages[] }) {
   const [conversations, setConversations] = useState(initialConversations)
   const [selectedId, setSelectedId] = useState<string | null>(initialConversations[0]?.id ?? null)
+  // No mobile (< md) a lista e o detalhe não cabem juntos: mostramos um por vez.
+  const [mobilePane, setMobilePane] = useState<'list' | 'detail'>('list')
   const analyticsBase = useAnalyticsBase()
+
+  const handleSelect = (id: string) => {
+    setSelectedId(id)
+    setMobilePane('detail')
+  }
 
   const selected = useMemo(() => conversations.find((c) => c.id === selectedId) ?? null, [conversations, selectedId])
 
@@ -26,6 +34,7 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
     if (target && conversations.some((c) => c.id === target)) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedId(target)
+      setMobilePane('detail')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -102,10 +111,25 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
 
   return (
     <div className="grid h-[calc(100vh-160px)] grid-cols-1 gap-0 overflow-hidden rounded-xl border border-[var(--navy-06)] bg-white shadow-[var(--shadow-sm)] md:grid-cols-[340px_1fr]">
-      <div className="min-h-0 overflow-hidden border-r border-[var(--navy-06)]">
-        <ConversationList conversations={conversations} selectedId={selectedId} onSelect={setSelectedId} />
+      {/* LISTA — sempre no desktop; no mobile só quando mobilePane === 'list' */}
+      <div
+        className={cn(
+          'min-h-0 overflow-hidden border-r border-[var(--navy-06)]',
+          mobilePane === 'detail' && 'hidden md:block',
+        )}
+      >
+        <ConversationList conversations={conversations} selectedId={selectedId} onSelect={handleSelect} />
       </div>
-      <div className="min-h-0 overflow-hidden">
+
+      {/* DETALHE — painel no desktop; overlay full-screen no mobile */}
+      <div
+        className={cn(
+          'min-h-0 overflow-hidden',
+          mobilePane === 'list'
+            ? 'hidden md:block'
+            : 'fixed inset-0 z-50 bg-white md:static md:z-auto',
+        )}
+      >
         {selected ? (
           <ConversationDetail
             conversationId={selected.id}
@@ -119,6 +143,7 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
             onResolve={handleResolve}
             onReactivateBot={handleReactivateBot}
             onToggleArchived={handleToggleArchived}
+            onBack={() => setMobilePane('list')}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-gray-400">
