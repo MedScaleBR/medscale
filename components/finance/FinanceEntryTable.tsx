@@ -38,7 +38,8 @@ export function FinanceEntryTable({
       {rows.length === 0 ? (
         <p className="py-12 text-center text-sm text-gray-400">Nenhum lançamento neste período.</p>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        <div className="hidden overflow-x-auto md:block">
           <table className="w-full min-w-[640px] text-sm">
             <thead>
               <tr className="border-b border-[var(--navy-06)] bg-[var(--navy-06)]/40 text-left text-xs text-gray-400">
@@ -103,6 +104,76 @@ export function FinanceEntryTable({
             </tbody>
           </table>
         </div>
+
+        <ul className="divide-y divide-[var(--navy-06)] md:hidden">
+          {rows.map((e) => {
+            const n = names(tree, e)
+            const isIncome = e.direction === 'in'
+            const isMirror = !!e.revenue_entry_id
+            return (
+              <li key={e.id} className="flex items-start gap-3 px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-sm font-medium text-gray-900">
+                      {e.description ?? n.cat}
+                    </span>
+                    <span
+                      className={`shrink-0 text-sm font-medium ${
+                        isIncome ? 'text-green-600' : 'text-gray-900'
+                      }`}
+                    >
+                      {isIncome ? '+' : ''}
+                      {formatBRL(e.amount)}
+                    </span>
+                  </div>
+                  <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500">
+                    <span>{new Date(e.entry_date + 'T00:00:00').toLocaleDateString('pt-BR')}</span>
+                    <span aria-hidden>·</span>
+                    <span
+                      className={`rounded-full px-1.5 py-0.5 ${
+                        isIncome ? 'bg-green-100 text-green-700' : 'bg-[var(--navy-06)] text-gray-500'
+                      }`}
+                    >
+                      {isIncome ? 'Receita' : 'Despesa'}
+                    </span>
+                    <span aria-hidden>·</span>
+                    <span className={n.uncategorized ? 'text-amber-600' : undefined}>{n.cat}</span>
+                    {n.sub !== '—' && (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span>{n.sub}</span>
+                      </>
+                    )}
+                    {kind === 'pj' && (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span>
+                          {e.workspace_id ? (unitNames[e.workspace_id] ?? 'Unidade') : 'Consolidado'}
+                        </span>
+                      </>
+                    )}
+                  </div>
+                </div>
+                {isMirror ? (
+                  <span className="shrink-0 pt-0.5 text-[11px] text-gray-400">Ciclo</span>
+                ) : (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger className="-mr-1.5 flex size-11 shrink-0 items-center justify-center rounded hover:bg-[var(--navy-06)]">
+                      <MoreVertical className="h-4 w-4 text-gray-400" />
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem onClick={() => onEdit(e)}>Editar</DropdownMenuItem>
+                      <DropdownMenuItem className="text-red-600" onClick={() => onDelete(e)}>
+                        Excluir
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </li>
+            )
+          })}
+        </ul>
+        </>
       )}
     </div>
   )
