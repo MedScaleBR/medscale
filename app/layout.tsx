@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { PostHogProvider } from "@/lib/posthog-provider";
@@ -16,6 +16,14 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "MedScale — Gestão de clínicas",
   description: "Painel de agenda, métricas, receita e agente WhatsApp para clínicas.",
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+  interactiveWidget: "resizes-content",
+  themeColor: "#0F1E45",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
