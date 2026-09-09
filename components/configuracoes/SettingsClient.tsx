@@ -25,7 +25,7 @@ interface SettingsClientProps {
   google: { connected: boolean; email: string | null }
   workspaceCalendars: WorkspaceCalendarRow[]
   isOwner: boolean
-  /** owner ou admin — pode configurar a Maria e a conexão do Google Calendar. */
+  /** owner ou admin — pode configurar a Clara e a conexão do Google Calendar. */
   canManageIntegrations: boolean
   showRevenueCycle: boolean
 }
@@ -115,7 +115,7 @@ export function SettingsClient({
       >
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-sm font-medium text-gray-900">Configurações da Maria (Chatbot)</h2>
+            <h2 className="text-sm font-medium text-gray-900">Configurações da Clara (Chatbot)</h2>
             {workspace.hasMetaToken ? (
               <Badge className="border-none bg-green-50 text-green-700">
                 Conectado{workspace.whatsappNumber ? ` — ${workspace.whatsappNumber}` : ''}

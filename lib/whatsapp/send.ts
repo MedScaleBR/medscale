@@ -151,7 +151,7 @@ interface SendWaitlistSpecificParams {
   slot: string // "quarta-feira, 16/09 às 15:00" | "quarta-feira, 16/09 — 14:00, 15:30"
 }
 
-// Aviso de vaga para quem entrou na lista de espera pela Maria — nomeia o
+// Aviso de vaga para quem entrou na lista de espera pela Clara — nomeia o
 // dia/horário específico que a pessoa queria. Template aprovado pela Meta.
 export async function sendWaitlistSpecificTemplate({
   to,

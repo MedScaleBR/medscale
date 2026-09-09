@@ -108,7 +108,7 @@ create table public.workspaces (
   city            text,
   state           text,
   zip_code        text,
-  -- Campos exibidos pela Maria que variam por unidade. A configuração do bot
+  -- Campos exibidos pela Clara que variam por unidade. A configuração do bot
   -- (personalidade, regras, FAQ, convênios, conexão WhatsApp) é única por
   -- account (bot_config); só estes campos, mais o expediente
   -- (availability_rules), o horário de handoff (handoff_hours) e o catálogo de
@@ -280,7 +280,7 @@ create table public.finance_entries (
   id                uuid default uuid_generate_v4() primary key,
   account_id        uuid references public.accounts(id) on delete cascade not null,
   -- Unidade do lançamento. NULL = consolidado / account-wide (padrão para PF).
-  -- Para PJ a Maria financeira pergunta qual unidade antes de gravar.
+  -- Para PJ a Clara financeira pergunta qual unidade antes de gravar.
   workspace_id      uuid references public.workspaces(id) on delete set null,
   recorded_by_phone text not null,
   type              text not null check (type in ('pf','pj')),
@@ -336,7 +336,7 @@ create table public.patients (
 
 -- Catálogo de procedimentos (por workspace) — nome + preço estruturados que
 -- alimentam a agenda, o bot e o ciclo de receita. bot_config.procedures (text[])
--- continua existindo em paralelo para o prompt da Maria.
+-- continua existindo em paralelo para o prompt da Clara.
 create table public.procedure_catalog (
   id            uuid default uuid_generate_v4() primary key,
   workspace_id  uuid not null references public.workspaces(id) on delete cascade,
@@ -431,7 +431,7 @@ create table public.transcriptions (
 -- Conversas do bot WhatsApp
 create table public.conversations (
   id              uuid default uuid_generate_v4() primary key,
-  -- NULL até a Maria confirmar em qual unidade o paciente quer ser atendido —
+  -- NULL até a Clara confirmar em qual unidade o paciente quer ser atendido —
   -- a conversa é resolvida por account + telefone (número único). A unidade
   -- real de cada consulta fica em appointments.workspace_id.
   workspace_id    uuid references public.workspaces(id) on delete set null,
@@ -500,7 +500,7 @@ create table public.waitlist (
   preferred_days  text[],                             -- ['segunda','quarta']
   preferred_times text[],                             -- ['manha','tarde']
   notes           text,
-  desired_date    date,                               -- dia exato que o paciente pediu (entrada da Maria)
+  desired_date    date,                               -- dia exato que o paciente pediu (entrada da Clara)
   desired_time    time,                               -- horário exato, se o paciente nomeou um
   source          text not null default 'manual'
                   check (source in ('manual','bot')),
@@ -580,15 +580,15 @@ create table public.ad_campaigns (
 );
 
 -- Configuração do bot (uma por account — vale para todas as unidades).
--- Contém a personalidade/regras da Maria e a conexão WhatsApp (número único
+-- Contém a personalidade/regras da Clara e a conexão WhatsApp (número único
 -- por account). Campos que variam por unidade (endereço, horário,
 -- estacionamento, contato, preço, número de handoff) ficam em workspaces.
 create table public.bot_config (
   id                      uuid default uuid_generate_v4() primary key,
   account_id              uuid references public.accounts(id) on delete cascade not null unique,
-  -- Nome fixo em todo o produto ("Maria", ver lib/bot/constants.ts) — esta
+  -- Nome fixo em todo o produto ("Clara", ver lib/bot/constants.ts) — esta
   -- coluna não é mais lida pelo app, mantida só por compatibilidade de schema.
-  bot_name                text not null default 'Maria',
+  bot_name                text not null default 'Clara',
   specialty               text,
   procedures              text[] default '{}',
   insurance_plans         text[] default '{}',
@@ -662,7 +662,7 @@ create table public.webhook_logs (
 );
 
 -- Rate limiting do webhook do WhatsApp por (account, número) — o número da
--- Maria é único por account. Acesso exclusivo via service role (ver
+-- Clara é único por account. Acesso exclusivo via service role (ver
 -- lib/rate-limit/webhook.ts) — RLS habilitado sem policies na seção 13. Sem
 -- FK para patients: o número pode ainda não ser de um paciente cadastrado.
 create table public.rate_limit_log (

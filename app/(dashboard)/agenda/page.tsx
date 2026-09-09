@@ -44,7 +44,7 @@ export default async function AgendaPage() {
     }
   }
 
-  // Convênios atendidos (seletor "Atendimento" do modal). Config da Maria é
+  // Convênios atendidos (seletor "Atendimento" do modal). Config da Clara é
   // única por account (bot_config.insurance_plans).
   const { data: botConfig } = await supabase
     .from('bot_config')

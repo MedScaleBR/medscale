@@ -6,12 +6,12 @@ import type { Database } from '@/types/database'
 
 type BotConfigUpdate = Database['public']['Tables']['bot_config']['Update']
 
-// Campos da personalidade/regras da Maria — uma configuração por account.
+// Campos da personalidade/regras da Clara — uma configuração por account.
 // is_active, onboarding_step, number_source, webhook_verify_token e a conexão
 // WhatsApp são controlados pelo fluxo de onboarding. Campos que variam por
 // unidade (endereço, horário, estacionamento, contato, preço, número de
 // handoff) ficam em workspaces e são salvos via /api/workspaces/[id].
-// bot_name NÃO está aqui de propósito: o nome é fixo ("Maria").
+// bot_name NÃO está aqui de propósito: o nome é fixo ("Clara").
 const EDITABLE_FIELDS = [
   'specialty',
   'procedures',
@@ -47,7 +47,7 @@ export async function PATCH(req: NextRequest) {
   if ('error' in result) return result.error
   const { session } = result
 
-  // Personalidade/regras/preços da Maria valem para toda a conta e alimentam o
+  // Personalidade/regras/preços da Clara valem para toda a conta e alimentam o
   // atendimento a todos os pacientes — só owner/admin edita (mesmo critério de
   // /api/bot/onboarding/verify-meta).
   const roleCheck = requireRole(session, ['owner', 'admin'])
@@ -69,7 +69,7 @@ export async function PATCH(req: NextRequest) {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Invalida o cache para a Maria usar a config nova já na próxima mensagem
+  // Invalida o cache para a Clara usar a config nova já na próxima mensagem
   invalidateBotConfigCache(session.accountId)
 
   return NextResponse.json(data)

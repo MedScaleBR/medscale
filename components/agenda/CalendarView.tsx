@@ -281,7 +281,7 @@ export function CalendarView({
               color: '#fff',
               border: 'none',
               borderRadius: 6,
-              // realce sutil para consultas marcadas pela Maria
+              // realce sutil para consultas marcadas pela Clara
               boxShadow: a.source === 'bot' ? 'inset 3px 0 0 rgba(255,255,255,0.7)' : undefined,
             },
           }

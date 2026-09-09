@@ -9,7 +9,7 @@ export default async function BotConfigPage() {
   const session = await resolveActiveSession()
   if (!session) return null
 
-  // Configuração da Maria é exclusiva de owner/admin (a API espelha isso —
+  // Configuração da Clara é exclusiva de owner/admin (a API espelha isso —
   // ver /api/bot/config e /api/bot/onboarding/*).
   if (session.role !== 'owner' && session.role !== 'admin') redirect('/configuracoes')
 
@@ -55,10 +55,10 @@ export default async function BotConfigPage() {
           <ArrowLeft className="h-3.5 w-3.5" />
           Configurações
         </Link>
-        <h1 className="text-xl font-medium text-gray-900">Configurar a Maria (WhatsApp)</h1>
+        <h1 className="text-xl font-medium text-gray-900">Configurar a Clara (WhatsApp)</h1>
         <p className="text-sm text-gray-400">
-          Conexão com a Meta, personalidade e regras da Maria (uma configuração para toda a conta) e
-          os dados que variam por unidade. A Maria conversa e agenda 24/7 — só o atendimento humano
+          Conexão com a Meta, personalidade e regras da Clara (uma configuração para toda a conta) e
+          os dados que variam por unidade. A Clara conversa e agenda 24/7 — só o atendimento humano
           tem horário próprio.
         </p>
       </div>

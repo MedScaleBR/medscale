@@ -37,7 +37,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     'zip_code',
     'is_default',
     'is_active',
-    // Campos que a Maria usa por unidade (ver bot_config para o que é por account).
+    // Campos que a Clara usa por unidade (ver bot_config para o que é por account).
     'business_hours',
     'directions_parking',
     'contact_info',

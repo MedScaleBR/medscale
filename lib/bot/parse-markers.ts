@@ -1,4 +1,4 @@
-// Marcadores de controle que a Maria inclui na resposta e que o sistema lê
+// Marcadores de controle que a Clara inclui na resposta e que o sistema lê
 // (e remove antes de enviar ao paciente). Este arquivo é a ÚNICA fonte de
 // verdade do formato — o parsing vive aqui, isolado e puro, porque é a
 // interface entre o texto livre do Claude e as ações reais no banco:
@@ -25,7 +25,7 @@ export const PROCEDURE_ID_MARKER =
 export const UNIT_ID_MARKER =
   /UNIDADE_ID:\s*([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/
 
-// Lista de espera — a Maria emite quando o paciente, sem vaga no dia que
+// Lista de espera — a Clara emite quando o paciente, sem vaga no dia que
 // queria, opta por ser avisado. Aceita data pura ou data+hora com offset de
 // São Paulo (mesmo padrão do CONFIRMATION_MARKER). Grupo 1 = AAAA-MM-DD,
 // grupo 2 = HH:mm (opcional).

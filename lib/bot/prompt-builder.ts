@@ -33,7 +33,7 @@ interface BuildPromptInput {
   isFirstMessage: boolean
   upcomingAppointments: UpcomingAppointment[] // consultas futuras já agendadas deste paciente (todas as unidades)
   // Nome da unidade que o paciente já mencionou nesta conversa — DICA de
-  // prioridade, não trava. A Maria continua vendo todas as unidades.
+  // prioridade, não trava. A Clara continua vendo todas as unidades.
   currentUnitName?: string | null
   // Módulo `waitlist` ativo na account — libera o passo de lista de espera.
   waitlistEnabled?: boolean

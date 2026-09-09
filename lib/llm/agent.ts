@@ -86,16 +86,16 @@ async function getOrCreatePatient(supabase: SupabaseAdmin, accountId: string, pa
   return newPatient
 }
 
-// Um único registro de conversa por paciente por account (o número da Maria é
+// Um único registro de conversa por paciente por account (o número da Clara é
 // único por account) — nunca cria uma nova só porque a anterior foi resolvida;
 // reabre a mesma linha (a não ser que o bot esteja pausado por intervenção
 // manual).
 //
 // `defaultWorkspaceId` é a unidade à qual a conversa já pertence antes de a
-// Maria "perguntar": nas contas de uma unidade só ela é conhecida desde a
+// Clara "perguntar": nas contas de uma unidade só ela é conhecida desde a
 // primeira mensagem, então a conversa já nasce visível no /conversa daquela
 // clínica. Nas contas com várias unidades vem NULL — a unidade só é gravada
-// quando a Maria confirma qual (marcador UNIDADE_ID, passo 7.5).
+// quando a Clara confirma qual (marcador UNIDADE_ID, passo 7.5).
 async function getOrCreateConversation(
   supabase: SupabaseAdmin,
   accountId: string,
@@ -170,7 +170,7 @@ interface UnsupportedMessageParams {
   whatsappMessageId: string
 }
 
-// A Maria só entende texto. Isso avisa o paciente e pede pra escrever.
+// A Clara só entende texto. Isso avisa o paciente e pede pra escrever.
 export async function handleUnsupportedMessage(params: UnsupportedMessageParams) {
   const { accountId, patientPhone, messageType, whatsappMessageId } = params
   const supabase = createAdminClient()
@@ -241,20 +241,20 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   const supabase = createAdminClient()
   const { accountId, patientPhone, message, whatsappMessageId } = params
 
-  // 1. Config da Maria (por account) — sem config ou inativa, não responde.
+  // 1. Config da Clara (por account) — sem config ou inativa, não responde.
   const botConfig = await getBotConfig(accountId)
   if (!botConfig || !botConfig.isActive) {
-    console.warn(`Maria inativa ou sem configuração para account ${accountId}`)
+    console.warn(`Clara inativa ou sem configuração para account ${accountId}`)
     return
   }
 
-  // 1.1 Unidades da account + nome da account (a Maria pergunta a unidade).
+  // 1.1 Unidades da account + nome da account (a Clara pergunta a unidade).
   const [allUnits, { data: account }] = await Promise.all([
     getAccountUnits(accountId),
     supabase.from('accounts').select('name, modules').eq('id', accountId).single(),
   ])
   if (allUnits.length === 0) {
-    console.warn(`account ${accountId} sem unidades ativas — Maria não tem onde agendar`)
+    console.warn(`account ${accountId} sem unidades ativas — Clara não tem onde agendar`)
     return
   }
   const accountName = account?.name ?? 'nossa clínica'
@@ -269,7 +269,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
 
   // 3. Conversa deste paciente (uma por account+telefone). Numa conta de uma
   // unidade só, a conversa já nasce ligada a ela e aparece no /conversa daquela
-  // clínica desde já; com várias, workspace_id fica NULL até a Maria confirmar
+  // clínica desde já; com várias, workspace_id fica NULL até a Clara confirmar
   // a unidade (passo 7.5).
   const singleUnitId = units.length === 1 ? units[0].id : null
   const conversation = await getOrCreateConversation(
@@ -281,7 +281,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   )
 
   // 3.1 Unidade "corrente" da conversa — a que o paciente já mencionou (marcador
-  // UNIDADE_ID numa resposta anterior). É só uma DICA: a Maria continua vendo
+  // UNIDADE_ID numa resposta anterior). É só uma DICA: a Clara continua vendo
   // todas as unidades e todos os horários, e o paciente pode trocar de unidade
   // ou pedir as opções a qualquer momento. A garantia dura vem da revalidação
   // no agendamento (isSlotAvailable na unidade escolhida).
@@ -429,9 +429,9 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     patient.full_name = patientName
   }
 
-  // 7.5 Unidade corrente: a Maria emite UNIDADE_ID quando o paciente indica a
+  // 7.5 Unidade corrente: a Clara emite UNIDADE_ID quando o paciente indica a
   // unidade. Grava na conversa (é o que faz o chat aparecer no /conversa
-  // daquela clínica) e serve de DICA para as próximas mensagens — a Maria
+  // daquela clínica) e serve de DICA para as próximas mensagens — a Clara
   // continua vendo todas as unidades e o paciente pode trocar quando quiser.
   if (
     markers.unitId &&
@@ -462,7 +462,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
       (units.length === 1 ? units[0].id : null)
 
     if (!bookingUnitId) {
-      // A Maria confirmou um horário sem dizer a unidade (account com várias) —
+      // A Clara confirmou um horário sem dizer a unidade (account com várias) —
       // não dá pra agendar; pede a unidade em vez de confirmar algo falso.
       unitRequired = true
     } else {
@@ -593,7 +593,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     }
   }
 
-  // Lista de espera — a Maria emite LISTA_ESPERA quando o paciente, sem vaga
+  // Lista de espera — a Clara emite LISTA_ESPERA quando o paciente, sem vaga
   // no dia que queria, opta por ser avisado em vez de escolher outro horário.
   // Nunca junto de um agendamento confirmado; ignorado se o módulo waitlist
   // não estiver ativo na account.

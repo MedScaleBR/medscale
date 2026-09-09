@@ -1,6 +1,6 @@
 import { createAdminClient } from '@/lib/supabase/server'
 
-// Configuração da Maria — uma por account, vale para todas as unidades.
+// Configuração da Clara — uma por account, vale para todas as unidades.
 // Campos que variam por unidade (endereço, horário, estacionamento, contato,
 // preço, número de handoff) NÃO estão aqui: ficam em workspaces e são
 // carregados à parte (ver getAccountUnits).
@@ -26,7 +26,7 @@ export interface BotConfig {
   metaToken: string | null // criptografado (lib/crypto.ts)
 }
 
-// Contexto de uma unidade para a Maria — o que ela informa ao paciente e usa
+// Contexto de uma unidade para a Clara — o que ela informa ao paciente e usa
 // para agendar. Slots livres e catálogo de procedimentos são carregados à
 // parte no agente (dependem de data).
 export interface UnitContext {
@@ -81,7 +81,7 @@ export async function getBotConfig(accountId: string): Promise<BotConfig | null>
   return config
 }
 
-// Unidades ativas da account, com os campos que a Maria usa por unidade.
+// Unidades ativas da account, com os campos que a Clara usa por unidade.
 export async function getAccountUnits(accountId: string): Promise<UnitContext[]> {
   const supabase = createAdminClient()
   const { data } = await supabase

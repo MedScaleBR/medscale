@@ -15,7 +15,7 @@ export interface WaitlistRow {
   source: string
 }
 
-// Entradas da Maria (source 'bot' com dia desejado) casam só aquele dia; o
+// Entradas da Clara (source 'bot' com dia desejado) casam só aquele dia; o
 // resto — inclusive uma entrada 'bot' sem data, que não deveria existir —
 // segue o caminho manual (próximos dias, qualquer vaga).
 export function partitionWaitlist(rows: WaitlistRow[]): { bot: WaitlistRow[]; manual: WaitlistRow[] } {
