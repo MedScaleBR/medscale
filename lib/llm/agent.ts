@@ -11,6 +11,7 @@ import { cancelEvent, createEvent } from '@/lib/google/calendar'
 import { getBotConfig, getAccountUnits } from '@/lib/bot/config'
 import { buildDynamicSystemPrompt } from '@/lib/bot/prompt-builder'
 import { detectHandoffIntent, executeHandoff, isHandoffAvailableNow, logHandoffUnavailable } from '@/lib/bot/handoff'
+import { broadcastToWorkspace } from '@/lib/realtime/broadcast'
 import { parseMarkers } from '@/lib/bot/parse-markers'
 import { createBookingRevenueEntry } from '@/lib/revenue/cycle'
 import {
@@ -163,6 +164,21 @@ const UNSUPPORTED_TYPE_LABELS: Record<string, string> = {
   contacts: 'contato',
 }
 
+// Toast in-app para a equipe quando o bot está pausado (handoff em andamento
+// ou intervenção manual) e o paciente manda mais uma mensagem — o webhook só
+// registra, então sem isto ninguém no sistema fica sabendo até dar refresh.
+// Sem workspace_id resolvido não dá pra endereçar o canal; nesse caso, silêncio.
+async function notifyHumanNeeded(
+  conversation: { id: string; workspace_id: string | null },
+  patient: { full_name: string } | null
+): Promise<void> {
+  if (!conversation.workspace_id) return
+  await broadcastToWorkspace(conversation.workspace_id, 'handoff_message', {
+    conversationId: conversation.id,
+    patientName: patient?.full_name ?? 'Paciente',
+  })
+}
+
 interface UnsupportedMessageParams {
   accountId: string
   patientPhone: string
@@ -206,7 +222,10 @@ export async function handleUnsupportedMessage(params: UnsupportedMessageParams)
   })
 
   // Pausado por intervenção manual/handoff — mesma regra do texto: só registra.
-  if (conversation.bot_paused) return
+  if (conversation.bot_paused) {
+    await notifyHumanNeeded(conversation, patient)
+    return
+  }
 
   if (!botConfig.phoneNumberId || !botConfig.metaToken) return
 
@@ -310,6 +329,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   // Bot pausado (intervenção manual ou handoff em andamento) — só registra.
   if (conversation.bot_paused) {
     console.log(`[handoff] conversa ${conversation.id} está bot_paused — mensagem só registrada, bot não responde`)
+    await notifyHumanNeeded(conversation, patient)
     return
   }
 
