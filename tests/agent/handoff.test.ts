@@ -11,6 +11,8 @@ vi.mock('@/lib/whatsapp/send', async () => {
   const h = await import('../helpers/agent-harness')
   return { sendWhatsAppMessage: h.sendWhatsAppMessage }
 })
+const broadcastToWorkspace = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/realtime/broadcast', () => ({ broadcastToWorkspace }))
 
 import { detectHandoffIntent, isHandoffAvailableNow, executeHandoff, logHandoffUnavailable } from '@/lib/bot/handoff'
 import { sendWhatsAppMessage } from '../helpers/agent-harness'
@@ -178,6 +180,26 @@ describe('executeHandoff — transferência efetiva', () => {
       trigger_reason: 'user_request',
       handoff_to: '+5511999998888',
     })
+  })
+
+  it('deve emitir um broadcast in-app para a workspace com o nome do paciente', async () => {
+    setup({ conversations: { update: { data: null }, select: { data: { patients: { full_name: 'Ana Souza' } } } } })
+
+    await executeHandoff(params)
+
+    expect(broadcastToWorkspace).toHaveBeenCalledWith('w1', 'handoff_message', {
+      conversationId: 'c1',
+      patientName: 'Ana Souza',
+    })
+  })
+
+  it('deve emitir o broadcast para cada workspace em notifyWorkspaceIds', async () => {
+    setup()
+
+    await executeHandoff({ ...params, notifyWorkspaceIds: ['w1', 'w2'] })
+
+    const targets = broadcastToWorkspace.mock.calls.map((c) => c[0])
+    expect(targets).toEqual(['w1', 'w2'])
   })
 
   it('sem número configurado: transfere do mesmo jeito, só não manda "Contato:"', async () => {

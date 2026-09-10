@@ -29,6 +29,7 @@ vi.mock('@anthropic-ai/sdk', async () => {
   const h = await import('../helpers/agent-harness')
   return { default: class { messages = { create: h.claudeCreate } } }
 })
+vi.mock('@/lib/realtime/broadcast', () => ({ broadcastToWorkspace: vi.fn(), workspaceChannel: (id: string) => `handoff-toast:${id}` }))
 
 import { processIncomingMessage } from '@/lib/llm/agent'
 import { resetAgentHarness, mergeSupabaseConfig, state, PARAMS, UNIT_ID } from '../helpers/agent-harness'

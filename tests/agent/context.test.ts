@@ -29,6 +29,8 @@ vi.mock('@anthropic-ai/sdk', async () => {
   const h = await import('../helpers/agent-harness')
   return { default: class { messages = { create: h.claudeCreate } } }
 })
+const broadcastToWorkspace = vi.hoisted(() => vi.fn())
+vi.mock('@/lib/realtime/broadcast', () => ({ broadcastToWorkspace }))
 
 import { processIncomingMessage, handleUnsupportedMessage } from '@/lib/llm/agent'
 import {
@@ -74,6 +76,35 @@ describe('processIncomingMessage — montagem de contexto', () => {
     const inserted = supabase.callsTo('messages', 'insert')
     expect(inserted).toHaveLength(1)
     expect(inserted[0].payload).toMatchObject({ role: 'user', content: PARAMS.message })
+  })
+
+  it('deve emitir broadcast in-app quando o paciente escreve numa conversa pausada', async () => {
+    mergeSupabaseConfig({
+      conversations: {
+        select: { data: { id: 'c1', status: 'handoff', bot_paused: true, archived_at: null, workspace_id: 'w-42' } },
+      },
+    })
+
+    await processIncomingMessage(PARAMS)
+
+    expect(broadcastToWorkspace).toHaveBeenCalledWith('w-42', 'handoff_message', {
+      conversationId: 'c1',
+      patientName: 'Paciente',
+    })
+  })
+
+  it('não deve emitir broadcast quando a conversa pausada ainda não tem workspace resolvida', async () => {
+    // Conta multi-unidade: a conversa nasce sem workspace até a Clara confirmar.
+    state.units = [{ ...UNIT }, { ...UNIT, id: 'unit-2', name: 'Unidade 2' }]
+    mergeSupabaseConfig({
+      conversations: {
+        select: { data: { id: 'c1', status: 'open', bot_paused: true, archived_at: null, workspace_id: null } },
+      },
+    })
+
+    await processIncomingMessage(PARAMS)
+
+    expect(broadcastToWorkspace).not.toHaveBeenCalled()
   })
 
   it('não deve chamar o Claude quando o bot_config está inativo', async () => {

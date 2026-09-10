@@ -6,6 +6,7 @@ import { ConversationList, type ConversationListItem } from './ConversationList'
 import { ConversationDetail, type DetailMessage } from './ConversationDetail'
 import { useAnalyticsBase } from '@/lib/session/session-context'
 import { trackBotPausedManually, trackBotResumed } from '@/lib/analytics/posthog'
+import { useActiveConversation } from './active-conversation'
 import type { ConversationStatus } from '@/types/database'
 
 export interface ConversationWithMessages extends ConversationListItem {
@@ -18,6 +19,7 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
   // No mobile (< md) a lista e o detalhe não cabem juntos: mostramos um por vez.
   const [mobilePane, setMobilePane] = useState<'list' | 'detail'>('list')
   const analyticsBase = useAnalyticsBase()
+  const { setActiveConversationId, pendingConversationId, clearPendingConversation } = useActiveConversation()
 
   const handleSelect = (id: string) => {
     setSelectedId(id)
@@ -25,6 +27,24 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
   }
 
   const selected = useMemo(() => conversations.find((c) => c.id === selectedId) ?? null, [conversations, selectedId])
+
+  // Publica a conversa aberta para o HandoffToastListener (no layout) não
+  // mostrar toast da conversa que já está na tela. Limpa ao desmontar.
+  useEffect(() => {
+    setActiveConversationId(selectedId)
+    return () => setActiveConversationId(null)
+  }, [selectedId, setActiveConversationId])
+
+  // Clique num toast de handoff pede para abrir aquela conversa. Consome assim
+  // que ela existir na lista e limpa o pedido.
+  useEffect(() => {
+    if (pendingConversationId && conversations.some((c) => c.id === pendingConversationId)) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setSelectedId(pendingConversationId)
+      setMobilePane('detail')
+      clearPendingConversation()
+    }
+  }, [pendingConversationId, conversations, clearPendingConversation])
 
   // Deep-link vindo da notificação push de handoff (/bot?c=<id>). Sincroniza
   // uma vez, depois da hidratação — evita useSearchParams (exigiria Suspense

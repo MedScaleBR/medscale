@@ -2,6 +2,7 @@ import { TZDate } from '@date-fns/tz'
 import { createAdminClient } from '@/lib/supabase/server'
 import { sendWhatsAppMessage } from '@/lib/whatsapp/send'
 import { trackHandoffTriggered } from '@/lib/analytics/posthog-server'
+import { broadcastToWorkspace } from '@/lib/realtime/broadcast'
 import type { HandoffTriggerReason } from '@/types/database'
 
 const TZ = 'America/Sao_Paulo'
@@ -74,13 +75,15 @@ export async function executeHandoff(params: HandoffParams) {
     const { sendHandoffPush } = await import('@/lib/push/send')
     const notifyIds = params.notifyWorkspaceIds?.length ? params.notifyWorkspaceIds : [workspaceId]
     await Promise.all(
-      notifyIds.map((wid) =>
+      notifyIds.flatMap((wid) => [
         sendHandoffPush(wid, {
           title: '🔔 Atendimento solicitado',
           body: `${patientName} pediu atendimento humano`,
           url: `/bot?c=${conversationId}`,
-        })
-      )
+        }),
+        // Par in-app da push: quem está com o sistema aberto vê um toast.
+        broadcastToWorkspace(wid, 'handoff_message', { conversationId, patientName }),
+      ])
     )
   } catch (err) {
     console.error('[handoff] push notification failed', err)
