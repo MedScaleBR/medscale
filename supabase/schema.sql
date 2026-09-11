@@ -18,6 +18,7 @@ drop trigger if exists on_auth_user_created on auth.users;
 -- `cascade` aqui também remove automaticamente todas as policies, índices e
 -- triggers de cada tabela — não é preciso dropar isso separadamente.
 drop table if exists
+  public.feedback,
   public.finance_categories,
   public.finance_sessions,
   public.finance_entries,
@@ -192,6 +193,10 @@ create table public.profiles (
   crm               text,                             -- registro médico pessoal
   specialty         text,
   last_workspace_id uuid references public.workspaces(id) on delete set null,
+  -- Última interação com o balão de feedback (envio OU "agora não"). O
+  -- default now() faz o relógio de FEEDBACK_PROMPT_INTERVAL_DAYS começar no
+  -- cadastro, pra ninguém ser abordado no primeiro login.
+  feedback_prompt_dismissed_at timestamptz default now(),
   created_at        timestamptz not null default now(),
   updated_at        timestamptz not null default now()
 );
@@ -230,6 +235,21 @@ create table public.account_tasks (
   status        text not null default 'pending' check (status in ('pending','done')),
   created_by    uuid references auth.users(id) on delete set null,
   completed_at  timestamptz,
+  created_at    timestamptz not null default now(),
+  updated_at    timestamptz not null default now()
+);
+
+-- Sugestões que o cliente manda pelo balão do workspace. Sentido único: o
+-- membro só escreve (policy de insert), quem lê e tria é o admin interno.
+-- As FKs são "on delete set null" de propósito — se a account sair, a
+-- sugestão continua valendo como sinal de produto.
+create table public.feedback (
+  id            uuid default uuid_generate_v4() primary key,
+  account_id    uuid references public.accounts(id) on delete set null,
+  workspace_id  uuid references public.workspaces(id) on delete set null,
+  user_id       uuid references auth.users(id) on delete set null,
+  message       text not null,
+  status        text not null default 'new' check (status in ('new','reviewed')),
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
 );
@@ -754,6 +774,7 @@ create index idx_transcriptions_archived_at  on public.transcriptions(archived_a
 create index idx_account_notes_account       on public.account_notes(account_id, created_at desc);
 create index idx_account_tasks_account       on public.account_tasks(account_id, status);
 create index idx_account_tasks_assignee      on public.account_tasks(assigned_to, status, due_date);
+create index idx_feedback_status             on public.feedback(status, created_at desc);
 create index idx_finance_entries_account     on public.finance_entries(account_id, entry_date desc);
 create index idx_finance_entries_type        on public.finance_entries(account_id, type);
 create index idx_finance_entries_workspace   on public.finance_entries(account_id, workspace_id, entry_date desc);
@@ -824,6 +845,10 @@ create trigger trg_account_notes_updated_at
 
 create trigger trg_account_tasks_updated_at
   before update on public.account_tasks
+  for each row execute procedure public.handle_updated_at();
+
+create trigger trg_feedback_updated_at
+  before update on public.feedback
   for each row execute procedure public.handle_updated_at();
 
 -- ============================================================
@@ -1207,6 +1232,7 @@ alter table public.account_tasks          enable row level security;
 alter table public.finance_entries        enable row level security;
 alter table public.finance_sessions       enable row level security;
 alter table public.finance_categories     enable row level security;
+alter table public.feedback               enable row level security;
 
 -- Accounts: membro lê o(s) próprio(s); admin do account edita
 create policy "accounts: members read" on public.accounts
@@ -1354,6 +1380,22 @@ create policy "account_notes: medscale admin full" on public.account_notes
 
 create policy "account_tasks: medscale admin full" on public.account_tasks
   for all using (public.is_medscale_admin());
+
+-- feedback: sentido único. O membro só insere em nome próprio, numa account
+-- da qual é membro; ler e triar é exclusivo dos admins MedScale — nem o autor
+-- lê o próprio texto de volta.
+create policy "feedback: member insert own" on public.feedback
+  for insert with check (
+    user_id = auth.uid()
+    and account_id = any(public.my_account_ids())
+  );
+
+create policy "feedback: medscale admin read"   on public.feedback
+  for select using (public.is_medscale_admin());
+create policy "feedback: medscale admin update" on public.feedback
+  for update using (public.is_medscale_admin());
+create policy "feedback: medscale admin delete" on public.feedback
+  for delete using (public.is_medscale_admin());
 
 -- finance_entries: dado financeiro pessoal — exclusivo do owner do account,
 -- não estendido a admin/member como o restante dos dados operacionais.

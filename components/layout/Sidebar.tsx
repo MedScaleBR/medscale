@@ -4,6 +4,7 @@ import Image from 'next/image'
 import { WorkspaceSwitcher } from './WorkspaceSwitcher'
 import { AccountSwitcher } from './AccountSwitcher'
 import { NavLinks } from './NavLinks'
+import { SidebarFeedbackButton } from '@/components/feedback/FeedbackTrigger'
 import type { ActiveSession } from '@/lib/session/context'
 import type { AccountSummary } from '@/lib/session/context'
 
@@ -28,6 +29,10 @@ export function Sidebar({ session, accounts }: SidebarProps) {
       {allWorkspaces.length > 1 && <WorkspaceSwitcher workspaces={allWorkspaces} activeId={workspaceId} />}
 
       <NavLinks userModules={userModules} role={role} className="flex-1 space-y-1 px-3 py-4" />
+
+      <div className="px-3 pb-2">
+        <SidebarFeedbackButton />
+      </div>
 
       <div className="border-t border-[var(--w10)] px-6 py-4">
         <p className="truncate text-xs font-medium text-white/80">{accountName}</p>

@@ -45,6 +45,7 @@ export type TranscriptionStatus =
 export type TranscriptionSource = 'system' | 'whatsapp'
 export type AccountNoteType = 'note' | 'call' | 'email' | 'meeting'
 export type AccountTaskStatus = 'pending' | 'done'
+export type FeedbackStatus = 'new' | 'reviewed'
 export type FinanceEntryType = 'pf' | 'pj'
 
 // Módulos controláveis por account/membership. dashboard, patients e
@@ -223,6 +224,34 @@ export interface Database {
           },
         ]
       }
+      feedback: {
+        Row: {
+          id: string
+          account_id: string | null
+          workspace_id: string | null
+          user_id: string | null
+          message: string
+          status: FeedbackStatus
+          created_at: string
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['feedback']['Row']> & { message: string }
+        Update: Partial<Database['public']['Tables']['feedback']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'feedback_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'feedback_workspace_id_fkey'
+            columns: ['workspace_id']
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       profiles: {
         Row: {
           id: string
@@ -233,6 +262,7 @@ export interface Database {
           crm: string | null
           specialty: string | null
           last_workspace_id: string | null
+          feedback_prompt_dismissed_at: string | null
           created_at: string
           updated_at: string
         }

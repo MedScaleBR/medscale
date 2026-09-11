@@ -12,6 +12,7 @@ import {
 import { LogOut, Settings } from 'lucide-react'
 import Link from 'next/link'
 import { moduleTitleFromPath } from '@/lib/nav/tabs'
+import { FeedbackMenuItem } from '@/components/feedback/FeedbackTrigger'
 import { useLogout } from '@/lib/auth/use-logout'
 import type { ActiveSession, AccountSummary } from '@/lib/session/context'
 
@@ -56,6 +57,7 @@ export function Topbar({ userName, userEmail, avatarUrl }: TopbarProps) {
             <Settings className="h-4 w-4" />
             Configurações
           </DropdownMenuItem>
+          <FeedbackMenuItem />
           <DropdownMenuSeparator />
           <DropdownMenuItem onClick={handleLogout} className="flex items-center gap-2 text-red-600">
             <LogOut className="h-4 w-4" />
