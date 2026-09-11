@@ -965,6 +965,10 @@ export interface Database {
           name: string
           sort_order: number
           is_archived: boolean
+          // Gasto excessivo só vira sugestão em categoria não essencial.
+          // Default true no banco: categoria antiga nunca revisada não dispara
+          // alerta retroativo. Ver lib/finance/suggestions.ts.
+          is_essential: boolean
           created_at: string
         }
         Insert: Partial<Database['public']['Tables']['finance_categories']['Row']> & {
@@ -984,6 +988,194 @@ export interface Database {
             foreignKeyName: 'finance_categories_parent_id_fkey'
             columns: ['parent_id']
             referencedRelation: 'finance_categories'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      // --- Patrimônio (schema.sql seção 7C) ---
+      finance_reserves: {
+        Row: {
+          id: string
+          account_id: string
+          kind: FinanceEntryType
+          name: string
+          archived_at: string | null
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['finance_reserves']['Row']> & {
+          account_id: string
+          name: string
+        }
+        Update: Partial<Database['public']['Tables']['finance_reserves']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'finance_reserves_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      finance_reserve_movements: {
+        Row: {
+          id: string
+          reserve_id: string
+          account_id: string
+          // Sempre positivo; o sinal está em `type`.
+          amount: number
+          type: 'deposit' | 'withdrawal'
+          source: 'web' | 'whatsapp'
+          note: string | null
+          occurred_at: string
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['finance_reserve_movements']['Row']> & {
+          reserve_id: string
+          amount: number
+          type: 'deposit' | 'withdrawal'
+        }
+        Update: Partial<Database['public']['Tables']['finance_reserve_movements']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'finance_reserve_movements_reserve_id_fkey'
+            columns: ['reserve_id']
+            referencedRelation: 'finance_reserves'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      finance_investments: {
+        Row: {
+          id: string
+          account_id: string
+          kind: FinanceEntryType
+          name: string
+          type: 'renda_fixa' | 'renda_variavel' | 'cripto' | 'outro'
+          invested_amount: number
+          // Informado pelo owner. O estimado é derivado na leitura, nunca gravado.
+          current_value: number | null
+          rate_type: 'fixed_annual' | 'pct_cdi' | 'ipca_plus' | null
+          rate_value: number | null
+          start_date: string
+          maturity_date: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['finance_investments']['Row']> & {
+          account_id: string
+          name: string
+          type: 'renda_fixa' | 'renda_variavel' | 'cripto' | 'outro'
+          invested_amount: number
+        }
+        Update: Partial<Database['public']['Tables']['finance_investments']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'finance_investments_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      finance_projections: {
+        Row: {
+          id: string
+          account_id: string
+          category_id: string
+          subcategory_id: string | null
+          // Sempre o dia 1 do mês (normalizado por trigger).
+          period_month: string
+          projected_amount: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['finance_projections']['Row']> & {
+          account_id: string
+          category_id: string
+          period_month: string
+          projected_amount: number
+        }
+        Update: Partial<Database['public']['Tables']['finance_projections']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'finance_projections_category_id_fkey'
+            columns: ['category_id']
+            referencedRelation: 'finance_categories'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      finance_goals: {
+        Row: {
+          id: string
+          account_id: string
+          kind: FinanceEntryType
+          name: string
+          mode: 'manual' | 'auto'
+          target_amount: number | null
+          target_date: string | null
+          months_of_expenses: number
+          linked_reserve_id: string | null
+          status: 'active' | 'completed' | 'archived'
+          created_at: string
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['finance_goals']['Row']> & {
+          account_id: string
+          name: string
+          mode: 'manual' | 'auto'
+        }
+        Update: Partial<Database['public']['Tables']['finance_goals']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'finance_goals_linked_reserve_id_fkey'
+            columns: ['linked_reserve_id']
+            referencedRelation: 'finance_reserves'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      finance_suggestion_dismissals: {
+        Row: {
+          id: string
+          account_id: string
+          category_id: string
+          subcategory_id: string | null
+          period_month: string
+          dismissed_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['finance_suggestion_dismissals']['Row']> & {
+          account_id: string
+          category_id: string
+          period_month: string
+        }
+        Update: Partial<Database['public']['Tables']['finance_suggestion_dismissals']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'finance_suggestion_dismissals_category_id_fkey'
+            columns: ['category_id']
+            referencedRelation: 'finance_categories'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      finance_suggestion_settings: {
+        Row: {
+          account_id: string
+          projection_tolerance_pct: number
+          history_tolerance_pct: number
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['finance_suggestion_settings']['Row']> & {
+          account_id: string
+        }
+        Update: Partial<Database['public']['Tables']['finance_suggestion_settings']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'finance_suggestion_settings_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
             referencedColumns: ['id']
           },
         ]
