@@ -3,6 +3,7 @@ import { requireCronAuth } from '@/lib/cron-auth'
 import { createAdminClient } from '@/lib/supabase/server'
 import { generateSOAP } from '@/lib/transcriptions/generate-soap'
 import { trackSoapGenerated, trackTranscriptionError } from '@/lib/analytics/posthog-server'
+import { notifyTranscriptionFailed } from '@/lib/transcriptions/notify-error'
 
 export const maxDuration = 60
 
@@ -17,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   const { data: transcription } = await supabase
     .from('transcriptions')
-    .select('transcript_text, retry_count, workspace_id, account_id, recorded_by')
+    .select('transcript_text, retry_count, workspace_id, account_id, recorded_by, patient_id')
     .eq('id', transcription_id)
     .single()
 
@@ -71,6 +72,13 @@ export async function POST(req: NextRequest) {
         account_id: transcription.account_id,
         error_message: String(err),
         retry_count: retryCount,
+      })
+
+      await notifyTranscriptionFailed({
+        id: transcription_id,
+        workspace_id: transcription.workspace_id,
+        patient_id: transcription.patient_id,
+        recorded_by: transcription.recorded_by,
       })
     }
 

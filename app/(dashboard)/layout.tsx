@@ -9,6 +9,7 @@ import { MobileTabBar } from '@/components/layout/MobileTabBar'
 import { Toaster } from '@/components/ui/sonner'
 import { ActiveConversationProvider } from '@/components/bot/active-conversation'
 import { HandoffToastListener } from '@/components/bot/HandoffToastListener'
+import { TranscriptionErrorToastListener } from '@/components/transcriptions/TranscriptionErrorToastListener'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
@@ -64,6 +65,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
           <MobileTabBar session={session} accounts={accounts} />
         </div>
         <HandoffToastListener handoffEnabled={membership?.handoff_push_enabled ?? false} />
+        <TranscriptionErrorToastListener />
         <Toaster />
       </ActiveConversationProvider>
     </SessionProvider>

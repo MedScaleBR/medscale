@@ -102,3 +102,95 @@ export async function sendHandoffPush(workspaceId: string, payload: PushPayload)
     console.error('[push] sendHandoffPush falhou', err)
   }
 }
+
+// Dispara um Web Push só para o médico que gravou a consulta, quando a
+// transcrição dele esgota as tentativas automáticas. Reaproveita o mesmo
+// opt-in de sendHandoffPush (`handoff_push_enabled` — único toggle de push do
+// produto hoje) em vez de criar uma preferência dedicada. Fire-and-forget,
+// mesmo contrato de sendHandoffPush: nunca lança, loga como `[push] ...`.
+export async function sendTranscriptionErrorPush(
+  workspaceId: string,
+  userId: string,
+  payload: PushPayload
+): Promise<void> {
+  if (!pushConfigured) {
+    console.warn('[push] VAPID keys ausentes (NEXT_PUBLIC_VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY) — push ignorado')
+    return
+  }
+
+  try {
+    const supabase = createAdminClient()
+
+    const { data: workspace, error: wsError } = await supabase
+      .from('workspaces')
+      .select('account_id')
+      .eq('id', workspaceId)
+      .single()
+
+    if (wsError || !workspace) {
+      console.error('[push] workspace não encontrada', workspaceId, wsError?.message)
+      return
+    }
+
+    const { data: membership, error: mError } = await supabase
+      .from('memberships')
+      .select('handoff_push_enabled')
+      .eq('account_id', workspace.account_id)
+      .eq('user_id', userId)
+      .eq('status', 'active')
+      .eq('handoff_push_enabled', true)
+      .maybeSingle()
+
+    if (mError) {
+      console.error('[push] erro ao buscar membership', mError.message)
+      return
+    }
+
+    if (!membership) {
+      console.log('[push] médico sem handoff_push_enabled — transcription error push ignorado')
+      return
+    }
+
+    const { data: subscriptions, error: sError } = await supabase
+      .from('push_subscriptions')
+      .select('id, endpoint, p256dh, auth')
+      .eq('workspace_id', workspaceId)
+      .eq('user_id', userId)
+
+    if (sError) {
+      console.error('[push] erro ao buscar push_subscriptions', sError.message)
+      return
+    }
+
+    if (!subscriptions?.length) {
+      console.log('[push] médico sem subscription registrada nessa workspace')
+      return
+    }
+
+    const payloadStr = JSON.stringify(payload)
+
+    const results = await Promise.allSettled(
+      subscriptions.map(async (sub) => {
+        try {
+          await webpush.sendNotification(
+            { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
+            payloadStr
+          )
+        } catch (err) {
+          const statusCode = (err as { statusCode?: number })?.statusCode
+          if (statusCode === 404 || statusCode === 410) {
+            await supabase.from('push_subscriptions').delete().eq('id', sub.id)
+          } else {
+            console.error('[push] falha ao enviar, status', statusCode)
+          }
+          throw err
+        }
+      })
+    )
+
+    const ok = results.filter((r) => r.status === 'fulfilled').length
+    console.log(`[push] transcription error: ${ok}/${subscriptions.length} notificações enviadas`)
+  } catch (err) {
+    console.error('[push] sendTranscriptionErrorPush falhou', err)
+  }
+}
