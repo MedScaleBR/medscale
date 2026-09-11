@@ -1,5 +1,6 @@
 import { TZDate } from '@date-fns/tz'
 import { investmentCurrentValue } from './investments'
+import { normalizeCategoryName } from './default-categories'
 import type {
   FinanceGoal,
   FinanceInvestment,
@@ -79,6 +80,23 @@ function savedFor(goal: FinanceGoal, ctx: GoalContext, today: Date): number {
     .filter((i) => i.kind === goal.kind)
     .reduce((sum, i) => sum + investmentCurrentValue(i, today), 0)
   return fromReserves + fromInvestments
+}
+
+// Casa o nome que o owner falou ("minha meta de viagem") contra as metas da
+// conta, com a mesma normalização das categorias. Devolve a lista de
+// candidatas: vazia = não achou (o agente diz quais existem em vez de chutar),
+// mais de uma = o agente mostra as duas.
+export function resolveGoalByName(goals: FinanceGoal[], spoken: string): FinanceGoal[] {
+  const target = normalizeCategoryName(spoken)
+  if (!target) return []
+
+  const exact = goals.filter((g) => normalizeCategoryName(g.name) === target)
+  if (exact.length > 0) return exact
+
+  return goals.filter((g) => {
+    const name = normalizeCategoryName(g.name)
+    return name.includes(target) || target.includes(name)
+  })
 }
 
 // Situação da meta, SEMPRE derivada na leitura. Meta automática não guarda

@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { FinanceEntry, FinanceEntryType } from './types'
+import type { FinanceEntry, FinanceEntryType, ReserveMovementType } from './types'
+import type { InvestmentProjection } from './investments'
 import type { RevenuePaymentMethod } from '@/types/database'
 import { PAYMENT_METHOD_LABELS } from '@/lib/revenue/cycle'
 import type { AppointmentPaymentMatch } from './appointment-payment'
@@ -375,6 +376,135 @@ export function buildPaymentMethodNeededMessage(): string {
 
 export function buildUnsupportedTypeMessage(): string {
   return `Por favor, envie apenas mensagens de texto. Digite /ajuda para ver os comandos.`
+}
+
+// ── Patrimônio: reservas, investimentos, projeções e metas ────────────────
+// Tudo determinístico, sem chamada ao modelo: são confirmações de número, onde
+// uma redação criativa só arriscaria mudar o valor que o médico acabou de
+// mandar — e manteria o custo por mensagem subindo à toa.
+
+export function buildReserveMovementMessage(
+  reserveName: string,
+  type: ReserveMovementType,
+  amount: number,
+  balance: number
+): string {
+  const verbo = type === 'deposit' ? 'Guardei' : 'Tirei'
+  const preposicao = type === 'deposit' ? 'na' : 'da'
+  return `✅ ${verbo} ${formatBRL(amount)} ${preposicao} reserva ${reserveName}.\nSaldo agora: ${formatBRL(balance)}.`
+}
+
+// Nome falado que não casa com nenhuma caixinha. Nunca cria por conta própria:
+// uma reserva inventada por erro de digitação some do radar do médico e leva o
+// dinheiro junto.
+export function buildReserveNotFoundMessage(spoken: string, reserves: { name: string }[]): string {
+  const existentes = reserves.length
+    ? `\nSuas reservas hoje: ${reserves.map((r) => r.name).join(', ')}.`
+    : ''
+  return `Não achei nenhuma reserva chamada "${spoken}".${existentes}\nQuer que eu crie essa reserva agora? Responda "sim" pra criar.`
+}
+
+export function buildReserveAmbiguousMessage(reserves: { name: string }[]): string {
+  const list = reserves.map((r, i) => `${i + 1}. ${r.name}`).join('\n')
+  return `Tenho mais de uma reserva com esse nome:\n${list}\n\nMe diz qual delas.`
+}
+
+export function buildReserveNameNeededMessage(reserves: { name: string }[]): string {
+  if (reserves.length === 0) {
+    return `Você ainda não tem nenhuma reserva. Me diz o nome da que quer criar — por exemplo "guardei 500 na reserva de emergência".`
+  }
+  return `Em qual reserva? Você tem: ${reserves.map((r) => r.name).join(', ')}.`
+}
+
+export function buildAskReserveAmountMessage(reserveName: string | null, type: ReserveMovementType): string {
+  const onde = reserveName ? ` na reserva ${reserveName}` : ''
+  return type === 'deposit' ? `Quanto você guardou${onde}?` : `Quanto você tirou${onde}?`
+}
+
+export function buildReserveCreateCancelledMessage(): string {
+  return `Ok, não criei nada. Se quiser, me diz o nome de uma reserva que você já tem.`
+}
+
+export function buildInvestmentRegisteredMessage(
+  name: string,
+  amount: number,
+  projection: InvestmentProjection | null
+): string {
+  const base = `✅ Registrei: ${name} · ${formatBRL(amount)} investidos.`
+  // Sem taxa completa não há projeção — e estimar rendimento sem base seria
+  // inventar número, então a mensagem simplesmente não fala de futuro.
+  if (!projection) {
+    return `${base}\nSe me disser o rendimento (ex: "110% do CDI"), eu passo a projetar quanto isso rende.`
+  }
+  const futuro = projection.projectedAtMaturity
+    ? `\nNo vencimento: ${formatBRL(projection.projectedAtMaturity)}.`
+    : ''
+  return `${base}\nValor estimado hoje: ${formatBRL(projection.estimatedCurrentValue)} (${projection.annualRatePct.toFixed(1)}% ao ano).${futuro}`
+}
+
+export function buildAskInvestmentAmountMessage(name: string | null): string {
+  return name ? `Quanto você investiu em ${name}?` : `Quanto você investiu?`
+}
+
+export function buildProjectionSavedMessage(
+  categoryPath: string,
+  amount: number,
+  month: string | null,
+  realized: number
+): string {
+  const quando = monthLabel(month)
+  const jaGasto =
+    realized > 0
+      ? `\nJá gastou ${formatBRL(realized)} — ${realized > amount ? `${formatBRL(realized - amount)} acima do planejado` : `faltam ${formatBRL(amount - realized)}`}.`
+      : ''
+  return `✅ Anotei: você planeja gastar ${formatBRL(amount)} em ${categoryPath} em ${quando}.${jaGasto}`
+}
+
+export function buildAskProjectionAmountMessage(categoryPath: string | null): string {
+  const onde = categoryPath ? ` em ${categoryPath}` : ''
+  return `Quanto você planeja gastar${onde} no mês?`
+}
+
+/** Uma meta com o status já calculado, do jeito que a resposta precisa. */
+export interface GoalLine {
+  name: string
+  currentSaved: number
+  requiredTotal: number
+  remaining: number
+  monthlyRequired: number | null
+  progressPct: number
+}
+
+export function buildGoalStatusMessage(goals: GoalLine[]): string {
+  if (goals.length === 1) {
+    const g = goals[0]
+    if (g.remaining <= 0) {
+      return `🎉 Sua meta "${g.name}" está batida: ${formatBRL(g.currentSaved)} de ${formatBRL(g.requiredTotal)}.`
+    }
+    const porMes = g.monthlyRequired
+      ? `\nPra chegar no prazo: ${formatBRL(g.monthlyRequired)} por mês.`
+      : ''
+    return (
+      `Meta "${g.name}": faltam ${formatBRL(g.remaining)}.\n` +
+      `Você tem ${formatBRL(g.currentSaved)} de ${formatBRL(g.requiredTotal)} (${Math.round(g.progressPct)}%).${porMes}`
+    )
+  }
+  const lines = goals
+    .map((g) =>
+      g.remaining <= 0
+        ? `• ${g.name}: batida ✅`
+        : `• ${g.name}: faltam ${formatBRL(g.remaining)} (${Math.round(g.progressPct)}%)`
+    )
+    .join('\n')
+  return `Suas metas:\n${lines}`
+}
+
+export function buildGoalNotFoundMessage(spoken: string | null, goals: { name: string }[]): string {
+  if (goals.length === 0) {
+    return `Você ainda não tem metas cadastradas. Dá pra criar no painel financeiro, em Metas.`
+  }
+  const quais = `Você tem: ${goals.map((g) => g.name).join(', ')}.`
+  return spoken ? `Não achei nenhuma meta chamada "${spoken}". ${quais}` : quais
 }
 
 // "gastos pessoais (PF) em Assinaturas em agosto de 2026" (ou "receitas..."

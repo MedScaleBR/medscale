@@ -96,6 +96,29 @@ export type FinanceIntent =
   // Ciclo de receita: o médico avisa que um paciente pagou uma consulta.
   // Sempre passa por confirmação explícita antes de persistir.
   | { kind: 'confirm_payment'; patient: string | null; time: string | null; method: RevenuePaymentMethod | null }
+  // Patrimônio pelo WhatsApp. Os nomes (reserva, meta, categoria) vêm como o
+  // owner falou; quem resolve contra o banco é o agente, que pergunta em vez
+  // de criar sozinho quando não acha.
+  | { kind: 'reserve_deposit'; reserve: string | null; amount: number | null; type: FinanceEntryType | null }
+  | { kind: 'reserve_withdrawal'; reserve: string | null; amount: number | null; type: FinanceEntryType | null }
+  | {
+      kind: 'investment'
+      name: string | null
+      investmentType: InvestmentKind | null
+      amount: number | null
+      rateType: InvestmentRateType | null
+      rateValue: number | null
+      type: FinanceEntryType | null
+    }
+  | {
+      kind: 'projection'
+      category: string | null
+      subcategory: string | null
+      amount: number | null
+      month: string | null
+      type: FinanceEntryType | null
+    }
+  | { kind: 'goal_query'; goal: string | null }
   | { kind: 'undo' }
   | { kind: 'help' }
   // Saudação/agradecimento — responde com simpatia em vez de "não entendi".
