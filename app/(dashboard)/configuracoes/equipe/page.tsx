@@ -4,7 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { TeamClient } from '@/components/configuracoes/TeamClient'
-import { OVERRIDABLE_MODULES } from '@/components/layout/NavLinks'
+import { OVERRIDABLE_MODULES } from '@/lib/nav/tabs'
 import type { ModuleSlug } from '@/types/database'
 
 export default async function EquipePage() {

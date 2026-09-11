@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession } from '@/lib/session/api'
-import { OVERRIDABLE_MODULES } from '@/components/layout/NavLinks'
+import { OVERRIDABLE_MODULES } from '@/lib/nav/tabs'
 import type { MembershipRole, ModuleSlug } from '@/types/database'
 
 const ASSIGNABLE_ROLES: MembershipRole[] = ['admin', 'member']

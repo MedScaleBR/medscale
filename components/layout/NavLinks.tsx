@@ -72,21 +72,9 @@ export const NAV_GROUPS: NavGroup[] = [
 // Ordem fixa de exibição, derivada de NAV_GROUPS (achatada).
 export const NAV_ORDER: ModuleSlug[] = NAV_GROUPS.flatMap((g) => g.modules)
 
-// OWNER_ONLY_MODULES ('finance') e ADMIN_MIN_MODULES ('revenue_cycle') e a
-// regra isModuleVisible vivem em lib/nav/tabs.ts — importados no topo.
-
-// Módulos que um owner pode restringir por pessoa via module_overrides —
-// exclui os sempre-ativos (ALWAYS_ON_MODULES) e os exclusivos de owner
-// (OWNER_ONLY_MODULES, que dependem do papel, não de override).
-export const OVERRIDABLE_MODULES: ModuleSlug[] = [
-  'agenda',
-  'conversations',
-  'locations',
-  'schedule',
-  'waitlist',
-  'campaigns',
-  'transcriptions',
-]
+// OWNER_ONLY_MODULES ('finance'), ADMIN_MIN_MODULES ('revenue_cycle'),
+// OVERRIDABLE_MODULES e a regra isModuleVisible vivem em lib/nav/tabs.ts —
+// importados no topo.
 
 interface NavLinksProps {
   userModules: ModuleSlug[]
