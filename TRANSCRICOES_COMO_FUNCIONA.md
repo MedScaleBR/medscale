@@ -91,6 +91,14 @@ separado** neste projeto — tudo roda em rotas de API do Next.js chamadas por H
    não tem esse valor), o botão "Tentar novamente" da UI chama
    `POST /api/transcriptions/[id]/retry` — uma rota autenticada por sessão normal, que reseta o
    status para `pending` e rechama `trigger_transcription_process` pela mesma função RPC.
+9. **Notificação de erro** — no mesmo instante em que uma transcrição esgota as 3 tentativas e
+   vira `error`, `notifyTranscriptionFailed()` (`lib/transcriptions/notify-error.ts`) avisa só o
+   médico que gravou (`recorded_by`, não o workspace todo): Web Push
+   (`sendTranscriptionErrorPush()`, reaproveitando o opt-in `memberships.handoff_push_enabled` —
+   não existe um toggle dedicado) e, em paralelo, um toast in-app via Realtime Broadcast
+   (`TranscriptionErrorToastListener`, mesmo canal `handoff-toast:<workspaceId>` do handoff do
+   bot, evento `transcription_error`) para quem estiver com o sistema aberto. Ambos passivos,
+   fire-and-forget — nunca impedem a rota de responder.
 
 ## Modelo de dados
 
@@ -143,6 +151,8 @@ lib/transcriptions/
   types.ts            tipos SOAPRecord e Transcription
   whisper.ts           transcribeAudio() — chama a API do Whisper
   generate-soap.ts      generateSOAP() — chama o Claude, parseia o JSON
+  notify-error.ts        notifyTranscriptionFailed() — avisa o médico quando o status vira error
+  transcription-toast.ts  shouldShowTranscriptionErrorToast() — decisão pura do toast
 
 app/api/transcriptions/
   upload-url/route.ts            emite a signed upload URL (sessão de usuário)
@@ -161,6 +171,7 @@ components/transcriptions/
   AlertsPanel.tsx                 avisos de campos vazios
   TranscriptionDetailClient.tsx   estado da página de detalhe + Realtime + assinar/retry
   TranscriptionsListClient.tsx    lista com filtros de status/período
+  TranscriptionErrorToastListener.tsx  toast in-app quando a transcrição do próprio médico falha
 
 app/(dashboard)/transcricoes/
   page.tsx           lista (RSC)

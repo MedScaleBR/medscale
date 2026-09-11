@@ -3,6 +3,7 @@ import { requireCronAuth } from '@/lib/cron-auth'
 import { createAdminClient } from '@/lib/supabase/server'
 import { transcribeAudio } from '@/lib/transcriptions/whisper'
 import { trackTranscriptionCompleted, trackTranscriptionError } from '@/lib/analytics/posthog-server'
+import { notifyTranscriptionFailed } from '@/lib/transcriptions/notify-error'
 
 export const maxDuration = 60
 
@@ -78,6 +79,13 @@ export async function POST(req: NextRequest) {
         account_id: transcription.account_id,
         error_message: String(err),
         retry_count: retryCount,
+      })
+
+      await notifyTranscriptionFailed({
+        id: transcription.id,
+        workspace_id: transcription.workspace_id,
+        patient_id: transcription.patient_id,
+        recorded_by: transcription.recorded_by,
       })
     }
 

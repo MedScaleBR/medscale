@@ -6,6 +6,7 @@ const g = vi.hoisted(() => ({
   supabase: null as unknown as SupabaseMock,
   transcribeAudio: null as unknown as MockFn,
   openaiCreate: null as unknown as MockFn,
+  notifyTranscriptionFailed: null as unknown as MockFn,
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -14,6 +15,9 @@ vi.mock('@/lib/supabase/server', () => ({
 }))
 vi.mock('@/lib/transcriptions/whisper', () => ({
   transcribeAudio: (...args: unknown[]) => g.transcribeAudio(...args),
+}))
+vi.mock('@/lib/transcriptions/notify-error', () => ({
+  notifyTranscriptionFailed: (...args: unknown[]) => g.notifyTranscriptionFailed(...args),
 }))
 vi.mock('openai', () => ({
   default: class {
@@ -55,6 +59,7 @@ function request(body: unknown, secret: string | null = CRON_SECRET) {
 describe('POST /api/transcriptions/process — etapa Whisper', () => {
   beforeEach(() => {
     g.transcribeAudio = vi.fn(async () => TRANSCRIPT)
+    g.notifyTranscriptionFailed = vi.fn(async () => {})
   })
 
   it('deve retornar 401 quando o header de autorização está ausente', async () => {
@@ -131,13 +136,16 @@ describe('POST /api/transcriptions/process — etapa Whisper', () => {
       'trigger_transcription_process',
       expect.objectContaining({ p_transcription_id: 't1' })
     )
+    expect(g.notifyTranscriptionFailed).not.toHaveBeenCalled()
   })
 
-  it('deve marcar error e não re-disparar quando o Whisper falha na terceira tentativa', async () => {
+  it('deve marcar error, não re-disparar e notificar o médico quando o Whisper falha na terceira tentativa', async () => {
     g.transcribeAudio = vi.fn(async () => {
       throw new Error('Whisper indisponível')
     })
-    const supabase = setup({ transcriptions: { select: { data: pendingRow({ retry_count: 2 }) }, update: { data: null } } })
+    const supabase = setup({
+      transcriptions: { select: { data: pendingRow({ retry_count: 2, workspace_id: 'w1', patient_id: 'p1', recorded_by: 'u1' }) }, update: { data: null } },
+    })
     const res = await processRoute(request({ transcription_id: 't1' }))
 
     expect(res.status).toBe(500)
@@ -145,6 +153,12 @@ describe('POST /api/transcriptions/process — etapa Whisper', () => {
     expect(final?.payload).toMatchObject({ status: 'error' })
     expect(String((final?.payload as { error_message: string }).error_message)).toContain('Whisper indisponível')
     expect(supabase.rpc).not.toHaveBeenCalled()
+    expect(g.notifyTranscriptionFailed).toHaveBeenCalledWith({
+      id: 't1',
+      workspace_id: 'w1',
+      patient_id: 'p1',
+      recorded_by: 'u1',
+    })
   })
 
   it('deve cair no retry quando a signed URL do Storage não pode ser gerada', async () => {
