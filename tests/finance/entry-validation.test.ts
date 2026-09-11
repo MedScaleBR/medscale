@@ -3,11 +3,11 @@ import { validateEntryInput } from '@/lib/finance/entry-validation'
 import type { FinanceCategoryTree } from '@/lib/finance/categories'
 
 const TREE: FinanceCategoryTree = {
-  pf: [{ id: 'fil', name: 'Filhos', direction: 'out', sortOrder: 0, isArchived: false, children: [
-        { id: 'esc', name: 'Escola', direction: 'out', sortOrder: 0, isArchived: false, children: [] }] }],
+  pf: [{ id: 'fil', name: 'Filhos', direction: 'out', sortOrder: 0, isArchived: false, isEssential: true, children: [
+        { id: 'esc', name: 'Escola', direction: 'out', sortOrder: 0, isArchived: false, isEssential: true, children: [] }] }],
   pj: [
-    { id: 'alu', name: 'Aluguel', direction: 'out', sortOrder: 0, isArchived: false, children: [] },
-    { id: 'rec', name: 'Consultas particulares', direction: 'in', sortOrder: 0, isArchived: false, children: [] },
+    { id: 'alu', name: 'Aluguel', direction: 'out', sortOrder: 0, isArchived: false, isEssential: true, children: [] },
+    { id: 'rec', name: 'Consultas particulares', direction: 'in', sortOrder: 0, isArchived: false, isEssential: true, children: [] },
   ],
 }
 const base = { type: 'pf' as const, entryDate: '2026-09-01', amount: 100, categoryId: null, subcategoryId: null, direction: 'out' as const }

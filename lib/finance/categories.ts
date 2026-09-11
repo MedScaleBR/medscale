@@ -11,6 +11,9 @@ export interface CategoryNode {
   direction: 'in' | 'out'
   sortOrder: number
   isArchived: boolean
+  // Gasto excessivo só vira sugestão em categoria NÃO essencial. Default true
+  // no banco — ver lib/finance/suggestions.ts.
+  isEssential: boolean
   children: CategoryNode[]
 }
 export interface FinanceCategoryTree {
@@ -31,7 +34,9 @@ export async function getFinanceCategoryTree(
 ): Promise<FinanceCategoryTree> {
   let q = client
     .from('finance_categories')
-    .select('id, account_id, kind, direction, parent_id, name, sort_order, is_archived, created_at')
+    .select(
+      'id, account_id, kind, direction, parent_id, name, sort_order, is_archived, is_essential, created_at'
+    )
     .eq('account_id', accountId)
     .order('sort_order', { ascending: true })
   if (!opts.includeArchived) q = q.eq('is_archived', false)
@@ -43,7 +48,12 @@ export async function getFinanceCategoryTree(
 function buildTree(rows: Row[]): FinanceCategoryTree {
   const node = (r: Row): CategoryNode => ({
     id: r.id, name: r.name, direction: r.direction, sortOrder: r.sort_order,
-    isArchived: r.is_archived, children: [],
+    isArchived: r.is_archived,
+    // Conta antiga, antes da migração de patrimônio, pode não ter a coluna
+    // preenchida no cache do PostgREST — essencial é o default seguro (não
+    // alerta).
+    isEssential: r.is_essential ?? true,
+    children: [],
   })
   const make = (kind: FinanceEntryType): CategoryNode[] => {
     const ofKind = rows.filter((r) => r.kind === kind)

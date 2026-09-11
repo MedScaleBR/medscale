@@ -1,6 +1,32 @@
-import type { FinanceEntryType, RevenuePaymentMethod } from '@/types/database'
+import type { Database, FinanceEntryType, RevenuePaymentMethod } from '@/types/database'
 
 export type { FinanceEntryType }
+
+// --- Patrimônio (schema.sql seção 7C) -------------------------------------
+// Aliases das linhas do banco. Os módulos de lógica pura (investments.ts,
+// goals.ts, suggestions.ts) trabalham em cima destes tipos e nunca tocam o
+// Supabase, o que os deixa testáveis sem mock de banco.
+type T = Database['public']['Tables']
+
+export type FinanceReserve = T['finance_reserves']['Row']
+export type FinanceReserveMovement = T['finance_reserve_movements']['Row']
+export type FinanceInvestment = T['finance_investments']['Row']
+export type FinanceProjection = T['finance_projections']['Row']
+export type FinanceGoal = T['finance_goals']['Row']
+export type FinanceSuggestionDismissal = T['finance_suggestion_dismissals']['Row']
+export type FinanceSuggestionSettings = T['finance_suggestion_settings']['Row']
+
+export type InvestmentKind = FinanceInvestment['type']
+export type InvestmentRateType = NonNullable<FinanceInvestment['rate_type']>
+export type ReserveMovementType = FinanceReserveMovement['type']
+export type GoalMode = FinanceGoal['mode']
+
+// Reserva com o saldo já somado dos movimentos. O saldo nunca é coluna: é
+// derivado, para o histórico não poder divergir do total.
+export type ReserveWithBalance = FinanceReserve & {
+  balance: number
+  movements: FinanceReserveMovement[]
+}
 
 export type FinanceEntry = {
   id: string
