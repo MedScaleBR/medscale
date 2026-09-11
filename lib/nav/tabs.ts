@@ -26,6 +26,21 @@ export const OWNER_ONLY_MODULES: ModuleSlug[] = ['finance']
 // Exigem no mínimo papel admin.
 export const ADMIN_MIN_MODULES: ModuleSlug[] = ['revenue_cycle']
 
+// Módulos que um owner pode restringir por pessoa via module_overrides —
+// exclui os sempre-ativos (ALWAYS_ON_MODULES) e os exclusivos de owner
+// (OWNER_ONLY_MODULES, que dependem do papel, não de override). Vive aqui
+// (não em NavLinks.tsx, que é 'use client') para ser importável em Server
+// Components e route handlers sem virar client reference.
+export const OVERRIDABLE_MODULES: ModuleSlug[] = [
+  'agenda',
+  'conversations',
+  'locations',
+  'schedule',
+  'waitlist',
+  'campaigns',
+  'transcriptions',
+]
+
 // Mesma regra do antigo NavLinks.isVisible.
 export function isModuleVisible(
   slug: ModuleSlug,
