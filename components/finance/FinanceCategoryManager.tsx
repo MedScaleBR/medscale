@@ -12,6 +12,8 @@ import {
   FolderPlus,
   Pencil,
   Plus,
+  ShieldCheck,
+  Sparkles,
   Trash2,
 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -38,6 +40,7 @@ export type NodeWithCount = {
   direction: 'in' | 'out'
   sortOrder: number
   isArchived: boolean
+  isEssential: boolean
   entryCount: number
   children: NodeWithCount[]
 }
@@ -169,6 +172,20 @@ export function FinanceCategoryManager({
     const ok = await send(
       `/api/finance/categories/${node.id}`,
       jsonInit('PATCH', { is_archived: value }),
+    )
+    if (ok) {
+      await load()
+      onChanged?.()
+    }
+  }
+
+  // Marca a categoria como essencial (nunca alerta em Sugestoes) ou superflua.
+  // Nao cascateia: uma subcategoria superflua pode viver dentro de uma
+  // categoria essencial (Casa > Decoracao) e vice-versa.
+  const setEssential = async (node: NodeWithCount, value: boolean): Promise<void> => {
+    const ok = await send(
+      `/api/finance/categories/${node.id}`,
+      jsonInit('PATCH', { is_essential: value }),
     )
     if (ok) {
       await load()
@@ -335,6 +352,31 @@ export function FinanceCategoryManager({
                       <FolderPlus className="h-3.5 w-3.5" />
                       Subcategoria
                     </Button>
+                    {direction === 'out' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        disabled={busy}
+                        title={
+                          root.isEssential
+                            ? 'Gasto essencial: nunca vira alerta em Sugestões'
+                            : 'Gasto supérfluo: entra nas Sugestões quando foge da curva'
+                        }
+                        onClick={() => void setEssential(root, !root.isEssential)}
+                      >
+                        {root.isEssential ? (
+                          <>
+                            <ShieldCheck className="h-3.5 w-3.5" />
+                            Essencial
+                          </>
+                        ) : (
+                          <>
+                            <Sparkles className="h-3.5 w-3.5" />
+                            Supérflua
+                          </>
+                        )}
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="sm"
@@ -421,6 +463,31 @@ export function FinanceCategoryManager({
                             <Pencil className="h-3.5 w-3.5" />
                             Renomear
                           </Button>
+                          {direction === 'out' && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              disabled={busy}
+                              title={
+                                child.isEssential
+                                  ? 'Gasto essencial: nunca vira alerta em Sugestões'
+                                  : 'Gasto supérfluo: entra nas Sugestões quando foge da curva'
+                              }
+                              onClick={() => void setEssential(child, !child.isEssential)}
+                            >
+                              {child.isEssential ? (
+                                <>
+                                  <ShieldCheck className="h-3.5 w-3.5" />
+                                  Essencial
+                                </>
+                              ) : (
+                                <>
+                                  <Sparkles className="h-3.5 w-3.5" />
+                                  Supérflua
+                                </>
+                              )}
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="sm"

@@ -32,7 +32,7 @@ function entry(partial: Partial<FinanceEntry> & { amount: number; entry_date: st
 }
 
 function root(id: string, name: string): CategoryNode {
-  return { id, name, direction: 'out', sortOrder: 0, isArchived: false, children: [] }
+  return { id, name, direction: 'out', sortOrder: 0, isArchived: false, isEssential: true, children: [] }
 }
 
 describe('shiftMonth', () => {

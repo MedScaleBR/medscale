@@ -39,6 +39,7 @@ function withEntryCounts(nodes: CategoryNode[], counts: Map<string, number>): No
     direction: n.direction,
     sortOrder: n.sortOrder,
     isArchived: n.isArchived,
+    isEssential: n.isEssential,
     entryCount: counts.get(n.id) ?? 0,
     children: withEntryCounts(n.children, counts),
   }))
