@@ -1268,7 +1268,7 @@ A superfície genuinamente análoga à Maria: recebe a transcrição de uma cons
 - Consumes: `detectInjectionAttempt` de `@/lib/bot/security` (Task 1). O reuso entre as duas superfícies é o que justifica o módulo compartilhado.
 - Produces: nada.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Adicionar ao final de `tests/transcriptions/generate-soap.test.ts`:
 
@@ -1334,12 +1334,12 @@ describe('generateSOAP — hardening contra injection na transcrição', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/transcriptions/generate-soap.test.ts`
 Expected: FAIL nos casos novos (sem `<transcricao_consulta>`, sem alerta). Os 3 describes antigos continuam verdes.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Em `lib/transcriptions/generate-soap.ts`, acrescentar o import:
 
@@ -1396,12 +1396,12 @@ E o bloco final do `try`/`catch` do `validateSOAPRecord`:
 
 > O prefill `{ role: 'assistant', content: '{' }` **não muda** — é o que segura o JSON sem fence.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/transcriptions/generate-soap.test.ts`
 Expected: PASS — os 3 describes antigos e o novo.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/transcriptions/generate-soap.ts tests/transcriptions/generate-soap.test.ts
