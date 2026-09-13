@@ -64,6 +64,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.parent_id !== undefined) patch.parent_id = nextParent
   if (body.sort_order !== undefined) patch.sort_order = Number(body.sort_order)
   if (body.is_archived !== undefined) patch.is_archived = Boolean(body.is_archived)
+  // is_essential não cascateia: uma subcategoria supérflua pode viver dentro de
+  // uma categoria essencial (Casa > Decoração) e vice-versa.
+  if (body.is_essential !== undefined) patch.is_essential = Boolean(body.is_essential)
 
   if (Object.keys(patch).length === 0) return NextResponse.json({ ok: true })
 

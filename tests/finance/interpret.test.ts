@@ -12,12 +12,12 @@ import { interpretMessage } from '@/lib/finance/interpret'
 
 const TREE: FinanceCategoryTree = {
   pf: [
-    { id: 'pf-ali', name: 'Alimentação', direction: 'out', sortOrder: 0, isArchived: false, children: [] },
-    { id: 'pf-sal', name: 'Salário / Pró-labore', direction: 'in', sortOrder: 0, isArchived: false, children: [] },
+    { id: 'pf-ali', name: 'Alimentação', direction: 'out', sortOrder: 0, isArchived: false, isEssential: true, children: [] },
+    { id: 'pf-sal', name: 'Salário / Pró-labore', direction: 'in', sortOrder: 0, isArchived: false, isEssential: true, children: [] },
   ],
   pj: [
-    { id: 'pj-alu', name: 'Aluguel', direction: 'out', sortOrder: 0, isArchived: false, children: [] },
-    { id: 'pj-rec', name: 'Consultas particulares', direction: 'in', sortOrder: 0, isArchived: false, children: [] },
+    { id: 'pj-alu', name: 'Aluguel', direction: 'out', sortOrder: 0, isArchived: false, isEssential: true, children: [] },
+    { id: 'pj-rec', name: 'Consultas particulares', direction: 'in', sortOrder: 0, isArchived: false, isEssential: true, children: [] },
   ],
 }
 

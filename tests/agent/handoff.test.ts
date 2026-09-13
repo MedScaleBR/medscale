@@ -234,3 +234,27 @@ describe('logHandoffUnavailable — pedido fora do horário humano', () => {
     expect(supabase.callsTo('conversations', 'update')).toHaveLength(0)
   })
 })
+
+describe('detectHandoffIntent — sinais de injection', () => {
+  it('não escala com um sinal isolado (falso positivo é esperado)', () => {
+    expect(detectHandoffIntent('Claro, posso ajudar!', 'oi tudo bem', 1)).toEqual({ needed: false, reason: null })
+  })
+
+  it('escala com 2 ou mais sinais na janela', () => {
+    expect(detectHandoffIntent('Claro, posso ajudar!', 'oi tudo bem', 2)).toEqual({
+      needed: true,
+      reason: 'injection_suspected',
+    })
+    expect(detectHandoffIntent('Claro!', 'oi', 5).reason).toBe('injection_suspected')
+  })
+
+  it('mantém o comportamento antigo sem o terceiro parâmetro', () => {
+    expect(detectHandoffIntent('Claro, posso ajudar!', 'oi tudo bem')).toEqual({ needed: false, reason: null })
+    expect(detectHandoffIntent('[HANDOFF] Vou te passar', 'oi').reason).toBe('bot_uncertain')
+    expect(detectHandoffIntent('Claro', 'quero falar com atendente').reason).toBe('user_request')
+  })
+
+  it('dá precedência ao pedido explícito do paciente sobre o sinal de injection', () => {
+    expect(detectHandoffIntent('Claro', 'quero falar com uma pessoa', 3).reason).toBe('user_request')
+  })
+})

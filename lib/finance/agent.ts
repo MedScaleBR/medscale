@@ -40,6 +40,13 @@ import {
   summarizeAccountToday,
   type AppointmentPaymentMatch,
 } from './appointment-payment'
+import {
+  handlePatrimonioIntent,
+  resumeReserveMovement,
+  type PatrimonioCtx,
+  type PatrimonioResult,
+  type PendingReserveMovement,
+} from './agent-patrimonio'
 import type { EntryDraft, FinanceEntry, FinanceEntryType } from './types'
 import type { RevenuePaymentMethod } from '@/types/database'
 
@@ -247,6 +254,18 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
   // (ciclo de receita — fluxo de duas mensagens, ver PendingPaymentConfirm)
   if (await handlePendingPaymentConfirm(supabase, accountId, senderPhone, messageText)) return
 
+  // 2.7 Há um movimento de reserva esperando o valor ou o "sim" para criar a
+  // caixinha? (ver PendingReserveMovement)
+  if (
+    await handlePendingReserveMovement(
+      supabase,
+      { accountId, categoryTree, today },
+      senderPhone,
+      messageText
+    )
+  )
+    return
+
   // 3. Entender a mensagem. Atalho com barra primeiro (instantâneo e sem
   // custo); só o que não for comando vai para o Claude interpretar.
   const shortcut = parseCommand(messageText)
@@ -300,6 +319,18 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
     return
   }
 
+  // Patrimônio (reservas, investimentos, projeções e metas). Fluxos próprios,
+  // fora do laço de lançamentos: guardar dinheiro numa reserva não é gasto.
+  const patrimonio = await handlePatrimonioIntent(
+    supabase,
+    { accountId, categoryTree, today },
+    intent
+  )
+  if (patrimonio) {
+    await applyPatrimonioResult(supabase, accountId, senderPhone, patrimonio)
+    return
+  }
+
   if (intent.kind === 'query') {
     // Recorte por unidade: "quanto a Moema gastou" filtra; sem menção = consolidado.
     const units = await listAccountUnits(supabase, accountId)
@@ -333,6 +364,13 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
     const unitNames = Object.fromEntries(units.map((u) => [u.id, u.name]))
     const response = await buildQueryMessage(entries, filters, unitNames)
     await sendFinanceReply(senderPhone, response)
+    return
+  }
+
+  // Os intents de patrimônio já saíram no bloco acima; se algum chegar aqui é
+  // porque o fluxo devolveu null (nada a fazer), e lançamento não é.
+  if (intent.kind !== 'entry') {
+    await sendFinanceReply(senderPhone, buildUnknownMessage())
     return
   }
 
@@ -736,11 +774,72 @@ async function setPendingPaymentConfirm(
   await setPendingFinanceSession(supabase, accountId, senderPhone, pending)
 }
 
+// Envia a resposta de um fluxo de patrimônio e ajusta a sessão: `pending`
+// undefined não mexe, null limpa, objeto grava a pergunta pendente.
+async function applyPatrimonioResult(
+  supabase: ReturnType<typeof createAdminClient>,
+  accountId: string,
+  senderPhone: string,
+  result: PatrimonioResult
+): Promise<void> {
+  if (result.pending === null) {
+    await clearPendingFinanceSession(supabase, senderPhone)
+  } else if (result.pending) {
+    await setPendingFinanceSession(supabase, accountId, senderPhone, result.pending)
+  }
+  await sendFinanceReply(senderPhone, result.reply)
+}
+
+// Trata a mensagem quando um movimento de reserva está parado numa pergunta
+// ("quanto você guardou?" ou "quer que eu crie essa reserva?"). Retorna true
+// se a mensagem foi consumida aqui.
+async function handlePendingReserveMovement(
+  supabase: ReturnType<typeof createAdminClient>,
+  ctx: PatrimonioCtx,
+  senderPhone: string,
+  messageText: string
+): Promise<boolean> {
+  const { data: fsession } = await supabase
+    .from('finance_sessions')
+    .select('pending_entry, last_message_at')
+    .eq('phone', senderPhone)
+    .maybeSingle()
+
+  const raw = fsession?.pending_entry as { kind?: string } | null | undefined
+  if (!raw || raw.kind !== 'reserve_movement') return false
+  const pending = raw as unknown as PendingReserveMovement
+
+  if (
+    fsession?.last_message_at &&
+    Date.now() - new Date(fsession.last_message_at).getTime() > PENDING_TTL_MS
+  ) {
+    await clearPendingFinanceSession(supabase, senderPhone)
+    return false
+  }
+
+  const text = messageText.trim()
+  const result = await resumeReserveMovement(supabase, ctx, pending, {
+    amount: parseAmount(text),
+    affirmative: AFFIRMATIVE.test(text),
+    negative: NEGATIVE.test(text),
+  })
+
+  // null = a resposta não serve para esta pergunta (provavelmente é outro
+  // assunto): abandona a pendência e deixa o fluxo normal interpretar.
+  if (!result) {
+    await clearPendingFinanceSession(supabase, senderPhone)
+    return false
+  }
+
+  await applyPatrimonioResult(supabase, ctx.accountId, senderPhone, result)
+  return true
+}
+
 async function setPendingFinanceSession(
   supabase: ReturnType<typeof createAdminClient>,
   accountId: string,
   senderPhone: string,
-  pending: PendingPaymentConfirm | PendingEntryBatch
+  pending: PendingPaymentConfirm | PendingEntryBatch | PendingReserveMovement
 ): Promise<void> {
   await supabase.from('finance_sessions').upsert(
     {

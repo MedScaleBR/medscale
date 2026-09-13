@@ -1,5 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk'
-import type { FinanceIntent, FinanceEntryType, EntryDraft } from './types'
+import type {
+  FinanceIntent,
+  FinanceEntryType,
+  EntryDraft,
+  InvestmentKind,
+  InvestmentRateType,
+} from './types'
 import type { FinanceCategoryTree } from './categories'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -55,6 +61,11 @@ const INTENT_TOOL = {
           'lancamento',
           'consulta',
           'confirmar_pagamento',
+          'guardar_reserva',
+          'retirar_reserva',
+          'investimento',
+          'projecao',
+          'meta',
           'desfazer',
           'ajuda',
           'conversa',
@@ -64,6 +75,11 @@ const INTENT_TOOL = {
           'lancamento = registrar um gasto. consulta = perguntar quanto gastou. ' +
           'confirmar_pagamento = o médico avisa que um paciente pagou uma consulta ' +
           '(ex: "João pagou a consulta das 14h", "recebi da Ana, foi no pix"). ' +
+          'guardar_reserva = separar dinheiro numa reserva ("guardei 500 na reserva de emergência"). ' +
+          'retirar_reserva = tirar dinheiro de uma reserva ("tirei 300 da reserva de viagem"). ' +
+          'investimento = registrar um investimento ("investi 1000 no CDB do banco X, 110% do CDI"). ' +
+          'projecao = definir quanto planeja gastar numa categoria no mês ("projeção de mercado esse mês é 800"). ' +
+          'meta = perguntar sobre uma meta de poupança ("quanto falta pra minha meta de viagem?"). ' +
           'desfazer = apagar o último lançamento. ajuda = quer saber como usar. ' +
           'conversa = saudação/agradecimento sem pedido. desconhecido = não dá para saber.',
       },
@@ -115,7 +131,55 @@ const INTENT_TOOL = {
       },
       mes: {
         type: ['string', 'null'],
-        description: 'Em consulta: o mês no formato YYYY-MM. null quando é o mês atual.',
+        description:
+          'Em consulta e projecao: o mês no formato YYYY-MM. null quando é o mês atual.',
+      },
+      // --- Patrimônio ---------------------------------------------------
+      reserva: {
+        type: ['string', 'null'],
+        description:
+          'Em guardar_reserva/retirar_reserva: o nome da reserva como o médico falou ' +
+          '("emergência", "viagem do Japão"). null quando ele não nomeia nenhuma.',
+      },
+      meta: {
+        type: ['string', 'null'],
+        description:
+          'Em meta: o nome da meta como o médico falou ("viagem", "carro"). null quando ele fala das metas em geral.',
+      },
+      valor: {
+        type: ['number', 'null'],
+        description:
+          'Em guardar_reserva, retirar_reserva, investimento e projecao: o valor em reais, positivo. ' +
+          'null quando a mensagem não traz um número claro. Em lancamento o valor vai em cada item de lancamentos.',
+      },
+      investimento_nome: {
+        type: ['string', 'null'],
+        description: 'Em investimento: como o médico chamou o investimento ("CDB do banco X", "Tesouro Selic"). null se não der.',
+      },
+      investimento_tipo: {
+        anyOf: [
+          { type: 'string', enum: ['renda_fixa', 'renda_variavel', 'cripto', 'outro'] },
+          { type: 'null' },
+        ],
+        description:
+          'Em investimento: renda_fixa (CDB, Tesouro, LCI/LCA), renda_variavel (ações, FII), ' +
+          'cripto, outro. null quando a mensagem não deixa claro.',
+      },
+      taxa_tipo: {
+        anyOf: [
+          { type: 'string', enum: ['fixed_annual', 'pct_cdi', 'ipca_plus'] },
+          { type: 'null' },
+        ],
+        description:
+          'Em investimento: pct_cdi para "110% do CDI"; ipca_plus para "IPCA + 5%"; ' +
+          'fixed_annual para "12% ao ano". null quando o médico não cita rendimento — ' +
+          'NUNCA chute uma taxa que ele não disse.',
+      },
+      taxa_valor: {
+        type: ['number', 'null'],
+        description:
+          'Em investimento: o número da taxa (110 para "110% do CDI", 5 para "IPCA + 5%", ' +
+          '12 para "12% ao ano"). null quando não houver taxa citada.',
       },
       unidade: {
         type: ['string', 'null'],
@@ -135,6 +199,8 @@ const INTENT_TOOL = {
       'intencao', 'lancamentos',
       'tipo', 'categoria', 'subcategoria', 'unidade', 'direcao',
       'mes', 'paciente', 'horario', 'forma_pagamento',
+      'reserva', 'meta', 'valor',
+      'investimento_nome', 'investimento_tipo', 'taxa_tipo', 'taxa_valor',
     ],
     additionalProperties: false,
   },
@@ -153,7 +219,10 @@ type LancamentoItem = {
 }
 
 type IntentToolInput = {
-  intencao: 'lancamento' | 'consulta' | 'confirmar_pagamento' | 'desfazer' | 'ajuda' | 'conversa' | 'desconhecido'
+  intencao:
+    | 'lancamento' | 'consulta' | 'confirmar_pagamento'
+    | 'guardar_reserva' | 'retirar_reserva' | 'investimento' | 'projecao' | 'meta'
+    | 'desfazer' | 'ajuda' | 'conversa' | 'desconhecido'
   lancamentos: LancamentoItem[]
   tipo: FinanceEntryType | null
   categoria: string | null
@@ -164,6 +233,13 @@ type IntentToolInput = {
   paciente: string | null
   horario: string | null
   forma_pagamento: PaymentMethodValue | null
+  reserva: string | null
+  meta: string | null
+  valor: number | null
+  investimento_nome: string | null
+  investimento_tipo: InvestmentKind | null
+  taxa_tipo: InvestmentRateType | null
+  taxa_valor: number | null
 }
 
 function buildSystem(today: string, tree: FinanceCategoryTree): string {
@@ -202,7 +278,14 @@ Regras:
 - Classifique cada lançamento em "tipo":
   - pf: gasto/receita pessoal do médico. Ex.: iFood, mercado, streaming, farmácia, escola dos filhos, viagem, salário/pró-labore, aluguel que ELE recebe, investimentos.
   - pj: da clínica. Ex.: "escritório", sala/consultório, equipamento médico, material de consultório, secretária/funcionário, sistema/CRM da clínica, imposto da clínica, receita de consulta/procedimento.
-  - null: genuinamente ambíguo — dá para ser pessoal ou da clínica e a mensagem não decide (ex.: aluguel, energia, água, internet, telefone, carro, contador, seguro, sem nada no texto apontando para um lado). NÃO chute; devolva null e o agente pergunta.`
+  - null: genuinamente ambíguo — dá para ser pessoal ou da clínica e a mensagem não decide (ex.: aluguel, energia, água, internet, telefone, carro, contador, seguro, sem nada no texto apontando para um lado). NÃO chute; devolva null e o agente pergunta.
+
+Patrimônio (reservas, investimentos, projeções e metas):
+- Guardar/tirar dinheiro de uma reserva NÃO é lançamento: o dinheiro só mudou de lugar, não foi gasto nem recebido. "guardei 500 na reserva de emergência" é guardar_reserva com reserva "emergência" e valor 500; "tirei 300 da reserva de viagem" é retirar_reserva. Devolva lancamentos: [] nos dois casos.
+- Em guardar_reserva/retirar_reserva, ponha em "reserva" o nome como o médico falou, sem tentar adivinhar o nome exato da caixinha dele — o agente casa com o que existe e pergunta quando não acha.
+- "investimento" é registrar onde o dinheiro foi aplicado ("investi 1000 no CDB do banco X, 110% do CDI"): investimento_nome "CDB do banco X", investimento_tipo renda_fixa, valor 1000, taxa_tipo pct_cdi, taxa_valor 110. Sem rendimento citado, taxa_tipo e taxa_valor ficam null — não invente taxa.
+- "projecao" é planejar quanto vai gastar, não registrar gasto ("projeção de mercado esse mês é 800", "quero gastar no máximo 500 em lazer em outubro"): categoria = a categoria EXATA da lista de DESPESA, valor = o teto, mes = YYYY-MM (null para o mês corrente).
+- "meta" é perguntar sobre uma meta de poupança ("quanto falta pra minha meta de viagem?", "como estão minhas metas?"). Ponha o nome citado em "meta", ou null quando ele pergunta das metas em geral.`
 }
 
 // Interpreta linguagem natural. Só é chamada quando parseCommand não
@@ -230,6 +313,12 @@ export async function interpretMessage(
   }
 
   return toIntent(toolUse.input as IntentToolInput, messageText)
+}
+
+// Valor só vale se for número positivo finito. Zero e negativo viram null —
+// o agente pergunta em vez de gravar um movimento sem sentido.
+function positive(value: number | null): number | null {
+  return typeof value === 'number' && isFinite(value) && value > 0 ? value : null
 }
 
 function toIntent(input: IntentToolInput, raw: string): FinanceIntent {
@@ -281,6 +370,41 @@ function toIntent(input: IntentToolInput, raw: string): FinanceIntent {
         time: /^\d{1,2}:\d{2}$/.test(input.horario ?? '') ? input.horario : null,
         method: input.forma_pagamento ?? null,
       }
+
+    case 'guardar_reserva':
+    case 'retirar_reserva':
+      return {
+        kind: input.intencao === 'guardar_reserva' ? 'reserve_deposit' : 'reserve_withdrawal',
+        reserve: input.reserva?.trim() || null,
+        amount: positive(input.valor),
+        type: input.tipo,
+      }
+
+    case 'investimento':
+      return {
+        kind: 'investment',
+        name: input.investimento_nome?.trim() || null,
+        investmentType: input.investimento_tipo ?? null,
+        amount: positive(input.valor),
+        // Taxa é tudo-ou-nada: metade da informação viraria uma projeção sem
+        // base, e o produto não estima rendimento que o médico não disse.
+        rateType: input.taxa_tipo && positive(input.taxa_valor) != null ? input.taxa_tipo : null,
+        rateValue: input.taxa_tipo ? positive(input.taxa_valor) : null,
+        type: input.tipo,
+      }
+
+    case 'projecao':
+      return {
+        kind: 'projection',
+        category: input.categoria?.trim() || null,
+        subcategory: input.subcategoria?.trim() || null,
+        amount: positive(input.valor),
+        month: /^\d{4}-\d{2}$/.test(input.mes ?? '') ? input.mes : null,
+        type: input.tipo,
+      }
+
+    case 'meta':
+      return { kind: 'goal_query', goal: input.meta?.trim() || null }
 
     case 'desfazer':
       return { kind: 'undo' }

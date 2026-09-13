@@ -4,16 +4,16 @@ import type { FinanceCategoryTree } from '@/lib/finance/categories'
 
 const TREE: FinanceCategoryTree = {
   pf: [
-    { id: 'fil', name: 'Filhos', direction: 'out', sortOrder: 0, isArchived: false, children: [
-      { id: 'esc', name: 'Escola', direction: 'out', sortOrder: 0, isArchived: false, children: [] },
+    { id: 'fil', name: 'Filhos', direction: 'out', sortOrder: 0, isArchived: false, isEssential: true, children: [
+      { id: 'esc', name: 'Escola', direction: 'out', sortOrder: 0, isArchived: false, isEssential: true, children: [] },
     ] },
-    { id: 'arq', name: 'Arquivada', direction: 'out', sortOrder: 1, isArchived: true, children: [] },
-    { id: 'out', name: 'Outros', direction: 'out', sortOrder: 2, isArchived: false, children: [] },
-    { id: 'sal', name: 'Salário / Pró-labore', direction: 'in', sortOrder: 0, isArchived: false, children: [] },
+    { id: 'arq', name: 'Arquivada', direction: 'out', sortOrder: 1, isArchived: true, isEssential: true, children: [] },
+    { id: 'out', name: 'Outros', direction: 'out', sortOrder: 2, isArchived: false, isEssential: true, children: [] },
+    { id: 'sal', name: 'Salário / Pró-labore', direction: 'in', sortOrder: 0, isArchived: false, isEssential: true, children: [] },
   ],
   pj: [
-    { id: 'alu', name: 'Aluguel', direction: 'out', sortOrder: 0, isArchived: false, children: [] },
-    { id: 'rec', name: 'Consultas particulares', direction: 'in', sortOrder: 0, isArchived: false, children: [] },
+    { id: 'alu', name: 'Aluguel', direction: 'out', sortOrder: 0, isArchived: false, isEssential: true, children: [] },
+    { id: 'rec', name: 'Consultas particulares', direction: 'in', sortOrder: 0, isArchived: false, isEssential: true, children: [] },
   ],
 }
 

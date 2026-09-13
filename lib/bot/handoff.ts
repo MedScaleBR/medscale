@@ -23,6 +23,11 @@ interface HandoffParams {
   // o paciente ainda não escolheu a unidade (conta multi-unidade), o chamador
   // passa todas para o pedido não ficar sem dono.
   notifyWorkspaceIds?: string[]
+  // Conteúdo descartado por suspeita de injection (a resposta do bot que
+  // prometia desconto não configurado). Fica só em handoff_logs, que é coberto
+  // por RLS — nunca em console.*, Sentry ou PostHog, porque o scrub do Sentry
+  // só redige telefone e deixaria o resto passar.
+  flaggedContent?: string | null
 }
 
 export async function executeHandoff(params: HandoffParams) {
@@ -60,6 +65,7 @@ export async function executeHandoff(params: HandoffParams) {
     patient_phone: patientPhone,
     trigger_reason: triggerReason,
     handoff_to: handoffNumber ?? null,
+    flagged_content: params.flaggedContent ?? null,
   })
 
   // 5. Notificar a equipe por Web Push (fire-and-forget — nunca derruba o
@@ -128,7 +134,8 @@ export async function logHandoffUnavailable(params: {
 // Detecta se a resposta do LLM indica necessidade de handoff
 export function detectHandoffIntent(
   assistantMessage: string,
-  userMessage: string
+  userMessage: string,
+  injectionSignalCount = 0
 ): { needed: boolean; reason: HandoffTriggerReason | null } {
   // Sinalização explícita do LLM (via instrução no prompt)
   if (assistantMessage.includes('[HANDOFF]')) {
@@ -154,6 +161,14 @@ export function detectHandoffIntent(
   ]
   if (humanKeywords.some((k) => userLower.includes(k))) {
     return { needed: true, reason: 'user_request' }
+  }
+
+  // Dois ou mais sinais de injection na janela recente. Um sinal isolado é
+  // ruído esperado (a heurística tem falso positivo por construção); um padrão
+  // repetido vira gente. O paciente nunca sabe que isto existe — o handoff usa
+  // a mesma mensagem genérica de qualquer outro.
+  if (injectionSignalCount >= 2) {
+    return { needed: true, reason: 'injection_suspected' }
   }
 
   return { needed: false, reason: null }

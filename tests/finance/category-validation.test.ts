@@ -4,14 +4,14 @@ import type { FinanceCategoryTree } from '@/lib/finance/categories'
 
 const TREE: FinanceCategoryTree = {
   pf: [
-    { id: 'fil', name: 'Filhos', direction: 'out', sortOrder: 0, isArchived: false, children: [
-      { id: 'esc', name: 'Escola', direction: 'out', sortOrder: 0, isArchived: false, children: [] },
+    { id: 'fil', name: 'Filhos', direction: 'out', sortOrder: 0, isArchived: false, isEssential: true, children: [
+      { id: 'esc', name: 'Escola', direction: 'out', sortOrder: 0, isArchived: false, isEssential: true, children: [] },
     ] },
-    { id: 'ali', name: 'Alimentação', direction: 'out', sortOrder: 1, isArchived: false, children: [] },
+    { id: 'ali', name: 'Alimentação', direction: 'out', sortOrder: 1, isArchived: false, isEssential: true, children: [] },
   ],
   pj: [
-    { id: 'alu', name: 'Aluguel', direction: 'out', sortOrder: 0, isArchived: false, children: [] },
-    { id: 'rec', name: 'Receitas', direction: 'in', sortOrder: 0, isArchived: false, children: [] },
+    { id: 'alu', name: 'Aluguel', direction: 'out', sortOrder: 0, isArchived: false, isEssential: true, children: [] },
+    { id: 'rec', name: 'Receitas', direction: 'in', sortOrder: 0, isArchived: false, isEssential: true, children: [] },
   ],
 }
 const base = { direction: 'out' as const }

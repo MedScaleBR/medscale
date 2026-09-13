@@ -34,12 +34,12 @@ describe('getFinanceCategoryTree', () => {
 })
 
 const TREE: FinanceCategoryTree = {
-  pf: [{ id: 'pf-fil', name: 'Filhos', direction: 'out', sortOrder: 0, isArchived: false, children: [
-        { id: 'pf-esc', name: 'Escola', direction: 'out', sortOrder: 0, isArchived: false, children: [] }] }],
+  pf: [{ id: 'pf-fil', name: 'Filhos', direction: 'out', sortOrder: 0, isArchived: false, isEssential: true, children: [
+        { id: 'pf-esc', name: 'Escola', direction: 'out', sortOrder: 0, isArchived: false, isEssential: true, children: [] }] }],
   pj: [
-    { id: 'pj-alu', name: 'Aluguel', direction: 'out', sortOrder: 0, isArchived: false, children: [] },
-    { id: 'pj-rec', name: 'Outras receitas', direction: 'in', sortOrder: 0, isArchived: false, children: [] },
-    { id: 'pj-rec-out', name: 'Outras receitas', direction: 'out', sortOrder: 1, isArchived: false, children: [] },
+    { id: 'pj-alu', name: 'Aluguel', direction: 'out', sortOrder: 0, isArchived: false, isEssential: true, children: [] },
+    { id: 'pj-rec', name: 'Outras receitas', direction: 'in', sortOrder: 0, isArchived: false, isEssential: true, children: [] },
+    { id: 'pj-rec-out', name: 'Outras receitas', direction: 'out', sortOrder: 1, isArchived: false, isEssential: true, children: [] },
   ],
 }
 
