@@ -28,7 +28,7 @@ const CONTROL_TOKENS =
 // jejum?" (pergunta clínica legítima). Note que \b impede que "ignora" case
 // dentro de "ignorar".
 const ROLE_OVERRIDE =
-  /\b(?:ignore|ignora|esque[çc]a|esquece|desconsidere|desconsidera|apague|apaga)\b\s+(?:as?\s+|todas?\s+as?\s+|o\s+|todo\s+o\s+|seu\s+|suas\s+)?(?:instru[çc][õo]es|regras|orienta[çc][õo]es|diretrizes|prompt|contexto|restri[çc][õo]es)\b|\bvoc[êe]\s+(?:agora\s+)?[ée]\s+(?:um|uma|o|a)\b|\baja\s+como\b|\bfinja\s+(?:que\s+)?(?:voc[êe]|ser)\b|\bfa[çc]a\s+de\s+conta\s+que\s+voc[êe]\b|\bsem\s+(?:nenhuma\s+)?restri[çc][õo]es?\b|\bnovo\s+(?:papel|modo|sistema)\b/i
+  /\b(?:ignore|ignora|esque[çc]a|esquece|desconsidere|desconsidera|apague|apaga)\b\s+(?:as?\s+|todas?\s+as?\s+|o\s+|todo\s+o\s+|seu\s+|suas\s+)?(?:instru[çc][õo]es|(?:regras|orienta[çc][õo]es)(?!\s+de\s+(?:reembolso|cancelamento|agendamento|remarca[çc][ãa]o|conv[êe]nio|atendimento|pagamento|jejum|preparo|exame|consulta))|diretrizes|prompt|contexto|restri[çc][õo]es)\b|\bvoc[êe]\s+agora\s+[ée]\s+(?:um|uma|o|a)\b|\baja\s+como\b|\bfinja\s+(?:que\s+)?(?:voc[êe]|ser)\b|\bfa[çc]a\s+de\s+conta\s+que\s+voc[êe]\b|\bsem\s+(?:nenhuma\s+)?restri[çc][õo]es?\b|\bnovo\s+(?:papel|modo|sistema)\b/i
 
 // Pedido de revelar o prompt. Exige verbo + alvo: "regras de cancelamento"
 // (pergunta legítima da clínica) não casa, "suas instruções" casa.
@@ -38,7 +38,7 @@ const PROMPT_EXTRACTION =
 // Alegação de autoridade. O sistema NUNCA fala com o modelo pelo canal do
 // paciente, então qualquer credencial que chegue por ali é só texto.
 const AUTHORITY_CLAIM =
-  /\b(?:sou|somos|aqui\s+[ée])\b[^.?!\n]{0,30}\b(?:da\s+equipe|do\s+suporte|do\s+time|desenvolvedor|programador|administrador|admin|t[ée]cnico\s+da|respons[áa]vel\s+pelo\s+(?:bot|sistema))\b|\bmodo\s+(?:debug|desenvolvedor|dev|manuten[çc][ãa]o|teste|admin)\b|\b(?:isso|isto)\s+[ée]\s+(?:s[óo]\s+|apenas\s+)?um\s+teste\b|\bestou\s+autorizad[oa]\b/i
+  /\b(?:sou|somos|aqui\s+[ée])\b[^.?!\n]{0,30}\b(?:da\s+equipe|do\s+suporte|do\s+time|desenvolvedor|programador|administrador|admin|t[ée]cnico\s+da|respons[áa]vel\s+pelo\s+(?:bot|sistema))\b|\bmodo\s+(?:debug|desenvolvedor|dev|manuten[çc][ãa]o|teste|admin)\b|\b(?:isso|isto)\s+[ée]\s+(?:s[óo]\s+|apenas\s+)?um\s+teste\b|\bestou\s+autorizad[oa]\s+(?:a|para)\b/i
 
 // A ordem importa: do mais determinístico (marcador literal) ao mais
 // ambíguo. A primeira que casar ganha — um sinal é um sinal, o consumidor só
@@ -78,6 +78,12 @@ export function sanitizePatientName(raw: string): string | null {
   if (/[<>]/.test(name)) return null
   if (CONTROL_TOKENS.test(name)) return null
   if (LEADING_IMPERATIVE.test(name)) return null
+  // Whitelist: only letters (Unicode-aware), apostrophes, periods, hyphens, spaces
+  if (!/^[\p{L}][\p{L}''.\-\s]*$/u.test(name)) return null
+  // Reject if more than 6 words (potential injection continuation)
+  if (name.split(/\s+/).length > 6) return null
+  // Reject if name itself triggers injection detection
+  if (detectInjectionAttempt(name)) return null
   return name
 }
 
