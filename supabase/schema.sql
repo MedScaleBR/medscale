@@ -851,8 +851,9 @@ create table public.handoff_logs (
   workspace_id    uuid references public.workspaces(id) on delete cascade not null,
   conversation_id uuid references public.conversations(id) on delete set null,
   patient_phone   text not null,
-  trigger_reason  text,        -- 'user_request' | 'bot_uncertain' | 'max_turns' | 'out_of_hours'
+  trigger_reason  text,        -- 'user_request' | 'bot_uncertain' | 'max_turns' | 'out_of_hours' | 'injection_suspected'
   handoff_to      text,
+  flagged_content text,        -- resposta descartada por suspeita de injection; só aqui (RLS), nunca em log externo
   sent_at         timestamptz not null default now()
 );
 

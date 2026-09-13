@@ -1422,7 +1422,7 @@ git commit -m "feat(transcriptions): delimitador e aviso de injection na geracao
 - Consumes: a decisão de `flaggedContent` da Task 4.
 - Produces: coluna `handoff_logs.flagged_content`.
 
-- [ ] **Step 1: Escrever a migration**
+- [x] **Step 1: Escrever a migration**
 
 Create `supabase/migration_injection_hardening.sql` (mesmo estilo de `migration_waitlist_maria.sql`: cabeçalho, idempotente, aponta para a spec):
 
@@ -1444,7 +1444,7 @@ alter table public.handoff_logs add column if not exists flagged_content text;
 -- constraint nova. Só o comentário em schema.sql é atualizado.
 ```
 
-- [ ] **Step 2: Refletir no schema.sql**
+- [x] **Step 2: Refletir no schema.sql**
 
 Em `supabase/schema.sql`, no `create table public.handoff_logs` (linha 849), atualizar o comentário do `trigger_reason` e acrescentar a coluna:
 
@@ -1466,7 +1466,7 @@ where table_name = 'handoff_logs' and column_name = 'flagged_content';
 ```
 Expected: uma linha, `text`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add supabase/migration_injection_hardening.sql supabase/schema.sql
