@@ -45,7 +45,7 @@ Funções puras, sem I/O — sem Supabase, sem Anthropic, sem Next. Testáveis i
   - `sanitizePatientName(raw: string): string | null`
   - `containsUnconfiguredDiscount(botReply: string, config: BotConfig): boolean`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/agent/security.test.ts`:
 
@@ -191,12 +191,12 @@ describe('containsUnconfiguredDiscount', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/agent/security.test.ts`
 Expected: FAIL — `Failed to resolve import "@/lib/bot/security"`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Create `lib/bot/security.ts`:
 
@@ -319,12 +319,12 @@ export function containsUnconfiguredDiscount(botReply: string, config: BotConfig
 }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/agent/security.test.ts`
 Expected: PASS — todos os describes verdes.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add lib/bot/security.ts tests/agent/security.test.ts
@@ -350,7 +350,7 @@ O bloco é fixo, fica no topo absoluto do system prompt (antes de qualquer dado 
 
 > `buildDynamicSystemPrompt` **não** monta `messages` — quem monta é `agent.ts:419`. `wrapPatientMessage` mora aqui mesmo assim, junto do bloco que descreve o delimitador, para o nome da tag ter uma fonte de verdade só.
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Adicionar ao **final** de `tests/agent/prompt-builder.test.ts` (mantendo os imports existentes; acrescentar `wrapPatientMessage` ao import de `@/lib/bot/prompt-builder`):
 
@@ -404,12 +404,12 @@ describe('wrapPatientMessage', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/agent/prompt-builder.test.ts`
 Expected: FAIL — `wrapPatientMessage is not exported` e os `indexOf` devolvendo `-1`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Em `lib/bot/prompt-builder.ts`, adicionar logo após os imports (antes de `interface UpcomingAppointment`):
 
@@ -451,17 +451,17 @@ Depois, na linha do `return` (hoje `` return `Você é ${BOT_NAME}...` ``), pref
 
 O resto do template literal fica exatamente como está.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/agent/prompt-builder.test.ts`
 Expected: PASS — os 6 describes antigos continuam verdes e os 2 novos passam.
 
-- [ ] **Step 5: Rodar a suíte inteira**
+- [x] **Step 5: Rodar a suíte inteira**
 
 Run: `npm test`
 Expected: PASS. O bloco novo muda o texto do system prompt; nenhum teste existente afirma o tamanho ou o início exato dele, então nada deve quebrar. Se algum teste afirmar `prompt.startsWith(...)`, ajuste o teste — o bloco no topo é a decisão 2 da spec.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add lib/bot/prompt-builder.ts tests/agent/prompt-builder.test.ts
