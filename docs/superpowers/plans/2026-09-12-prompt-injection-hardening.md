@@ -718,7 +718,7 @@ main().catch((err) => {
 })
 ```
 
-- [ ] **Step 3: Rodar a baseline e anotar**
+- [x] **Step 3: Rodar a baseline e anotar**
 
 Run: `npx tsx scripts/redteam-bot.ts --baseline`
 Depois: `npx tsx scripts/redteam-bot.ts`
@@ -1477,7 +1477,7 @@ git commit -m "feat(db): coluna flagged_content em handoff_logs para auditoria d
 
 ### Task 9: Fechamento — red-team comparado à baseline
 
-- [ ] **Step 1: Suíte completa**
+- [x] **Step 1: Suíte completa**
 
 Run: `npm test`
 Expected: PASS.
@@ -1485,18 +1485,26 @@ Expected: PASS.
 Run: `npm run lint`
 Expected: sem erro novo.
 
-- [ ] **Step 2: Rodar o red-team nos dois modos**
+Nota (2026-09-13): os dois comandos literais não rodam nesta máquina por causa do worktree
+obsoleto em `.claude/worktrees/` — `vitest` conta as falhas dele e o `eslint` estoura a heap
+varrendo-o. Nenhum dos dois tem relação com este plano. Rodado o equivalente:
+`npx vitest run --exclude '**/node_modules/**' --exclude '**/.claude/**'` → **817/817 em 60
+arquivos**; e `npx eslint` nos 12 arquivos tocados → exit 0. A cura de raiz (apagar o worktree
+ou pôr `.claude/**` nos ignores de `vitest.config.ts` e `eslint.config.mjs`) está fora do
+escopo deste plano.
+
+- [x] **Step 2: Rodar o red-team nos dois modos**
 
 Run: `npx tsx scripts/redteam-bot.ts --baseline`
 Run: `npx tsx scripts/redteam-bot.ts`
 
 Compare com os números anotados na Task 3. O caso `falso-positivo-jejum` tem que passar nos **dois** modos — se ele falhar no modo hardened, a heurística ficou agressiva demais e a regra "nunca bloquear atendimento legítimo" foi violada; conserte a regex em `lib/bot/security.ts` antes de seguir.
 
-- [ ] **Step 3: Anotar o resultado na spec**
+- [x] **Step 3: Anotar o resultado na spec**
 
 Acrescentar ao final de `docs/superpowers/specs/2026-09-12-prompt-injection-hardening-design.md` uma seção curta "Resultado do red-team" com os dois placares e a data. É o registro de que a camada fez diferença mensurável — e a linha de base para a próxima vez que alguém mexer no prompt.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/superpowers/specs/2026-09-12-prompt-injection-hardening-design.md
