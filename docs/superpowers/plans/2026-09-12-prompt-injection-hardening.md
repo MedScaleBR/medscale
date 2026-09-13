@@ -752,7 +752,7 @@ Precisa vir **antes** da integração em `agent.ts`: lá o `executeHandoff` rece
   - `detectHandoffIntent(assistantMessage: string, userMessage: string, injectionSignalCount?: number)` — 3º parâmetro **opcional**, default `0`; a função continua pura e síncrona
   - `HandoffParams` ganha `flaggedContent?: string | null`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Adicionar ao final de `tests/agent/handoff.test.ts`:
 
@@ -782,12 +782,12 @@ describe('detectHandoffIntent — sinais de injection', () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `npx vitest run tests/agent/handoff.test.ts`
 Expected: FAIL — `detectHandoffIntent` ignora o 3º argumento e devolve `{ needed: false, reason: null }` onde o teste espera `injection_suspected`.
 
-- [ ] **Step 3: Write the implementation**
+- [x] **Step 3: Write the implementation**
 
 Em `types/database.ts:36`:
 
@@ -847,12 +847,12 @@ E, logo antes do `return { needed: false, reason: null }` final:
   return { needed: false, reason: null }
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `npx vitest run tests/agent/handoff.test.ts`
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add types/database.ts lib/bot/handoff.ts tests/agent/handoff.test.ts

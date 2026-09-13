@@ -33,7 +33,12 @@ export type OnboardingStep =
   | 'verified'
   | 'provisioning'
   | 'active'
-export type HandoffTriggerReason = 'user_request' | 'bot_uncertain' | 'max_turns' | 'out_of_hours'
+export type HandoffTriggerReason =
+  | 'user_request'
+  | 'bot_uncertain'
+  | 'max_turns'
+  | 'out_of_hours'
+  | 'injection_suspected'
 export type TranscriptionStatus =
   | 'pending'
   | 'transcribing'
@@ -812,6 +817,9 @@ export interface Database {
           patient_phone: string
           trigger_reason: HandoffTriggerReason | null
           handoff_to: string | null
+          // Conteúdo descartado por suspeita de injection. Só existe aqui (RLS),
+          // nunca em log externo. Coluna criada pela migration do hardening.
+          flagged_content: string | null
           sent_at: string
         }
         Insert: Partial<Database['public']['Tables']['handoff_logs']['Row']> & { workspace_id: string; patient_phone: string }
