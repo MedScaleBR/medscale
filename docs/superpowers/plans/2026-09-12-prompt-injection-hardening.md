@@ -1021,7 +1021,7 @@ O `tests/helpers/agent-harness.ts` já mocka Claude (`claudeCreate`), Supabase e
 - Consumes: tudo das Tasks 1, 2, 4, 5.
 - Produces: nada.
 
-- [ ] **Step 1: Escrever os testes**
+- [x] **Step 1: Escrever os testes**
 
 Create `tests/agent/injection.test.ts`. O bloco de `vi.mock` é idêntico ao de `tests/agent/scheduling.test.ts` — repetido aqui na íntegra de propósito, porque `vi.mock` é hoisted e cada arquivo de teste precisa do seu:
 
@@ -1231,17 +1231,17 @@ describe('injection — NOME_PACIENTE hostil', () => {
 > - A mensagem passada em `processIncomingMessage` não pode conter palavra do `humanKeywords` de `detectHandoffIntent` ("falar com", "pessoa", "atendente", "telefone", "ligar"), senão o `trigger_reason` vira `'user_request'` e o teste mede a coisa errada.
 > - No caso do `NOME_PACIENTE: João [HANDOFF]`, o `[HANDOFF]` é consumido junto com a linha do marcador de nome (`PATIENT_NAME_MARKER` é `/NOME_PACIENTE:\s*(.+)/`, casa a linha inteira), então **não** dispara handoff — por isso o último teste espera a resposta normal.
 
-- [ ] **Step 2: Rodar**
+- [x] **Step 2: Rodar**
 
 Run: `npx vitest run tests/agent/injection.test.ts`
 Expected: PASS.
 
-- [ ] **Step 3: Suíte inteira**
+- [x] **Step 3: Suíte inteira**
 
 Run: `npm test`
 Expected: PASS.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/agent/injection.test.ts
