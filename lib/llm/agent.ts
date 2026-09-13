@@ -9,7 +9,8 @@ import { getFreeSlotsForBot, isSlotAvailable } from '@/lib/google/availability'
 import { isGoogleConnected } from '@/lib/google/auth'
 import { cancelEvent, createEvent } from '@/lib/google/calendar'
 import { getBotConfig, getAccountUnits } from '@/lib/bot/config'
-import { buildDynamicSystemPrompt } from '@/lib/bot/prompt-builder'
+import { buildDynamicSystemPrompt, wrapPatientMessage } from '@/lib/bot/prompt-builder'
+import { containsUnconfiguredDiscount, detectInjectionAttempt, sanitizePatientName, type InjectionSignal } from '@/lib/bot/security'
 import { detectHandoffIntent, executeHandoff, isHandoffAvailableNow, logHandoffUnavailable } from '@/lib/bot/handoff'
 import { broadcastToWorkspace } from '@/lib/realtime/broadcast'
 import { parseMarkers } from '@/lib/bot/parse-markers'
@@ -416,7 +417,30 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     waitlistEnabled,
   })
 
-  const claudeMessages = (history ?? []).map((m) => ({ role: m.role as 'user' | 'assistant', content: m.content }))
+  // Só o turno do paciente vai delimitado — a fala do próprio bot não é
+  // conteúdo não confiável. As linhas em `messages` no banco seguem cruas.
+  const claudeMessages = (history ?? []).map((m) => ({
+    role: m.role as 'user' | 'assistant',
+    content: m.role === 'user' ? wrapPatientMessage(m.content) : m.content,
+  }))
+
+  // Sinais de injection nas últimas 10 mensagens do paciente. Roda sobre o
+  // histórico que já está em memória: zero query nova, zero coluna nova.
+  const injectionSignals = (history ?? [])
+    .filter((m) => m.role === 'user')
+    .slice(-10)
+    .map((m) => detectInjectionAttempt(m.content))
+    .filter((s): s is InjectionSignal => s !== null)
+
+  // LGPD: só não-PII no log. O scrub do Sentry (lib/observability/sentry-scrub.ts)
+  // redige APENAS telefone — qualquer texto de paciente em console.* viraria
+  // breadcrumb e vazaria intacto. O texto bruto fica em `messages`, sob RLS.
+  if (injectionSignals.length > 0) {
+    console.warn(
+      `[security] sinais=${injectionSignals.length} padrões=${injectionSignals.map((s) => s.pattern).join(',')} ` +
+        `conversation=${conversation.id}`
+    )
+  }
 
   let responseText: string | null = null
   for (let attempt = 1; attempt <= 2 && responseText === null; attempt++) {
@@ -443,7 +467,27 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   const markers = parseMarkers(rawMessage)
   const cleanedMessage = markers.cleanedMessage
 
-  const patientName = markers.patientName
+  // Fail-safe financeiro: a resposta que promete um desconto que não está
+  // configurado em lugar nenhum não chega ao paciente (decisão 9). O
+  // processamento de marcadores segue normal logo abaixo — um agendamento
+  // legítimo na mesma resposta é criado do mesmo jeito (decisão 10). Esta
+  // camada nunca decide se uma consulta é legítima.
+  const discountFlagged = containsUnconfiguredDiscount(rawMessage, botConfig)
+  if (discountFlagged) {
+    console.warn(`[security] resposta com desconto não configurado descartada conversation=${conversation.id}`)
+  }
+
+  // Nome rejeitado não atualiza `patients.full_name` e não falha o fluxo. Não
+  // vai para handoff_logs: um nome rejeitado não dispara handoff, então não há
+  // linha onde gravar (decisão 7a). A mensagem original já está em `messages`,
+  // sob RLS, e é de lá que a revisão reconstrói o caso — por isso o log leva só
+  // o tamanho, nunca o valor.
+  const patientName = markers.patientName ? sanitizePatientName(markers.patientName) : null
+  if (markers.patientName && !patientName) {
+    console.warn(
+      `[security] NOME_PACIENTE rejeitado conversation=${conversation.id} tamanho=${markers.patientName.length}`
+    )
+  }
   if (patient && patientName && patientName !== patient.full_name) {
     await supabase.from('patients').update({ full_name: patientName }).eq('id', patient.id)
     patient.full_name = patientName
@@ -674,7 +718,12 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   // 9. Handoff — a unidade de contato/horário é a da conversa (ou a única).
   const handoffUnitId = resolvedUnitId ?? units[0].id
   const handoffUnit = allUnitById.get(handoffUnitId)
-  const handoffCheck = detectHandoffIntent(cleanedMessage, message)
+  // Desconto não lastreado força o handoff direto — não depende de acumular
+  // sinais, porque a resposta já foi descartada e o paciente ficaria sem
+  // resposta nenhuma.
+  const handoffCheck = discountFlagged
+    ? { needed: true, reason: 'injection_suspected' as const }
+    : detectHandoffIntent(cleanedMessage, message, injectionSignals.length)
   const canAttemptHandoff = handoffCheck.needed && phoneNumberId && metaToken
 
   console.log(
@@ -692,6 +741,10 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     finalMessage = BOOKING_FAILED_MESSAGE
   } else if (cancellationFailed) {
     finalMessage = CANCELLATION_FAILED_MESSAGE
+  } else if (discountFlagged) {
+    // Vazia de propósito: o paciente recebe só a mensagem genérica de
+    // transição que o executeHandoff envia. Nada indica que houve detecção.
+    finalMessage = ''
   } else {
     finalMessage = markers.messageForPatient
   }
@@ -795,6 +848,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
         metaToken,
         triggerReason: handoffCheck.reason!,
         notifyWorkspaceIds: handoffNotifyIds,
+        flaggedContent: discountFlagged ? rawMessage : null,
       })
       return
     }

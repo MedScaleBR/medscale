@@ -288,11 +288,14 @@ describe('processIncomingMessage — montagem de contexto', () => {
 
     await processIncomingMessage(PARAMS)
 
-    expect(claudeMessages()).toEqual([
-      { role: 'user', content: 'Oi, quero marcar' },
-      { role: 'assistant', content: 'Tenho 08:00 e 09:00' },
-      { role: 'user', content: 'Quero segunda de manhã' },
-    ])
+    // O que este teste guarda é a ORDEM cronológica e o começo em "user". A
+    // fala do paciente agora vai delimitada em <mensagem_paciente> (hardening
+    // contra injection, decisão 1 da spec); a do bot não, porque não é
+    // conteúdo não confiável — por isso o assistant segue em igualdade estrita.
+    expect(claudeMessages().map((m) => m.role)).toEqual(['user', 'assistant', 'user'])
+    expect(claudeMessages()[0].content).toContain('Oi, quero marcar')
+    expect(claudeMessages()[1].content).toBe('Tenho 08:00 e 09:00')
+    expect(claudeMessages()[2].content).toContain('Quero segunda de manhã')
   })
 
   it('deve descartar um "assistant" órfão no começo da janela de histórico', async () => {

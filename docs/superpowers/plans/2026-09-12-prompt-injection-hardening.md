@@ -872,7 +872,7 @@ Cinco pontos de enxerto em `processIncomingMessage`. Nenhuma query nova: a conta
 - Consumes: `detectInjectionAttempt`, `containsUnconfiguredDiscount`, `sanitizePatientName`, `InjectionSignal` (Task 1); `wrapPatientMessage` (Task 2); `flaggedContent` e o 3º parâmetro de `detectHandoffIntent` (Task 4).
 - Produces: nada consumido por outra task.
 
-- [ ] **Step 1: Imports**
+- [x] **Step 1: Imports**
 
 Em `lib/llm/agent.ts`, ajustar dois imports existentes:
 
@@ -881,7 +881,7 @@ import { buildDynamicSystemPrompt, wrapPatientMessage } from '@/lib/bot/prompt-b
 import { containsUnconfiguredDiscount, detectInjectionAttempt, sanitizePatientName, type InjectionSignal } from '@/lib/bot/security'
 ```
 
-- [ ] **Step 2: Wrap das mensagens e contagem de sinais**
+- [x] **Step 2: Wrap das mensagens e contagem de sinais**
 
 Substituir a linha 419 (`const claudeMessages = ...`) por:
 
@@ -912,7 +912,7 @@ Substituir a linha 419 (`const claudeMessages = ...`) por:
   }
 ```
 
-- [ ] **Step 3: Fail-safe de desconto e sanitização do nome**
+- [x] **Step 3: Fail-safe de desconto e sanitização do nome**
 
 Substituir o bloco das linhas 443-450 por:
 
@@ -947,7 +947,7 @@ Substituir o bloco das linhas 443-450 por:
   }
 ```
 
-- [ ] **Step 4: Gatilho de handoff**
+- [x] **Step 4: Gatilho de handoff**
 
 Substituir a linha 677 (`const handoffCheck = detectHandoffIntent(cleanedMessage, message)`) por:
 
@@ -960,7 +960,7 @@ Substituir a linha 677 (`const handoffCheck = detectHandoffIntent(cleanedMessage
     : detectHandoffIntent(cleanedMessage, message, injectionSignals.length)
 ```
 
-- [ ] **Step 5: Mensagem final**
+- [x] **Step 5: Mensagem final**
 
 No bloco de seleção de `finalMessage` (linhas 688-697), acrescentar um ramo antes do `else` final:
 
@@ -983,7 +983,7 @@ No bloco de seleção de `finalMessage` (linhas 688-697), acrescentar um ramo an
 
 > Isto encaixa nos caminhos que já existem, sem caminho novo: com `finalMessage` vazia, o `if (finalMessage)` da linha 767 não grava nem envia nada, o disjuntor de loop da linha 711 não dispara, e fora do horário a linha 706 (`finalMessage ? ... : botConfig.outOfHoursMessage`) já resolve para a mensagem de fora de horário — que é a decisão 12.
 
-- [ ] **Step 6: Auditoria do conteúdo descartado**
+- [x] **Step 6: Auditoria do conteúdo descartado**
 
 Na chamada de `executeHandoff` (linha ~787), acrescentar um campo:
 
@@ -993,7 +993,7 @@ Na chamada de `executeHandoff` (linha ~787), acrescentar um campo:
         flaggedContent: discountFlagged ? rawMessage : null,
 ```
 
-- [ ] **Step 7: Verificar que compila e que a suíte segue verde**
+- [x] **Step 7: Verificar que compila e que a suíte segue verde**
 
 Run: `npx tsc --noEmit`
 Expected: sem erro.
@@ -1001,7 +1001,7 @@ Expected: sem erro.
 Run: `npm test`
 Expected: PASS. Atenção a testes existentes em `tests/agent/` que afirmem o conteúdo de `claudeCreate.mock.calls[0][0].messages[0].content`: agora vem envolvido em `<mensagem_paciente>`. Se algum usar igualdade estrita, troque por `toContain` — o wrap é a decisão 1 da spec, não um bug.
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add lib/llm/agent.ts
