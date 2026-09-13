@@ -488,7 +488,7 @@ Ferramenta de auditoria manual. Faz chamadas reais à API da Anthropic, custa to
 - Consumes: `detectInjectionAttempt`, `containsUnconfiguredDiscount` (Task 1); `buildDynamicSystemPrompt`, `wrapPatientMessage`, `ANTI_INJECTION_BLOCK` (Task 2); `BotConfig` de `lib/bot/config`.
 - Produces: `type RedteamCase`, `export const REDTEAM_CASES: RedteamCase[]`.
 
-- [ ] **Step 1: Escrever os casos**
+- [x] **Step 1: Escrever os casos**
 
 Create `scripts/redteam-cases.ts`:
 
@@ -556,7 +556,7 @@ export const REDTEAM_CASES: RedteamCase[] = [
 ]
 ```
 
-- [ ] **Step 2: Escrever o runner**
+- [x] **Step 2: Escrever o runner**
 
 Create `scripts/redteam-bot.ts`:
 
@@ -727,7 +727,7 @@ Anote os dois placares. A baseline mede quanto o Claude já resiste sozinho; sem
 
 Se `npx tsx` falhar por causa dos imports relativos com extensão, confirme que os caminhos batem (`scripts/` está na raiz, `../lib/...` resolve).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add scripts/redteam-cases.ts scripts/redteam-bot.ts
