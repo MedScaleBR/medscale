@@ -21,7 +21,6 @@ drop table if exists
   public.cost_events,
   public.feedback,
   public.finance_agent_messages,
-  public.webhook_debug_log,
   public.finance_suggestion_settings,
   public.finance_suggestion_dismissals,
   public.finance_goals,
@@ -410,20 +409,6 @@ create table public.finance_agent_messages (
   content     text not null,
   whatsapp_id text,
   created_at  timestamptz not null default now()
-);
-
--- TEMPORARIO: log bruto de toda chamada ao webhook do WhatsApp, incluindo as
--- que falham na validacao de assinatura. Ver migration_webhook_debug_log.sql.
-create table public.webhook_debug_log (
-  id                uuid default uuid_generate_v4() primary key,
-  phone_number_id   text,
-  is_finance_number boolean not null default false,
-  signature_valid   boolean not null,
-  account_id        uuid references public.accounts(id) on delete set null,
-  message_type      text,
-  content           text,
-  whatsapp_id       text,
-  created_at        timestamptz not null default now()
 );
 
 -- ============================================================
@@ -1006,7 +991,6 @@ create index idx_finance_entries_category    on public.finance_entries(account_i
 create index idx_finance_entries_direction   on public.finance_entries(account_id, type, direction, entry_date desc);
 create index idx_finance_agent_messages_created on public.finance_agent_messages(created_at desc);
 create index idx_finance_agent_messages_account on public.finance_agent_messages(account_id, created_at desc);
-create index idx_webhook_debug_log_created on public.webhook_debug_log(created_at desc);
 create index idx_finance_categories_tree
   on public.finance_categories(account_id, kind, parent_id, sort_order);
 create index idx_finance_categories_tree_dir
@@ -1599,7 +1583,6 @@ alter table public.account_tasks          enable row level security;
 alter table public.finance_entries        enable row level security;
 alter table public.finance_sessions       enable row level security;
 alter table public.finance_agent_messages enable row level security;
-alter table public.webhook_debug_log       enable row level security;
 alter table public.finance_categories     enable row level security;
 alter table public.finance_reserves              enable row level security;
 alter table public.finance_reserve_movements     enable row level security;
@@ -1810,9 +1793,6 @@ create policy "finance_sessions: service role only" on public.finance_sessions
 -- Dados financeiros pessoais recebidos no WhatsApp: escrita só via webhook
 -- (service_role) e leitura apenas para admins internos no painel /admin.
 create policy "finance_agent_messages: medscale admin read" on public.finance_agent_messages
-  for select using (public.is_medscale_admin());
-
-create policy "webhook_debug_log: medscale admin read" on public.webhook_debug_log
   for select using (public.is_medscale_admin());
 
 -- cost_events: custo é informação interna da MedScale sobre a própria margem.
