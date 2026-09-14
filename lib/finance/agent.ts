@@ -163,7 +163,26 @@ function parsePaymentMethod(text: string): RevenuePaymentMethod | null {
   return null
 }
 
-export async function processFinancialMessage(senderPhone: string, messageText: string): Promise<void> {
+async function logIncomingFinanceMessage(
+  supabase: ReturnType<typeof createAdminClient>,
+  params: { accountId: string | null; phone: string; content: string; whatsappMessageId?: string | null }
+): Promise<void> {
+  const { error } = await supabase.from('finance_agent_messages').insert({
+    account_id: params.accountId,
+    phone: params.phone,
+    direction: 'inbound',
+    content: params.content,
+    whatsapp_id: params.whatsappMessageId ?? null,
+  })
+
+  if (error) console.error('[finance-agent] failed to log incoming message', error.message)
+}
+
+export async function processFinancialMessage(
+  senderPhone: string,
+  messageText: string,
+  whatsappMessageId?: string | null
+): Promise<void> {
   const supabase = createAdminClient()
 
   // 1. Identificar o owner pelo número de telefone. memberships e profiles
@@ -195,6 +214,12 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
       senderKeyTail: senderKey.slice(-4),
       matches: matches.length,
     })
+    await logIncomingFinanceMessage(supabase, {
+      accountId: null,
+      phone: senderPhone,
+      content: messageText,
+      whatsappMessageId,
+    })
     await sendFinanceReply(senderPhone, buildUnregisteredMessage())
     return
   }
@@ -213,11 +238,23 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
       ownersAtivos: ownerUserIds.length,
       ownersComTelefone: profiles?.length ?? 0,
     })
+    await logIncomingFinanceMessage(supabase, {
+      accountId: null,
+      phone: senderPhone,
+      content: messageText,
+      whatsappMessageId,
+    })
     await sendFinanceReply(senderPhone, buildUnregisteredMessage())
     return
   }
 
   const accountId = membership.account_id
+  await logIncomingFinanceMessage(supabase, {
+    accountId,
+    phone: senderPhone,
+    content: messageText,
+    whatsappMessageId,
+  })
 
   // O agente financeiro é do owner e fala da conta inteira; unidade só existe
   // quando o próprio fluxo resolve uma (consulta filtrada, lançamento com
