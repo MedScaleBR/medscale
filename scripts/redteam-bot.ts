@@ -49,6 +49,7 @@ const FIXTURE_CONFIG: BotConfig = {
   isActive: true,
   phoneNumberId: null,
   metaToken: null,
+  numberSource: 'own',
 }
 
 const RAW_MARKER = /(AGENDAMENTO_CONFIRMADO|CANCELAMENTO_CONFIRMADO|NOME_PACIENTE|PROCEDIMENTO_ID|UNIDADE_ID|LISTA_ESPERA)\s*:/

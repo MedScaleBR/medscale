@@ -18,6 +18,7 @@ drop trigger if exists on_auth_user_created on auth.users;
 -- `cascade` aqui também remove automaticamente todas as policies, índices e
 -- triggers de cada tabela — não é preciso dropar isso separadamente.
 drop table if exists
+  public.cost_events,
   public.feedback,
   public.finance_suggestion_settings,
   public.finance_suggestion_dismissals,
@@ -263,6 +264,50 @@ create table public.feedback (
   status        text not null default 'new' check (status in ('new','reviewed')),
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now()
+);
+
+-- Custo variável já incorrido pela MedScale, um evento por linha: uma chamada
+-- ao Claude, uma transcrição no Whisper, ou uma janela de 24h do WhatsApp que
+-- a MedScale paga à Meta (só quando bot_config.number_source = 'medscale').
+-- Não é previsão nem rateio — é o que já foi gasto. Alimenta /admin/costs.
+--
+-- account_id é NOT NULL e workspace_id é anulável de propósito: a Clara é
+-- configurada por account (bot_config.account_id é unique) e
+-- conversations.workspace_id fica NULL até o paciente indicar a unidade numa
+-- conta multi-unidade. Forçar uma unidade aqui seria inventar atribuição; o
+-- painel mostra esse custo num balde "sem unidade" explícito.
+create table public.cost_events (
+  id            uuid default uuid_generate_v4() primary key,
+  account_id    uuid references public.accounts(id)   on delete cascade not null,
+  workspace_id  uuid references public.workspaces(id) on delete set null,
+  provider      text not null check (provider in (
+                  'claude_agendamento',
+                  'claude_financeiro',
+                  'claude_soap',
+                  'whisper',
+                  'whatsapp_conversation'
+                )),
+  -- Id do modelo cobrado (ex: 'claude-sonnet-4-5', 'claude-opus-5',
+  -- 'whisper-1'). Null para whatsapp_conversation, que não tem modelo.
+  model         text,
+  input_tokens  int,
+  output_tokens int,
+  -- Unidade cobrada quando não são tokens: segundos de áudio no whisper,
+  -- 1 no whatsapp_conversation (uma janela de 24h).
+  quantity      numeric(12,2),
+  -- Custo em reais, congelado no momento do evento. É a unidade canônica: o
+  -- que a MedScale quer olhar é margem em R$, e a cotação do dia do gasto é a
+  -- correta para um custo já incorrido. O valor em USD e a cotação usada ficam
+  -- em metadata para auditoria.
+  cost_brl      numeric(12,4) not null default 0,
+  -- Origem do evento: conversation_id (bot e whatsapp), transcription_id
+  -- (whisper e soap). Sem FK: aponta para tabelas diferentes por provider, e
+  -- apagar a origem não deve apagar o custo já gasto.
+  related_id    uuid,
+  -- Só dado técnico (etapa do agente financeiro, cotação, custo em USD).
+  -- Nunca conteúdo de paciente — LGPD.
+  metadata      jsonb not null default '{}'::jsonb,
+  created_at    timestamptz not null default now()
 );
 
 -- ============================================================
@@ -980,6 +1025,14 @@ create unique index idx_finance_dismissals_unique
 -- Lookup do webhook do WhatsApp: phone_number_id recebido -> account/bot_config.
 create index idx_bot_config_phone_number_id  on public.bot_config(phone_number_id) where phone_number_id is not null;
 
+-- O painel de custo sempre corta por período; conta e unidade são os dois
+-- agrupamentos. O último serve a checagem da janela de 24h do WhatsApp, que
+-- busca o evento anterior da mesma conversa.
+create index idx_cost_events_account   on public.cost_events(account_id, created_at desc);
+create index idx_cost_events_workspace on public.cost_events(workspace_id, created_at desc);
+create index idx_cost_events_provider  on public.cost_events(provider, created_at desc);
+create index idx_cost_events_related   on public.cost_events(provider, related_id, created_at desc);
+
 -- ============================================================
 -- 10. TRIGGERS updated_at
 -- ============================================================
@@ -1522,6 +1575,7 @@ alter table public.finance_goals                 enable row level security;
 alter table public.finance_suggestion_dismissals enable row level security;
 alter table public.finance_suggestion_settings   enable row level security;
 alter table public.feedback               enable row level security;
+alter table public.cost_events            enable row level security;
 
 -- Accounts: membro lê o(s) próprio(s); admin do account edita
 create policy "accounts: members read" on public.accounts
@@ -1718,6 +1772,13 @@ create policy "finance_suggestion_settings: owner only" on public.finance_sugges
 -- (service role) acessa; sem policy tenant-facing.
 create policy "finance_sessions: service role only" on public.finance_sessions
   for all using (false);
+
+-- cost_events: custo é informação interna da MedScale sobre a própria margem.
+-- Nenhuma clínica vê a própria linha, nem a de outra — só admin interno lê. A
+-- escrita acontece exclusivamente via service_role (webhooks e jobs), que
+-- bypassa RLS; por isso não existe policy de insert para `authenticated`.
+create policy "cost_events: medscale admin read" on public.cost_events
+  for select using (public.is_medscale_admin());
 
 -- rate_limit_log: controle de rate limiting do webhook do WhatsApp — só o
 -- webhook (service role, que ignora RLS) acessa; deny-all para todo role

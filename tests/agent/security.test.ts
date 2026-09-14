@@ -21,6 +21,7 @@ const BASE_CONFIG: BotConfig = {
   isActive: true,
   phoneNumberId: 'pn-1',
   metaToken: 'enc:token',
+  numberSource: 'own',
 }
 
 const config = (over: Partial<BotConfig> = {}): BotConfig => ({ ...BASE_CONFIG, ...over })

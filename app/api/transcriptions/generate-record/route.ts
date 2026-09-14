@@ -29,7 +29,11 @@ export async function POST(req: NextRequest) {
   await supabase.from('transcriptions').update({ status: 'generating' }).eq('id', transcription_id)
 
   try {
-    const soapRecord = await generateSOAP(transcription.transcript_text)
+    const soapRecord = await generateSOAP(transcription.transcript_text, {
+      accountId: transcription.account_id,
+      workspaceId: transcription.workspace_id,
+      transcriptionId: transcription_id,
+    })
 
     await supabase
       .from('transcriptions')

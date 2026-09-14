@@ -1,8 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk'
 import type { FinanceEntryType } from './types'
 import type { FinanceCategoryTree } from './categories'
+import { recordClaudeCost, type CostContext } from '@/lib/costs/record'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+const MODEL = 'claude-sonnet-4-5'
 
 // Opções que o modelo pode escolher, a partir da árvore da conta (só
 // não-arquivadas, e só as da direção pedida). Cada linha é "Raiz" ou
@@ -32,19 +35,28 @@ export async function categorizeEntry(
   description: string,
   type: FinanceEntryType,
   direction: 'in' | 'out',
-  tree: FinanceCategoryTree
+  tree: FinanceCategoryTree,
+  costCtx: CostContext
 ): Promise<{ categoryName: string | null; subcategoryName: string | null }> {
   const options = buildCategorizePrompt(type, direction, tree)
   if (!options) return { categoryName: null, subcategoryName: null }
 
   const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5',
+    model: MODEL,
     max_tokens: 30,
     system:
       `Você categoriza lançamentos financeiros. Responda APENAS com uma linha EXATA da lista, ` +
       `sem pontuação extra. Se for uma subcategoria, use o formato "Categoria > Subcategoria".\n` +
       `Opções:\n${options}`,
     messages: [{ role: 'user', content: description }],
+  })
+
+  await recordClaudeCost({
+    ctx: costCtx,
+    provider: 'claude_financeiro',
+    model: MODEL,
+    usage: message.usage,
+    stage: 'categorize',
   })
 
   const raw = message.content[0].type === 'text' ? message.content[0].text.trim() : ''

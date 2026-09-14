@@ -8,7 +8,13 @@ vi.mock('@anthropic-ai/sdk', () => ({
   },
 }))
 
+// A captura de custo tem teste próprio (tests/costs/record.test.ts); aqui ela
+// só precisa não virar ruído no que estes testes medem, que é interpretação.
+vi.mock('@/lib/costs/record', () => ({ recordClaudeCost: vi.fn() }))
+
 import { interpretMessage } from '@/lib/finance/interpret'
+
+const COST_CTX = { accountId: 'acc1', workspaceId: null }
 
 const TREE: FinanceCategoryTree = {
   pf: [
@@ -70,7 +76,7 @@ describe('interpretMessage — direction', () => {
     createMock.mockResolvedValue(
       toolResponse({ lancamentos: [{ ...ITEM, descricao: 'Mercado', valor: 50, direcao: 'saida' }] })
     )
-    const intent = await interpretMessage('gastei 50 no mercado', '2026-09-04', TREE)
+    const intent = await interpretMessage('gastei 50 no mercado', '2026-09-04', TREE, COST_CTX)
     expect(intent).toMatchObject({ kind: 'entry' })
     if (intent.kind !== 'entry') throw new Error('esperava entry')
     expect(intent.entries).toHaveLength(1)
@@ -81,7 +87,7 @@ describe('interpretMessage — direction', () => {
     createMock.mockResolvedValue(
       toolResponse({ lancamentos: [{ ...ITEM, descricao: 'Mercado', valor: null, direcao: 'saida' }] })
     )
-    const intent = await interpretMessage('comprei umas coisas no mercado', '2026-09-04', TREE)
+    const intent = await interpretMessage('comprei umas coisas no mercado', '2026-09-04', TREE, COST_CTX)
     if (intent.kind !== 'entry') throw new Error('esperava entry')
     expect(intent.entries[0]).toMatchObject({ description: 'Mercado', amount: null })
   })
@@ -90,7 +96,7 @@ describe('interpretMessage — direction', () => {
     createMock.mockResolvedValue(
       toolResponse({ lancamentos: [{ ...ITEM, descricao: null, valor: null, direcao: 'saida' }] })
     )
-    const intent = await interpretMessage('comprei umas coisas', '2026-09-04', TREE)
+    const intent = await interpretMessage('comprei umas coisas', '2026-09-04', TREE, COST_CTX)
     expect(intent).toMatchObject({ kind: 'unknown' })
   })
 
@@ -98,7 +104,7 @@ describe('interpretMessage — direction', () => {
     createMock.mockResolvedValue(
       toolResponse({ lancamentos: [{ ...ITEM, descricao: 'Aluguel recebido', valor: 3000, direcao: 'entrada' }] })
     )
-    const intent = await interpretMessage('recebi 3000 de aluguel', '2026-09-04', TREE)
+    const intent = await interpretMessage('recebi 3000 de aluguel', '2026-09-04', TREE, COST_CTX)
     expect(intent).toMatchObject({ kind: 'entry' })
     if (intent.kind !== 'entry') throw new Error('esperava entry')
     expect(intent.entries[0]).toMatchObject({ direction: 'in', amount: 3000 })
@@ -108,7 +114,7 @@ describe('interpretMessage — direction', () => {
     createMock.mockResolvedValue(
       toolResponse({ lancamentos: [{ ...ITEM, descricao: 'Mercado', valor: 50, direcao: 'saida' }] })
     )
-    const intent = await interpretMessage('gastei 50 no mercado', '2026-09-04', TREE)
+    const intent = await interpretMessage('gastei 50 no mercado', '2026-09-04', TREE, COST_CTX)
     expect(intent).toMatchObject({ kind: 'entry' })
     if (intent.kind !== 'entry') throw new Error('esperava entry')
     expect(intent.entries[0]).toMatchObject({ direction: 'out', amount: 50 })
@@ -118,7 +124,7 @@ describe('interpretMessage — direction', () => {
     createMock.mockResolvedValue(
       toolResponse({ lancamentos: [{ ...ITEM, descricao: null, valor: 30, direcao: null }] })
     )
-    const intent = await interpretMessage('30 mercado', '2026-09-04', TREE)
+    const intent = await interpretMessage('30 mercado', '2026-09-04', TREE, COST_CTX)
     expect(intent).toMatchObject({ kind: 'entry' })
     if (intent.kind !== 'entry') throw new Error('esperava entry')
     expect(intent.entries[0]).toMatchObject({ direction: 'out' })
@@ -128,7 +134,7 @@ describe('interpretMessage — direction', () => {
     createMock.mockResolvedValue(
       toolResponse({ intencao: 'consulta', direcao: 'entrada', lancamentos: [] })
     )
-    const intent = await interpretMessage('quanto recebi esse mês', '2026-09-04', TREE)
+    const intent = await interpretMessage('quanto recebi esse mês', '2026-09-04', TREE, COST_CTX)
     expect(intent).toMatchObject({ kind: 'query', direction: 'in' })
   })
 
@@ -136,7 +142,7 @@ describe('interpretMessage — direction', () => {
     createMock.mockResolvedValue(
       toolResponse({ intencao: 'consulta', direcao: 'saida', lancamentos: [] })
     )
-    const intent = await interpretMessage('quanto gastei esse mês', '2026-09-04', TREE)
+    const intent = await interpretMessage('quanto gastei esse mês', '2026-09-04', TREE, COST_CTX)
     expect(intent).toMatchObject({ kind: 'query', direction: 'out' })
   })
 
@@ -146,7 +152,7 @@ describe('interpretMessage — direction', () => {
         intencao: 'confirmar_pagamento', direcao: 'entrada', paciente: 'João', lancamentos: [],
       })
     )
-    const intent = await interpretMessage('o João pagou a consulta', '2026-09-04', TREE)
+    const intent = await interpretMessage('o João pagou a consulta', '2026-09-04', TREE, COST_CTX)
     expect(intent).toEqual({ kind: 'confirm_payment', patient: 'João', time: null, method: null })
   })
 })
@@ -154,7 +160,7 @@ describe('interpretMessage — direction', () => {
 describe('interpretMessage — prompt do sistema', () => {
   it('lista categorias de despesa e receita separadas por pf/pj', async () => {
     createMock.mockResolvedValue(toolResponse({}))
-    await interpretMessage('recebi 3000 de aluguel', '2026-09-04', TREE)
+    await interpretMessage('recebi 3000 de aluguel', '2026-09-04', TREE, COST_CTX)
     const system = createMock.mock.calls[0][0].system as string
     expect(system).toContain('Categorias de despesa em pf: Alimentação')
     expect(system).toContain('Categorias de receita em pf: Salário / Pró-labore')
@@ -168,7 +174,7 @@ describe('interpretMessage — prompt do sistema', () => {
   // duplicando com o espelho do ciclo de receita.
   it('a guarda de "recebi da Ana" está no schema do item e nas regras', async () => {
     createMock.mockResolvedValue(toolResponse({}))
-    await interpretMessage('recebi 500 da consulta da Ana', '2026-09-04', TREE)
+    await interpretMessage('recebi 500 da consulta da Ana', '2026-09-04', TREE, COST_CTX)
     const call = createMock.mock.calls[0][0]
     const itemDirecao = call.tools[0].input_schema.properties.lancamentos.items.properties.direcao
       .description as string
@@ -182,7 +188,7 @@ describe('interpretMessage — prompt do sistema', () => {
 
   it('a ferramenta exige o campo direcao', async () => {
     createMock.mockResolvedValue(toolResponse({}))
-    await interpretMessage('recebi 3000 de aluguel', '2026-09-04', TREE)
+    await interpretMessage('recebi 3000 de aluguel', '2026-09-04', TREE, COST_CTX)
     const tool = createMock.mock.calls[0][0].tools[0]
     expect(tool.input_schema.required).toContain('direcao')
     expect(tool.input_schema.properties.direcao).toBeDefined()
@@ -199,14 +205,14 @@ describe('interpretMessage — múltiplos lançamentos', () => {
         ],
       })
     )
-    const intent = await interpretMessage('gastei 35 no ifood e 50 no uber', '2026-09-04', TREE)
+    const intent = await interpretMessage('gastei 35 no ifood e 50 no uber', '2026-09-04', TREE, COST_CTX)
     if (intent.kind !== 'entry') throw new Error('esperava entry')
     expect(intent.entries.map((e) => e.description)).toEqual(['iFood', 'Uber'])
   })
 
   it('prompt instrui um item por gasto e não manda usar desconhecido para vários', async () => {
     createMock.mockResolvedValue(toolResponse({}))
-    await interpretMessage('x', '2026-09-04', TREE)
+    await interpretMessage('x', '2026-09-04', TREE, COST_CTX)
     const system = createMock.mock.calls[0][0].system as string
     expect(system).toMatch(/um item .*para cada|mais de um lançamento/i)
     expect(system).not.toContain('use "desconhecido" — o registro é de um por vez')
@@ -220,14 +226,14 @@ describe('interpretMessage — PF/PJ ambíguo retorna null', () => {
         lancamentos: [{ tipo: null, descricao: 'aluguel', valor: 2600, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' }],
       })
     )
-    const intent = await interpretMessage('gastei 2600 no aluguel', '2026-09-04', TREE)
+    const intent = await interpretMessage('gastei 2600 no aluguel', '2026-09-04', TREE, COST_CTX)
     if (intent.kind !== 'entry') throw new Error('esperava entry')
     expect(intent.entries[0].type).toBeNull()
   })
 
   it('prompt tem os três buckets pf/pj/null e não tem o tiebreak clínico antigo', async () => {
     createMock.mockResolvedValue(toolResponse({}))
-    await interpretMessage('x', '2026-09-04', TREE)
+    await interpretMessage('x', '2026-09-04', TREE, COST_CTX)
     const system = createMock.mock.calls[0][0].system as string
     expect(system).toContain('genuinamente ambíguo')
     expect(system).toContain('NÃO chute')
@@ -242,7 +248,7 @@ describe('interpretMessage — valor faltando vira amount null', () => {
         lancamentos: [{ tipo: 'pf', descricao: 'almoço', valor: null, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' }],
       })
     )
-    const intent = await interpretMessage('paguei o almoço', '2026-09-04', TREE)
+    const intent = await interpretMessage('paguei o almoço', '2026-09-04', TREE, COST_CTX)
     if (intent.kind !== 'entry') throw new Error('esperava entry')
     expect(intent.entries[0]).toMatchObject({ description: 'almoço', amount: null })
   })
@@ -253,7 +259,7 @@ describe('interpretMessage — valor faltando vira amount null', () => {
         lancamentos: [{ tipo: 'pf', descricao: null, valor: null, categoria: null, subcategoria: null, unidade: null, direcao: 'saida' }],
       })
     )
-    const intent = await interpretMessage('gastei um dinheiro aí', '2026-09-04', TREE)
+    const intent = await interpretMessage('gastei um dinheiro aí', '2026-09-04', TREE, COST_CTX)
     expect(intent.kind).toBe('unknown')
   })
 
@@ -266,7 +272,7 @@ describe('interpretMessage — valor faltando vira amount null', () => {
         ],
       })
     )
-    const intent = await interpretMessage('35 no ifood e o estacionamento', '2026-09-04', TREE)
+    const intent = await interpretMessage('35 no ifood e o estacionamento', '2026-09-04', TREE, COST_CTX)
     if (intent.kind !== 'entry') throw new Error('esperava entry')
     expect(intent.entries.map((e) => [e.description, e.amount])).toEqual([['iFood', 35], ['estacionamento', null]])
   })

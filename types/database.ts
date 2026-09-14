@@ -25,6 +25,13 @@ export type RevenuePaymentMethod =
 export type RevenueSource = 'bot' | 'manual' | 'whatsapp_agent'
 export type AdChannel = 'instagram' | 'google' | 'facebook' | 'tiktok' | 'outro'
 export type NumberSource = 'own' | 'medscale'
+// Origem de um custo variável da MedScale (ver supabase/migration_costs.sql).
+export type CostProvider =
+  | 'claude_agendamento'
+  | 'claude_financeiro'
+  | 'claude_soap'
+  | 'whisper'
+  | 'whatsapp_conversation'
 export type OnboardingStep =
   | 'pending'
   | 'meta_app_created'
@@ -251,6 +258,41 @@ export interface Database {
           },
           {
             foreignKeyName: 'feedback_workspace_id_fkey'
+            columns: ['workspace_id']
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      cost_events: {
+        Row: {
+          id: string
+          account_id: string
+          workspace_id: string | null
+          provider: CostProvider
+          model: string | null
+          input_tokens: number | null
+          output_tokens: number | null
+          quantity: number | null
+          cost_brl: number
+          related_id: string | null
+          metadata: Record<string, unknown>
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['cost_events']['Row']> & {
+          account_id: string
+          provider: CostProvider
+        }
+        Update: Partial<Database['public']['Tables']['cost_events']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'cost_events_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'cost_events_workspace_id_fkey'
             columns: ['workspace_id']
             referencedRelation: 'workspaces'
             referencedColumns: ['id']

@@ -1,8 +1,11 @@
 import Anthropic from '@anthropic-ai/sdk'
 import { validateSOAPRecord, type SOAPRecord } from './types'
 import { detectInjectionAttempt } from '@/lib/bot/security'
+import { recordClaudeCost, type CostContext } from '@/lib/costs/record'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+const MODEL = 'claude-sonnet-4-5'
 
 const SYSTEM_PROMPT = `Você é um assistente médico especializado em documentação clínica brasileira.
 Receberá a transcrição de uma consulta médica e deve produzir um prontuário estruturado no formato SOAP.
@@ -67,9 +70,12 @@ function stripMarkdownFence(text: string): string {
   return fenced ? fenced[1] : trimmed
 }
 
-export async function generateSOAP(transcriptText: string): Promise<SOAPRecord> {
+export async function generateSOAP(
+  transcriptText: string,
+  costCtx: CostContext & { transcriptionId: string }
+): Promise<SOAPRecord> {
   const message = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5',
+    model: MODEL,
     max_tokens: 2048,
     system: SYSTEM_PROMPT,
     messages: [
@@ -81,6 +87,17 @@ export async function generateSOAP(transcriptText: string): Promise<SOAPRecord> 
       // direto o JSON em vez de abrir com um fence de markdown antes dele.
       { role: 'assistant', content: '{' },
     ],
+  })
+
+  // Antes de qualquer parse: o token já foi gasto mesmo que o JSON venha
+  // quebrado e a geração falhe logo abaixo. Registrar só no caminho feliz
+  // esconderia justamente o prontuário que custou e teve de ser refeito.
+  await recordClaudeCost({
+    ctx: { accountId: costCtx.accountId, workspaceId: costCtx.workspaceId },
+    provider: 'claude_soap',
+    model: MODEL,
+    usage: message.usage,
+    relatedId: costCtx.transcriptionId,
   })
 
   const completion = message.content[0].type === 'text' ? message.content[0].text : ''

@@ -1,0 +1,21 @@
+{
+  "ENABLE_TOOL_SEARCH": {
+    "original": "true",
+    "holders": [
+      {
+        "pid": 14996,
+        "start_src": null,
+        "start_time": null,
+        "port": null,
+        "inherited": false
+      },
+      {
+        "pid": 37136,
+        "start_src": null,
+        "start_time": null,
+        "port": null,
+        "inherited": true
+      }
+    ]
+  }
+}

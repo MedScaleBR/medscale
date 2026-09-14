@@ -100,7 +100,13 @@ describe('registrar receita', () => {
     const { categorizeEntry } = await import('@/lib/finance/categorize')
     await processFinancialMessage(PARAMS.patientPhone, '/pf+ Aluguel recebido 3000')
 
-    expect(categorizeEntry).toHaveBeenCalledWith('Aluguel recebido', 'pf', 'in', expect.anything())
+    expect(categorizeEntry).toHaveBeenCalledWith(
+      'Aluguel recebido',
+      'pf',
+      'in',
+      expect.anything(),
+      expect.objectContaining({ accountId: 'acc1' })
+    )
     const ins = state.supabase.callsTo('finance_entries', 'insert')[0]
     expect((ins.payload as Record<string, unknown>).direction).toBe('in')
     expect((ins.payload as Record<string, unknown>).category_id).toBe('sal')

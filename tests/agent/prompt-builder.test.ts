@@ -21,6 +21,7 @@ const BASE: BotConfig = {
   isActive: true,
   phoneNumberId: 'pn-1',
   metaToken: 'enc:token',
+  numberSource: 'own',
 }
 
 type Unit = Parameters<typeof buildDynamicSystemPrompt>[0]['units'][number]

@@ -4,6 +4,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { transcribeAudio } from '@/lib/transcriptions/whisper'
 import { trackTranscriptionCompleted, trackTranscriptionError } from '@/lib/analytics/posthog-server'
 import { notifyTranscriptionFailed } from '@/lib/transcriptions/notify-error'
+import { recordWhisperCost } from '@/lib/costs/record'
 
 export const maxDuration = 60
 
@@ -40,6 +41,15 @@ export async function POST(req: NextRequest) {
       .from('transcriptions')
       .update({ transcript_text: transcriptText, status: 'transcribed', retry_count: 0, error_message: null })
       .eq('id', transcription_id)
+
+    // O Whisper cobra por duração, então o custo só é conhecido aqui, depois
+    // de transcrever. Uma tentativa que falhou não gera linha: a OpenAI não
+    // cobra pelo áudio que não voltou transcrito.
+    await recordWhisperCost({
+      ctx: { accountId: transcription.account_id, workspaceId: transcription.workspace_id },
+      durationSeconds: transcription.duration_seconds ?? 0,
+      transcriptionId: transcription_id,
+    })
 
     await trackTranscriptionCompleted(transcription.recorded_by, {
       workspace_id: transcription.workspace_id,
