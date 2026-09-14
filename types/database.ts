@@ -1005,30 +1005,6 @@ export interface Database {
           },
         ]
       }
-      finance_agent_messages: {
-        Row: {
-          id: string
-          account_id: string | null
-          phone: string
-          direction: 'inbound' | 'outbound'
-          content: string
-          whatsapp_id: string | null
-          created_at: string
-        }
-        Insert: Partial<Database['public']['Tables']['finance_agent_messages']['Row']> & {
-          phone: string
-          content: string
-        }
-        Update: Partial<Database['public']['Tables']['finance_agent_messages']['Row']>
-        Relationships: [
-          {
-            foreignKeyName: 'finance_agent_messages_account_id_fkey'
-            columns: ['account_id']
-            referencedRelation: 'accounts'
-            referencedColumns: ['id']
-          },
-        ]
-      }
       finance_categories: {
         Row: {
           id: string
