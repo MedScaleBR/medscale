@@ -4,6 +4,7 @@ import { trackFinanceEntryCreatedViaWhatsApp } from '@/lib/analytics/posthog-ser
 import { parseCommand } from './parser'
 import { interpretMessage } from './interpret'
 import { categorizeEntry } from './categorize'
+import type { CostContext } from '@/lib/costs/record'
 import { ensureFinanceCategories } from './provision'
 import { getFinanceCategoryTree, resolveCategoryPair, type FinanceCategoryTree } from './categories'
 import {
@@ -218,6 +219,11 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
 
   const accountId = membership.account_id
 
+  // O agente financeiro é do owner e fala da conta inteira; unidade só existe
+  // quando o próprio fluxo resolve uma (consulta filtrada, lançamento com
+  // unidade). Sem isso o custo fica no balde da conta, que é o honesto.
+  const costCtx: CostContext = { accountId, workspaceId: null }
+
   // 2. Verificar feature flag
   const { data: account } = await supabase.from('accounts').select('modules').eq('id', accountId).single()
 
@@ -269,7 +275,8 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
   // 3. Entender a mensagem. Atalho com barra primeiro (instantâneo e sem
   // custo); só o que não for comando vai para o Claude interpretar.
   const shortcut = parseCommand(messageText)
-  const intent = shortcut.kind === 'unknown' ? await interpretMessage(messageText, today, categoryTree) : shortcut
+  const intent =
+    shortcut.kind === 'unknown' ? await interpretMessage(messageText, today, categoryTree, costCtx) : shortcut
 
   if (intent.kind === 'confirm_payment') {
     if (!revenueCycleActive) {
@@ -310,7 +317,7 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
   }
 
   if (intent.kind === 'smalltalk') {
-    await sendFinanceReply(senderPhone, await buildSmalltalkMessage(intent.raw))
+    await sendFinanceReply(senderPhone, await buildSmalltalkMessage(intent.raw, costCtx))
     return
   }
 
@@ -362,7 +369,7 @@ export async function processFinancialMessage(senderPhone: string, messageText: 
     }
     const entries = await getEntries(accountId, filters)
     const unitNames = Object.fromEntries(units.map((u) => [u.id, u.name]))
-    const response = await buildQueryMessage(entries, filters, unitNames)
+    const response = await buildQueryMessage(entries, filters, costCtx, unitNames)
     await sendFinanceReply(senderPhone, response)
     return
   }
@@ -408,7 +415,10 @@ async function resolveDraftCategory(ctx: EntryCtx, d: PendingDraft): Promise<voi
   if (d.type == null || d.categoryId !== undefined) return
   let pair = resolveCategoryPair(ctx.categoryTree, d.type, d.category, d.subcategory, d.direction)
   if (!pair.categoryId && d.description) {
-    const guess = await categorizeEntry(d.description, d.type, d.direction, ctx.categoryTree)
+    const guess = await categorizeEntry(d.description, d.type, d.direction, ctx.categoryTree, {
+      accountId: ctx.accountId,
+      workspaceId: d.workspaceId ?? null,
+    })
     pair = resolveCategoryPair(ctx.categoryTree, d.type, guess.categoryName, guess.subcategoryName, d.direction)
   }
   d.category = pair.categoryName
@@ -553,7 +563,10 @@ async function persistAndConfirm(
 
   if (saved.length === 1) {
     const total = await monthTotalFor(ctx.accountId, saved[0].type, saved[0].direction)
-    await sendFinanceReply(ctx.senderPhone, (await buildConfirmationMessage(saved[0], total)) + aviso)
+    await sendFinanceReply(
+      ctx.senderPhone,
+      (await buildConfirmationMessage(saved[0], total, { accountId: ctx.accountId })) + aviso
+    )
     return
   }
   await sendFinanceReply(

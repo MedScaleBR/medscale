@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import type { NumberSource } from '@/types/database'
 
 // Configuração da Clara — uma por account, vale para todas as unidades.
 // Campos que variam por unidade (endereço, horário, estacionamento, contato,
@@ -24,6 +25,10 @@ export interface BotConfig {
   // Conexão WhatsApp da account (número único).
   phoneNumberId: string | null
   metaToken: string | null // criptografado (lib/crypto.ts)
+  // Quem paga a Meta pela janela de 24h: 'own' = a clínica traz o App dela e
+  // paga direto; 'medscale' = número provisionado por nós, e a conversa entra
+  // no nosso custo variável (ver lib/costs/record.ts).
+  numberSource: NumberSource
 }
 
 // Contexto de uma unidade para a Clara — o que ela informa ao paciente e usa
@@ -75,6 +80,7 @@ export async function getBotConfig(accountId: string): Promise<BotConfig | null>
     isActive: data.is_active,
     phoneNumberId: data.phone_number_id,
     metaToken: data.meta_token,
+    numberSource: data.number_source,
   }
 
   configCache.set(accountId, { data: config, expiresAt: Date.now() + CACHE_TTL_MS })

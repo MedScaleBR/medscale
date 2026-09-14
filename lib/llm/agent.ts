@@ -24,6 +24,7 @@ import {
   trackWaitlistPatientAddedByBot,
 } from '@/lib/analytics/posthog-server'
 import type { Database } from '@/types/database'
+import { recordClaudeCost, recordWhatsappConversation } from '@/lib/costs/record'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -327,6 +328,17 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     is_first_message: (userMsgCount ?? 1) <= 1,
   })
 
+  // Janela de 24h da Meta. Só é custo NOSSO quando a MedScale provisionou o
+  // número — com o App próprio da clínica ('own'), quem paga a Meta é ela.
+  // Fica antes do short-circuit de bot_paused de propósito: a janela abre com
+  // a mensagem do paciente, mesmo que a Clara não responda nada.
+  if (botConfig.numberSource === 'medscale') {
+    await recordWhatsappConversation({
+      ctx: { accountId, workspaceId: conversation.workspace_id },
+      conversationId: conversation.id,
+    })
+  }
+
   // Bot pausado (intervenção manual ou handoff em andamento) — só registra.
   if (conversation.bot_paused) {
     console.log(`[handoff] conversa ${conversation.id} está bot_paused — mensagem só registrada, bot não responde`)
@@ -442,13 +454,24 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     )
   }
 
+  const BOT_MODEL = 'claude-sonnet-4-5'
   let responseText: string | null = null
   for (let attempt = 1; attempt <= 2 && responseText === null; attempt++) {
     const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-5',
+      model: BOT_MODEL,
       max_tokens: 1024,
       system: systemPrompt,
       messages: claudeMessages,
+    })
+
+    // Dentro do laço: a segunda tentativa é cobrada igual à primeira, e é
+    // justamente o retry repetido que denuncia bot mal configurado no painel.
+    await recordClaudeCost({
+      ctx: { accountId, workspaceId: conversation.workspace_id },
+      provider: 'claude_agendamento',
+      model: BOT_MODEL,
+      usage: response.usage,
+      relatedId: conversation.id,
     })
 
     if (response.content[0]?.type === 'text' && response.content[0].text.trim()) {

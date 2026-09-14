@@ -4,8 +4,11 @@ import type { InvestmentProjection } from './investments'
 import type { RevenuePaymentMethod } from '@/types/database'
 import { PAYMENT_METHOD_LABELS } from '@/lib/revenue/cycle'
 import type { AppointmentPaymentMatch } from './appointment-payment'
+import { recordClaudeCost, type CostContext } from '@/lib/costs/record'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
+
+const MODEL = 'claude-sonnet-4-5'
 
 const SYSTEM = `Você é um assistente financeiro pessoal para médicos, integrado via WhatsApp.
 Tom: direto, amigável, profissional. Sem markdown. Máximo 1 emoji por mensagem.
@@ -25,7 +28,11 @@ const SYSTEM_COM_TOTAL = `${SYSTEM}
 
 Sempre confirme o que foi registrado e mostre o total do mês na mesma resposta.`
 
-export async function buildConfirmationMessage(entry: FinanceEntry, monthTotal: number): Promise<string> {
+export async function buildConfirmationMessage(
+  entry: FinanceEntry,
+  monthTotal: number,
+  costCtx: CostContext
+): Promise<string> {
   const typeLabel = entry.type === 'pf' ? 'Pessoal (PF)' : 'Clínica (PJ)'
   const direcaoLabel = entry.direction === 'in' ? 'Receita' : 'Despesa'
   const desc = entry.description ?? 'Sem descrição'
@@ -43,10 +50,20 @@ Valor: ${valor}
 Total de ${direcaoLabel.toLowerCase()} em ${typeLabel} em ${mes}: ${total}`
 
   const msg = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5',
+    model: MODEL,
     max_tokens: 120,
     system: SYSTEM_COM_TOTAL,
     messages: [{ role: 'user', content: prompt }],
+  })
+
+  // O lançamento já existe aqui, então dá para amarrar o custo à unidade dele —
+  // é a atribuição mais precisa que o agente financeiro consegue.
+  await recordClaudeCost({
+    ctx: { accountId: costCtx.accountId, workspaceId: entry.workspace_id ?? costCtx.workspaceId ?? null },
+    provider: 'claude_financeiro',
+    model: MODEL,
+    usage: msg.usage,
+    stage: 'respond',
   })
 
   return msg.content[0].type === 'text' ? toWhatsApp(msg.content[0].text) : `✅ ${desc} ${valor} registrado.`
@@ -77,6 +94,7 @@ export interface QueryFilters {
 export async function buildQueryMessage(
   entries: FinanceEntry[],
   filters: QueryFilters,
+  costCtx: CostContext,
   unitNames: Record<string, string> = {}
 ): Promise<string> {
   const escopo = describeScope(filters)
@@ -105,10 +123,20 @@ Total: ${formatBRL(total)}
 Quantidade de lançamentos: ${entries.length}`
 
   const msg = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5',
+    model: MODEL,
     max_tokens: 400,
     system: SYSTEM_COM_TOTAL,
     messages: [{ role: 'user', content: prompt }],
+  })
+
+  // Consulta recortada por unidade é custo daquela unidade; consulta
+  // consolidada não é de nenhuma, e fica no balde da conta.
+  await recordClaudeCost({
+    ctx: { accountId: costCtx.accountId, workspaceId: filters.workspaceId ?? costCtx.workspaceId ?? null },
+    provider: 'claude_financeiro',
+    model: MODEL,
+    usage: msg.usage,
+    stage: 'respond',
   })
 
   return msg.content[0].type === 'text' ? toWhatsApp(msg.content[0].text) : `${escopo}: ${formatBRL(total)}`
@@ -123,9 +151,9 @@ export function buildNothingToUndoMessage(): string {
   return `Não há nenhum lançamento recente para apagar.`
 }
 
-export async function buildSmalltalkMessage(raw: string): Promise<string> {
+export async function buildSmalltalkMessage(raw: string, costCtx: CostContext): Promise<string> {
   const msg = await anthropic.messages.create({
-    model: 'claude-sonnet-4-5',
+    model: MODEL,
     max_tokens: 220,
     system: `${SYSTEM}
 
@@ -136,6 +164,14 @@ pessoais dele separados dos gastos da clínica, com um exemplo curto de cada um
 Feche mencionando que ele também pode perguntar quanto gastou.
 No máximo 5 linhas curtas.`,
     messages: [{ role: 'user', content: raw }],
+  })
+
+  await recordClaudeCost({
+    ctx: costCtx,
+    provider: 'claude_financeiro',
+    model: MODEL,
+    usage: msg.usage,
+    stage: 'respond',
   })
 
   return msg.content[0].type === 'text'

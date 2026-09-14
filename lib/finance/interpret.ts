@@ -7,6 +7,7 @@ import type {
   InvestmentRateType,
 } from './types'
 import type { FinanceCategoryTree } from './categories'
+import { recordClaudeCost, type CostContext } from '@/lib/costs/record'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -294,7 +295,8 @@ Patrimônio (reservas, investimentos, projeções e metas):
 export async function interpretMessage(
   messageText: string,
   today: string,
-  tree: FinanceCategoryTree
+  tree: FinanceCategoryTree,
+  costCtx: CostContext
 ): Promise<FinanceIntent> {
   const response = await anthropic.messages.create({
     model: MODEL,
@@ -305,6 +307,14 @@ export async function interpretMessage(
     // em texto e não sobra nada estruturado para executar.
     tool_choice: { type: 'tool', name: TOOL_NAME },
     messages: [{ role: 'user', content: messageText }],
+  })
+
+  await recordClaudeCost({
+    ctx: costCtx,
+    provider: 'claude_financeiro',
+    model: MODEL,
+    usage: response.usage,
+    stage: 'interpret',
   })
 
   const toolUse = response.content.find((block) => block.type === 'tool_use')

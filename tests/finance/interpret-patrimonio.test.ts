@@ -6,7 +6,11 @@ vi.mock('@anthropic-ai/sdk', () => ({
   default: class { messages = { create: createMock } },
 }))
 
+vi.mock('@/lib/costs/record', () => ({ recordClaudeCost: vi.fn() }))
+
 import { interpretMessage } from '@/lib/finance/interpret'
+
+const COST_CTX = { accountId: 'acc1', workspaceId: null }
 
 const TREE: FinanceCategoryTree = {
   pf: [
@@ -39,7 +43,7 @@ describe('interpretMessage — reservas', () => {
     createMock.mockResolvedValue(
       toolResponse({ intencao: 'guardar_reserva', reserva: 'emergência', valor: 500, tipo: 'pf' })
     )
-    const intent = await interpretMessage('guardei 500 na reserva de emergência', '2026-09-11', TREE)
+    const intent = await interpretMessage('guardei 500 na reserva de emergência', '2026-09-11', TREE, COST_CTX)
     expect(intent).toMatchObject({ kind: 'reserve_deposit', reserve: 'emergência', amount: 500, type: 'pf' })
   })
 
@@ -47,7 +51,7 @@ describe('interpretMessage — reservas', () => {
     createMock.mockResolvedValue(
       toolResponse({ intencao: 'retirar_reserva', reserva: 'viagem', valor: 300, tipo: 'pf' })
     )
-    const intent = await interpretMessage('tirei 300 da reserva de viagem', '2026-09-11', TREE)
+    const intent = await interpretMessage('tirei 300 da reserva de viagem', '2026-09-11', TREE, COST_CTX)
     expect(intent).toMatchObject({ kind: 'reserve_withdrawal', reserve: 'viagem', amount: 300 })
   })
 
@@ -55,21 +59,21 @@ describe('interpretMessage — reservas', () => {
     createMock.mockResolvedValue(
       toolResponse({ intencao: 'guardar_reserva', reserva: 'emergência', valor: null })
     )
-    const intent = await interpretMessage('guardei um dinheiro na reserva de emergência', '2026-09-11', TREE)
+    const intent = await interpretMessage('guardei um dinheiro na reserva de emergência', '2026-09-11', TREE, COST_CTX)
     expect(intent).toMatchObject({ kind: 'reserve_deposit', reserve: 'emergência', amount: null })
   })
 
   it('valor zero ou negativo não vira amount', async () => {
     createMock.mockResolvedValue(toolResponse({ intencao: 'guardar_reserva', reserva: 'x', valor: 0 }))
-    expect(await interpretMessage('guardei na reserva x', '2026-09-11', TREE)).toMatchObject({ amount: null })
+    expect(await interpretMessage('guardei na reserva x', '2026-09-11', TREE, COST_CTX)).toMatchObject({ amount: null })
 
     createMock.mockResolvedValue(toolResponse({ intencao: 'guardar_reserva', reserva: 'x', valor: -50 }))
-    expect(await interpretMessage('guardei na reserva x', '2026-09-11', TREE)).toMatchObject({ amount: null })
+    expect(await interpretMessage('guardei na reserva x', '2026-09-11', TREE, COST_CTX)).toMatchObject({ amount: null })
   })
 
   it('nome de reserva em branco vira null', async () => {
     createMock.mockResolvedValue(toolResponse({ intencao: 'guardar_reserva', reserva: '   ', valor: 100 }))
-    expect(await interpretMessage('guardei 100', '2026-09-11', TREE)).toMatchObject({ reserve: null })
+    expect(await interpretMessage('guardei 100', '2026-09-11', TREE, COST_CTX)).toMatchObject({ reserve: null })
   })
 })
 
@@ -81,7 +85,7 @@ describe('interpretMessage — investimentos', () => {
         valor: 1000, taxa_tipo: 'pct_cdi', taxa_valor: 110, tipo: 'pf',
       })
     )
-    const intent = await interpretMessage('investi 1000 no CDB do banco X, 110% do CDI', '2026-09-11', TREE)
+    const intent = await interpretMessage('investi 1000 no CDB do banco X, 110% do CDI', '2026-09-11', TREE, COST_CTX)
     expect(intent).toMatchObject({
       kind: 'investment', name: 'CDB Banco X', investmentType: 'renda_fixa',
       amount: 1000, rateType: 'pct_cdi', rateValue: 110,
@@ -96,7 +100,7 @@ describe('interpretMessage — investimentos', () => {
         valor: 1000, taxa_tipo: 'pct_cdi', taxa_valor: null,
       })
     )
-    const intent = await interpretMessage('investi 1000 no CDB atrelado ao CDI', '2026-09-11', TREE)
+    const intent = await interpretMessage('investi 1000 no CDB atrelado ao CDI', '2026-09-11', TREE, COST_CTX)
     expect(intent).toMatchObject({ kind: 'investment', rateType: null, rateValue: null })
   })
 
@@ -107,7 +111,7 @@ describe('interpretMessage — investimentos', () => {
         valor: 1000, taxa_tipo: null, taxa_valor: 110,
       })
     )
-    const intent = await interpretMessage('investi 1000 no CDB a 110', '2026-09-11', TREE)
+    const intent = await interpretMessage('investi 1000 no CDB a 110', '2026-09-11', TREE, COST_CTX)
     expect(intent).toMatchObject({ kind: 'investment', rateType: null, rateValue: null })
   })
 
@@ -115,7 +119,7 @@ describe('interpretMessage — investimentos', () => {
     createMock.mockResolvedValue(
       toolResponse({ intencao: 'investimento', investimento_nome: 'Tesouro', investimento_tipo: null, valor: 2000 })
     )
-    expect(await interpretMessage('coloquei 2000 no tesouro', '2026-09-11', TREE))
+    expect(await interpretMessage('coloquei 2000 no tesouro', '2026-09-11', TREE, COST_CTX))
       .toMatchObject({ kind: 'investment', investmentType: null, amount: 2000 })
   })
 })
@@ -125,7 +129,7 @@ describe('interpretMessage — projeções', () => {
     createMock.mockResolvedValue(
       toolResponse({ intencao: 'projecao', categoria: 'Mercado', valor: 800, mes: '2026-09', tipo: 'pf' })
     )
-    const intent = await interpretMessage('projeção de mercado esse mês é 800', '2026-09-11', TREE)
+    const intent = await interpretMessage('projeção de mercado esse mês é 800', '2026-09-11', TREE, COST_CTX)
     expect(intent).toMatchObject({
       kind: 'projection', category: 'Mercado', subcategory: null, amount: 800, month: '2026-09', type: 'pf',
     })
@@ -135,7 +139,7 @@ describe('interpretMessage — projeções', () => {
     createMock.mockResolvedValue(
       toolResponse({ intencao: 'projecao', categoria: 'Mercado', valor: 800, mes: 'setembro' })
     )
-    expect(await interpretMessage('projeção de mercado é 800', '2026-09-11', TREE))
+    expect(await interpretMessage('projeção de mercado é 800', '2026-09-11', TREE, COST_CTX))
       .toMatchObject({ kind: 'projection', month: null })
   })
 
@@ -143,7 +147,7 @@ describe('interpretMessage — projeções', () => {
     createMock.mockResolvedValue(
       toolResponse({ intencao: 'projecao', categoria: 'Mercado', subcategoria: 'Feira', valor: 300 })
     )
-    expect(await interpretMessage('projeção da feira é 300', '2026-09-11', TREE))
+    expect(await interpretMessage('projeção da feira é 300', '2026-09-11', TREE, COST_CTX))
       .toMatchObject({ kind: 'projection', category: 'Mercado', subcategory: 'Feira', amount: 300 })
   })
 })
@@ -151,13 +155,13 @@ describe('interpretMessage — projeções', () => {
 describe('interpretMessage — metas', () => {
   it('meta com nome vira goal_query com o nome falado', async () => {
     createMock.mockResolvedValue(toolResponse({ intencao: 'meta', meta: 'viagem' }))
-    expect(await interpretMessage('quanto falta pra minha meta de viagem?', '2026-09-11', TREE))
+    expect(await interpretMessage('quanto falta pra minha meta de viagem?', '2026-09-11', TREE, COST_CTX))
       .toEqual({ kind: 'goal_query', goal: 'viagem' })
   })
 
   it('meta sem nome vira goal_query com goal null (todas as metas)', async () => {
     createMock.mockResolvedValue(toolResponse({ intencao: 'meta', meta: null }))
-    expect(await interpretMessage('como estão minhas metas?', '2026-09-11', TREE))
+    expect(await interpretMessage('como estão minhas metas?', '2026-09-11', TREE, COST_CTX))
       .toEqual({ kind: 'goal_query', goal: null })
   })
 })
@@ -167,7 +171,7 @@ describe('interpretMessage — custo', () => {
     createMock.mockResolvedValue(
       toolResponse({ intencao: 'guardar_reserva', reserva: 'emergência', valor: 500 })
     )
-    await interpretMessage('guardei 500 na reserva de emergência', '2026-09-11', TREE)
+    await interpretMessage('guardei 500 na reserva de emergência', '2026-09-11', TREE, COST_CTX)
     expect(createMock).toHaveBeenCalledTimes(1)
     expect(createMock.mock.calls[0][0].tools[0].name).toBe('registrar_intencao')
   })

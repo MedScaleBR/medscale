@@ -11,6 +11,8 @@ import {
 } from '@/lib/finance/respond'
 import type { FinanceEntry } from '@/lib/finance/types'
 
+const COST_CTX = { accountId: 'acc1', workspaceId: null }
+
 // buildQueryMessage com entries:[] responde de forma determinística (sem
 // chamar o Claude) — dá pra testar o texto do escopo por direção sem mock
 // do SDK.
@@ -27,22 +29,22 @@ const baseFilters: QueryFilters = {
 
 describe('buildQueryMessage — escopo por direção', () => {
   it('despesa PF: "gastos pessoais (PF)"', async () => {
-    const msg = await buildQueryMessage([], { ...baseFilters, direction: 'out' })
+    const msg = await buildQueryMessage([], { ...baseFilters, direction: 'out' }, COST_CTX)
     expect(msg).toContain('gastos pessoais (PF)')
   })
 
   it('receita PF: "receitas pessoais (PF)"', async () => {
-    const msg = await buildQueryMessage([], { ...baseFilters, direction: 'in' })
+    const msg = await buildQueryMessage([], { ...baseFilters, direction: 'in' }, COST_CTX)
     expect(msg).toContain('receitas pessoais (PF)')
   })
 
   it('receita PJ: "receitas da clínica (PJ)"', async () => {
-    const msg = await buildQueryMessage([], { ...baseFilters, type: 'pj', direction: 'in' })
+    const msg = await buildQueryMessage([], { ...baseFilters, type: 'pj', direction: 'in' }, COST_CTX)
     expect(msg).toContain('receitas da clínica (PJ)')
   })
 
   it('sem type: "receitas" genérico', async () => {
-    const msg = await buildQueryMessage([], { ...baseFilters, type: null, direction: 'in' })
+    const msg = await buildQueryMessage([], { ...baseFilters, type: null, direction: 'in' }, COST_CTX)
     expect(msg).toContain('Não encontrei receitas')
   })
 })

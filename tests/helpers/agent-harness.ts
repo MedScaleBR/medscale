@@ -68,6 +68,7 @@ export const DEFAULT_BOT_CONFIG: BotConfig = {
   isActive: true,
   phoneNumberId: 'pn-1',
   metaToken: 'encrypted-token',
+  numberSource: 'own',
 }
 
 export const PATIENT = { id: 'p1', full_name: 'Paciente' }
