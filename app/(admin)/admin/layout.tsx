@@ -40,6 +40,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
             <Link href="/admin/conversas" className="hover:text-white">
               Conversas
             </Link>
+            <Link href="/admin/webhook-debug" className="hover:text-white">
+              Webhook debug
+            </Link>
             <Link href="/admin/feedback" className="hover:text-white">
               Feedback
             </Link>

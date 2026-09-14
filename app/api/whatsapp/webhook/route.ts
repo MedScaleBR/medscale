@@ -70,6 +70,24 @@ export async function POST(req: NextRequest) {
     validateMetaSignature(rawBody, signature, accountSecret) ||
     validateMetaSignature(rawBody, signature, financeSecret)
 
+  // TEMPORARIO: loga toda chamada recebida no webhook, mesmo as que falham a
+  // assinatura, pra depurar o phone_number_id que a Meta está de fato
+  // enviando. Ver migration_webhook_debug_log.sql — remover com a
+  // /admin/webhook-debug quando o diagnóstico terminar.
+  const debugMessage = value?.messages?.[0]
+  after(async () => {
+    const { error } = await supabase.from('webhook_debug_log').insert({
+      phone_number_id: phoneNumberId ?? null,
+      is_finance_number: isFinanceNumber,
+      signature_valid: validSignature,
+      account_id: botConn?.account_id ?? null,
+      message_type: debugMessage?.type ?? null,
+      content: debugMessage?.type === 'text' ? debugMessage.text?.body ?? null : null,
+      whatsapp_id: debugMessage?.id ?? null,
+    })
+    if (error) console.error('[webhook-debug-log] insert failed', error.message)
+  })
+
   if (!validSignature) {
     console.warn('[whatsapp webhook] signature validation failed', {
       phoneNumberId: phoneNumberId ?? null,

@@ -1029,6 +1029,31 @@ export interface Database {
           },
         ]
       }
+      webhook_debug_log: {
+        Row: {
+          id: string
+          phone_number_id: string | null
+          is_finance_number: boolean
+          signature_valid: boolean
+          account_id: string | null
+          message_type: string | null
+          content: string | null
+          whatsapp_id: string | null
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['webhook_debug_log']['Row']> & {
+          signature_valid: boolean
+        }
+        Update: Partial<Database['public']['Tables']['webhook_debug_log']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'webhook_debug_log_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       finance_categories: {
         Row: {
           id: string
