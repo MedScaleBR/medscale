@@ -104,7 +104,9 @@ export async function POST(req: NextRequest) {
     }
 
     after(() =>
-      processFinancialMessage(from, text ?? '').catch((err) => console.error('processFinancialMessage failed', err))
+      processFinancialMessage(from, text ?? '', message.id).catch((err) =>
+        console.error('processFinancialMessage failed', err)
+      )
     )
     return NextResponse.json({ status: 'ok' })
   }
