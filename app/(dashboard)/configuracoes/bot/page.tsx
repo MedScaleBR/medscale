@@ -69,7 +69,6 @@ export default async function BotConfigPage() {
         handoffHoursByWorkspace={handoffHoursByWorkspace}
         activeWorkspaceId={session.workspaceId}
         doctorPhone={profile?.phone ?? ''}
-        hasMetaAppSecret={Boolean(botConfig?.meta_app_secret)}
         initialHandoffPushEnabled={membership?.handoff_push_enabled ?? false}
       />
     </div>

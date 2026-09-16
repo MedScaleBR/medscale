@@ -6,12 +6,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Switch } from '@/components/ui/switch'
-import { Separator } from '@/components/ui/separator'
 import { TagInput } from './TagInput'
 import { FaqInput, type FaqItem } from './FaqInput'
 import { BotPreview } from './BotPreview'
-import { BotStatusBadge } from './BotStatusBadge'
-import { BotOnboarding } from './BotOnboarding'
 import { WorkspaceBotFields, type WorkspaceBotRow } from './WorkspaceBotFields'
 import { PushToggle } from '@/components/push/PushToggle'
 import { BOT_NAME } from '@/lib/bot/constants'
@@ -44,7 +41,6 @@ interface BotConfigFormProps {
   handoffHoursByWorkspace: Record<string, HandoffHour[]>
   activeWorkspaceId: string
   doctorPhone: string
-  hasMetaAppSecret: boolean
   initialHandoffPushEnabled: boolean
 }
 
@@ -76,7 +72,6 @@ export function BotConfigForm({
   handoffHoursByWorkspace,
   activeWorkspaceId,
   doctorPhone,
-  hasMetaAppSecret,
   initialHandoffPushEnabled,
 }: BotConfigFormProps) {
   const [config, setConfig] = useState(initialConfig)
@@ -84,25 +79,8 @@ export function BotConfigForm({
   const [testNumber, setTestNumber] = useState(doctorPhone)
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
-  const [disconnecting, setDisconnecting] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // Workspaces que conectaram antes do App Secret existir ficam com is_active
-  // = true mas sem esse campo — reabrimos o wizard pra elas até serem
-  // reverificadas, senão não haveria como preencher o campo que falta.
-  const [metaAppSecretMissing, setMetaAppSecretMissing] = useState(!hasMetaAppSecret)
-  const [showConnectionEditor, setShowConnectionEditor] = useState(false)
-
-  const refreshConfig = async () => {
-    const res = await fetch('/api/bot/config')
-    if (res.ok) {
-      const data = await res.json()
-      setConfig(data)
-      setForm(toFormState(data))
-    }
-    setMetaAppSecretMissing(false)
-    setShowConnectionEditor(false)
-  }
 
   const handleSave = async () => {
     setSaving(true)
@@ -126,29 +104,6 @@ export function BotConfigForm({
     }
   }
 
-  const handleDisconnect = async () => {
-    if (
-      !confirm(
-        'Desconectar o número do WhatsApp? O bot para de responder os pacientes na hora e as credenciais da Meta são apagadas. ' +
-          'A personalidade, FAQ e horários ficam salvos, mas você terá que refazer a conexão para reativar.'
-      )
-    )
-      return
-    setDisconnecting(true)
-    setError(null)
-    try {
-      const res = await fetch('/api/bot/onboarding/disconnect', { method: 'DELETE' })
-      if (!res.ok) {
-        const data = await res.json().catch(() => null)
-        setError(data?.error ?? 'Não foi possível desconectar.')
-        return
-      }
-      await refreshConfig()
-    } finally {
-      setDisconnecting(false)
-    }
-  }
-
   const handleTestMessage = async () => {
     if (!testNumber) return
     setTesting(true)
@@ -163,67 +118,8 @@ export function BotConfigForm({
     }
   }
 
-  const needsOnboarding = !config?.is_active || (config?.number_source === 'own' && metaAppSecretMissing) || showConnectionEditor
-
   return (
     <div className="space-y-6">
-      <div className="rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
-        <div className="mb-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-medium text-gray-900">Conexão WhatsApp</h2>
-            <p className="mt-0.5 text-xs text-gray-400">Número usado pelo bot para conversar com os pacientes.</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="rounded-full border-none bg-[var(--cyan-10)] px-2.5 py-1 text-[10px] font-semibold tracking-wide text-[var(--cyan-dark)]">
-              ATENDIMENTO 24/7
-            </span>
-            <BotStatusBadge isActive={config?.is_active ?? false} onboardingStep={config?.onboarding_step ?? 'pending'} />
-            {!needsOnboarding && config?.number_source === 'own' && (
-              <button
-                onClick={() => setShowConnectionEditor(true)}
-                className="text-xs text-gray-400 hover:text-gray-600 hover:underline"
-              >
-                Editar conexão
-              </button>
-            )}
-            {!needsOnboarding && config?.is_active && (
-              <button
-                onClick={handleDisconnect}
-                disabled={disconnecting}
-                className="text-xs text-red-400 hover:text-red-600 hover:underline disabled:opacity-50"
-              >
-                {disconnecting ? 'Desconectando...' : 'Desconectar'}
-              </button>
-            )}
-          </div>
-        </div>
-        {needsOnboarding && (
-          <>
-            <Separator className="my-4" />
-            {config?.is_active && metaAppSecretMissing && (
-              <p className="mb-4 rounded-lg bg-amber-50 p-3 text-xs text-amber-700">
-                Sua conexão foi feita antes de exigirmos o App Secret, necessário para validar as mensagens
-                recebidas — sem ele o bot não responde. Preencha os campos abaixo (o Phone Number ID e token
-                podem ser os mesmos de antes) para reconectar.
-              </p>
-            )}
-            <BotOnboarding
-              initialNumberSource={config?.number_source ?? null}
-              webhookVerifyToken={config?.webhook_verify_token ?? null}
-              onVerified={refreshConfig}
-            />
-            {showConnectionEditor && !metaAppSecretMissing && (
-              <button
-                onClick={() => setShowConnectionEditor(false)}
-                className="mt-3 text-xs text-gray-400 hover:text-gray-600"
-              >
-                Cancelar edição
-              </button>
-            )}
-          </>
-        )}
-      </div>
-
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-[2fr_1fr]">
         <div className="columns-1 gap-6 md:columns-2">
           <section className="mb-6 break-inside-avoid rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">

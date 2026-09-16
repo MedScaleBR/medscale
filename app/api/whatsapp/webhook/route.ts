@@ -10,9 +10,10 @@ import { sendWhatsAppMessage } from '@/lib/whatsapp/send'
 
 // Valida a assinatura HMAC enviada pela Meta para garantir que o payload
 // realmente veio da Meta e não foi forjado. `secret` é o App Secret do App
-// Meta que assinou a mensagem — o App único da MedScale (META_APP_SECRET)
-// para o fluxo compartilhado, ou o App Secret próprio da account no fluxo
-// "número próprio" (cada App só assina com o seu próprio secret).
+// Meta que assinou a mensagem — sob o modelo de Tech Provider existe um único
+// App Meta da MedScale (META_APP_SECRET), que assina todas as mensagens de
+// todas as accounts, mais o App Secret próprio do número financeiro
+// (FINANCE_META_APP_SECRET).
 function validateMetaSignature(payload: string, signature: string, secret: string | null | undefined): boolean {
   if (!signature || !secret) return false
   const expected = crypto.createHmac('sha256', secret).update(payload).digest('hex')
@@ -44,19 +45,15 @@ export async function POST(req: NextRequest) {
   const isFinanceNumber = Boolean(phoneNumberId && phoneNumberId === process.env.FINANCE_PHONE_NUMBER_ID)
 
   // Encontrar a account pelo phone_number_id (a conexão WhatsApp da Clara vive
-  // em bot_config, uma por account). Precisamos disso já aqui (antes de
-  // aceitar/rejeitar a assinatura) porque, no fluxo "número próprio", a
-  // assinatura só é validável com o App Secret daquela account.
+  // em bot_config, uma por account).
   const { data: botConn } =
     phoneNumberId && !isFinanceNumber
       ? await supabase
           .from('bot_config')
-          .select('account_id, meta_app_secret, phone_number_id, meta_token')
+          .select('account_id, phone_number_id, meta_token')
           .eq('phone_number_id', phoneNumberId)
           .maybeSingle()
       : { data: null }
-
-  const accountSecret = botConn?.meta_app_secret ? decryptToken(botConn.meta_app_secret) : null
 
   // O número financeiro pode estar num App Meta diferente do App único da
   // MedScale. Como ele não tem account, o secret vem de env var própria,
@@ -67,7 +64,6 @@ export async function POST(req: NextRequest) {
 
   const validSignature =
     validateMetaSignature(rawBody, signature, process.env.META_APP_SECRET) ||
-    validateMetaSignature(rawBody, signature, accountSecret) ||
     validateMetaSignature(rawBody, signature, financeSecret)
 
   if (!validSignature) {
@@ -75,7 +71,6 @@ export async function POST(req: NextRequest) {
       phoneNumberId: phoneNumberId ?? null,
       isFinanceNumber,
       accountId: botConn?.account_id ?? null,
-      hasAccountSecret: Boolean(accountSecret),
       hasGlobalSecret: Boolean(process.env.META_APP_SECRET),
       hasFinanceSecret: Boolean(process.env.FINANCE_META_APP_SECRET),
       hasSignatureHeader: Boolean(signature),
