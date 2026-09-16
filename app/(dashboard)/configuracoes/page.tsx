@@ -1,13 +1,14 @@
 import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { SettingsClient } from '@/components/configuracoes/SettingsClient'
+import { isEmbeddedSignupConfigured } from '@/lib/meta/embedded-signup'
 
 export default async function ConfiguracoesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ google?: string }>
+  searchParams: Promise<{ google?: string; whatsapp?: string; meta_ads?: string }>
 }) {
-  const { google: googleStatus } = await searchParams
+  const { google: googleStatus, whatsapp: whatsappStatus } = await searchParams
   const session = await resolveActiveSession()
   if (!session) return null
 
@@ -16,7 +17,7 @@ export default async function ConfiguracoesPage({
     supabase.from('profiles').select('*').eq('id', session.userId).single(),
     supabase
       .from('bot_config')
-      .select('whatsapp_number, meta_token')
+      .select('whatsapp_number, meta_token, phone_number_id')
       .eq('account_id', session.accountId)
       .maybeSingle(),
     supabase.from('google_tokens').select('google_email').eq('account_id', session.accountId).maybeSingle(),
@@ -45,6 +46,16 @@ export default async function ConfiguracoesPage({
           Não foi possível conectar o Google Agenda. Tente novamente.
         </div>
       )}
+      {whatsappStatus === 'connected' && (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-700">
+          WhatsApp conectado com sucesso.
+        </div>
+      )}
+      {whatsappStatus === 'error' && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">
+          Não foi possível conectar o WhatsApp. Tente novamente.
+        </div>
+      )}
 
       <SettingsClient
         initialProfile={{
@@ -54,9 +65,12 @@ export default async function ConfiguracoesPage({
           phone: profile?.phone ?? null,
         }}
         workspace={{
-          hasMetaToken: Boolean(botConfig?.meta_token),
           whatsappNumber: botConfig?.whatsapp_number ?? null,
         }}
+        whatsappConnected={Boolean(botConfig?.meta_token && botConfig?.phone_number_id)}
+        metaAppId={process.env.NEXT_PUBLIC_META_APP_ID ?? ''}
+        metaConfigId={process.env.META_ES_CONFIG_ID ?? ''}
+        metaConfigured={isEmbeddedSignupConfigured()}
         google={{ connected: Boolean(googleToken), email: googleToken?.google_email ?? null }}
         workspaceCalendars={(workspaces ?? []).map((w) => ({
           id: w.id,
