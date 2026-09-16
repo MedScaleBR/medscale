@@ -117,9 +117,20 @@ alter table public.ad_campaigns add constraint ad_campaigns_source_check
   check (source in ('manual','meta_sync'));
 
 -- Torna o upsert do sync idempotente sem impor unicidade às linhas manuais.
+--
+-- O índice NÃO é parcial, e isso é deliberado. O Postgres só infere um índice
+-- parcial no `on conflict (colunas)` se a mesma cláusula `where` for repetida no
+-- alvo do conflito, e o PostgREST/supabase-js só sabe mandar `on_conflict=<colunas>`
+-- (sem predicado): com `where source = 'meta_sync'` aqui, todo upsert do sync
+-- morreria com 42P10 e o sync gravaria zero linhas em silêncio.
+--
+-- As linhas manuais continuam livres de unicidade de graça: só o sync escreve
+-- `external_campaign_id` (a rota POST /api/campaigns insere lista de campos fixa,
+-- sem esse campo), então elas têm sempre NULL ali — e, com o padrão NULLS
+-- DISTINCT, nenhuma linha com NULL na chave colide com outra.
+drop index if exists public.uq_ad_campaigns_meta_sync;
 create unique index if not exists uq_ad_campaigns_meta_sync
-  on public.ad_campaigns (workspace_id, external_campaign_id, period_start)
-  where source = 'meta_sync';
+  on public.ad_campaigns (workspace_id, external_campaign_id, period_start);
 
 -- 4. bot_config: dados do Embedded Signup; App Secret por account sai de cena
 alter table public.bot_config add column if not exists waba_id text;
@@ -1680,7 +1691,7 @@ git commit -m "feat(configuracoes): login com Facebook e mapeamento unidade -> c
 
 - [ ] **Step 0: Fazer o mock do Supabase gravar as opções do `upsert`**
 
-Hoje `tests/helpers/supabase-mock.ts:132` é `upsert: (payload: unknown) => makeBuilder(table, 'upsert', payload)` — o segundo argumento (`{ onConflict }`) é **descartado**. Sem ele, o teste de idempotência não tem como provar que o conflito declarado é o do índice parcial. Mudança aditiva, não quebra suíte existente:
+Hoje `tests/helpers/supabase-mock.ts:132` é `upsert: (payload: unknown) => makeBuilder(table, 'upsert', payload)` — o segundo argumento (`{ onConflict }`) é **descartado**. Sem ele, o teste de idempotência não tem como provar que o conflito declarado é o do índice de unicidade do sync. Mudança aditiva, não quebra suíte existente:
 
 ```ts
 // em RecordedCall
@@ -1820,7 +1831,7 @@ describe('syncAdsForAccount', () => {
 
     const calls = g.supabase.callsTo('ad_campaigns', 'upsert')
     expect(calls).toHaveLength(2)
-    // O upsert precisa declarar o conflito no índice parcial do sync, senão
+    // O upsert precisa declarar o conflito no índice de unicidade do sync, senão
     // a segunda rodada insere linha nova em vez de atualizar.
     expect(calls.every((c) => (c.options as { onConflict?: string })?.onConflict === 'workspace_id,external_campaign_id,period_start')).toBe(true)
   })
@@ -1879,7 +1890,7 @@ import { graphFetch, MetaApiError } from './graph'
 
 // A Meta reescreve números retroativamente por atribuição, então re-sincronizar
 // a última semana é o que mantém o histórico honesto. O upsert é idempotente
-// (índice parcial uq_ad_campaigns_meta_sync), logo reprocessar é barato.
+// (índice uq_ad_campaigns_meta_sync), logo reprocessar é barato.
 export const SYNC_WINDOW_DAYS = 7
 
 export const LEAD_ACTION_TYPES = [

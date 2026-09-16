@@ -5,7 +5,7 @@ import { graphFetch, MetaApiError } from './graph'
 
 // A Meta reescreve números retroativamente por atribuição, então re-sincronizar
 // a última semana é o que mantém o histórico honesto. O upsert é idempotente
-// (índice parcial uq_ad_campaigns_meta_sync), logo reprocessar é barato.
+// (índice uq_ad_campaigns_meta_sync), logo reprocessar é barato.
 export const SYNC_WINDOW_DAYS = 7
 
 export const LEAD_ACTION_TYPES = [

@@ -48,9 +48,20 @@ alter table public.ad_campaigns add constraint ad_campaigns_source_check
   check (source in ('manual','meta_sync'));
 
 -- Torna o upsert do sync idempotente sem impor unicidade às linhas manuais.
+--
+-- O índice NÃO é parcial, e isso é deliberado. O Postgres só infere um índice
+-- parcial no `on conflict (colunas)` se a mesma cláusula `where` for repetida no
+-- alvo do conflito, e o PostgREST/supabase-js só sabe mandar `on_conflict=<colunas>`
+-- (sem predicado): com `where source = 'meta_sync'` aqui, todo upsert do sync
+-- morreria com 42P10 e o sync gravaria zero linhas em silêncio.
+--
+-- As linhas manuais continuam livres de unicidade de graça: só o sync escreve
+-- `external_campaign_id` (a rota POST /api/campaigns insere lista de campos fixa,
+-- sem esse campo), então elas têm sempre NULL ali — e, com o padrão NULLS
+-- DISTINCT, nenhuma linha com NULL na chave colide com outra.
+drop index if exists public.uq_ad_campaigns_meta_sync;
 create unique index if not exists uq_ad_campaigns_meta_sync
-  on public.ad_campaigns (workspace_id, external_campaign_id, period_start)
-  where source = 'meta_sync';
+  on public.ad_campaigns (workspace_id, external_campaign_id, period_start);
 
 -- 4. bot_config: dados do Embedded Signup; App Secret por account sai de cena
 alter table public.bot_config add column if not exists waba_id text;

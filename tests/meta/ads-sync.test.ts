@@ -124,7 +124,7 @@ describe('syncAdsForAccount', () => {
 
     const calls = g.supabase.callsTo('ad_campaigns', 'upsert')
     expect(calls).toHaveLength(2)
-    // O upsert precisa declarar o conflito no índice parcial do sync, senão
+    // O upsert precisa declarar o conflito no índice de unicidade do sync, senão
     // a segunda rodada insere linha nova em vez de atualizar.
     expect(calls.every((c) => (c.options as { onConflict?: string })?.onConflict === 'workspace_id,external_campaign_id,period_start')).toBe(true)
   })
