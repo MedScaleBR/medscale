@@ -30,7 +30,9 @@ export async function GET(req: NextRequest) {
 
   res.cookies.set(NONCE_COOKIE, `${session.accountId}:${randomUUID()}`, {
     httpOnly: true,
-    secure: true,
+    // Igual ao COOKIE_OPTS de lib/session/actions.ts: em produção o cookie é
+    // secure; em dev seria impossível testar o fluxo por http://localhost.
+    secure: process.env.NODE_ENV === 'production',
     sameSite: 'lax',
     path: NONCE_COOKIE_PATH,
     maxAge: NONCE_MAX_AGE_SECONDS,

@@ -25,7 +25,7 @@ beforeEach(() => {
 })
 
 describe('GET /api/meta/ads/connect', () => {
-  it('redireciona pro Facebook e grava um cookie de nonce httpOnly/secure/sameSite=lax de uso único', async () => {
+  it('redireciona pro Facebook e grava um cookie de nonce httpOnly/sameSite=lax de uso único', async () => {
     const res = await GET(req())
 
     expect(res.headers.get('location')).toBe('https://www.facebook.com/v21.0/dialog/oauth?state=acc1')
@@ -34,10 +34,21 @@ describe('GET /api/meta/ads/connect', () => {
     // Valor = `${accountId}:${nonce}` (URL-encoded: ':' vira %3A) — ver callback/route.ts.
     expect(setCookie).toMatch(/^meta_ads_oauth_nonce=acc1%3A[^;]+/)
     expect(setCookie).toMatch(/HttpOnly/i)
-    expect(setCookie).toMatch(/Secure/i)
     expect(setCookie).toMatch(/SameSite=lax/i)
     expect(setCookie).toMatch(/Path=\/api\/meta\/ads/)
     expect(setCookie).toMatch(/Max-Age=600\b/)
+  })
+
+  it('marca o cookie como Secure em produção e não em dev', async () => {
+    // `secure: true` fixo impediria exercitar o fluxo por http://localhost, então
+    // o flag segue o COOKIE_OPTS de lib/session/actions.ts e depende do ambiente.
+    const dev = await GET(req())
+    expect(dev.headers.get('set-cookie') ?? '').not.toMatch(/Secure/i)
+
+    vi.stubEnv('NODE_ENV', 'production')
+    const prod = await GET(req())
+    expect(prod.headers.get('set-cookie') ?? '').toMatch(/Secure/i)
+    vi.unstubAllEnvs()
   })
 
   it('member recebe 403 e não redireciona nem grava cookie', async () => {
