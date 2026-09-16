@@ -89,7 +89,7 @@ alter table public.meta_ads_connections enable row level security;
 
 drop policy if exists meta_ads_connections_select on public.meta_ads_connections;
 create policy meta_ads_connections_select on public.meta_ads_connections
-  for select using (account_id in (select public.my_account_ids()));
+  for select using (account_id = any(public.my_account_ids()));
 
 -- 2. Mapeamento unidade -> conta de anúncio
 create table if not exists public.workspace_ad_accounts (
@@ -106,7 +106,7 @@ alter table public.workspace_ad_accounts enable row level security;
 
 drop policy if exists workspace_ad_accounts_select on public.workspace_ad_accounts;
 create policy workspace_ad_accounts_select on public.workspace_ad_accounts
-  for select using (account_id in (select public.my_account_ids()));
+  for select using (account_id = any(public.my_account_ids()));
 
 -- 3. ad_campaigns: separar o que veio do sync do que foi digitado à mão
 alter table public.ad_campaigns add column if not exists source text not null default 'manual';
