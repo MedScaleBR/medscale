@@ -1638,6 +1638,7 @@ git commit -m "feat(configuracoes): login com Facebook e mapeamento unidade -> c
 
 **Files:**
 - Create: `lib/meta/ads-sync.ts`
+- Modify: `tests/helpers/supabase-mock.ts` (gravar as opções do `upsert` — ver Step 0)
 - Test: `tests/meta/ads-sync.test.ts`
 
 **Interfaces:**
@@ -1647,6 +1648,31 @@ git commit -m "feat(configuracoes): login com Facebook e mapeamento unidade -> c
   - `extractLeads(actions?: { action_type: string; value: string }[]): number`
   - `syncAdsForAccount(accountId: string, opts?: { days?: number }): Promise<{ synced: number; skipped: 'no_token' | 'token_expired' | null }>`
   - `SYNC_WINDOW_DAYS = 7`
+
+- [ ] **Step 0: Fazer o mock do Supabase gravar as opções do `upsert`**
+
+Hoje `tests/helpers/supabase-mock.ts:132` é `upsert: (payload: unknown) => makeBuilder(table, 'upsert', payload)` — o segundo argumento (`{ onConflict }`) é **descartado**. Sem ele, o teste de idempotência não tem como provar que o conflito declarado é o do índice parcial. Mudança aditiva, não quebra suíte existente:
+
+```ts
+// em RecordedCall
+  /** opções de insert/update/upsert, ex: { onConflict: 'a,b' } */
+  options?: unknown
+```
+
+```ts
+// na fábrica do builder
+  function makeBuilder(table: string, op: RecordedCall['op'], payload?: unknown, options?: unknown) {
+    const call: RecordedCall = { table, op, payload, options, filters: [] }
+```
+
+```ts
+// no objeto devolvido por from()
+        insert: (payload: unknown, options?: unknown) => makeBuilder(table, 'insert', payload, options),
+        update: (payload: unknown, options?: unknown) => makeBuilder(table, 'update', payload, options),
+        upsert: (payload: unknown, options?: unknown) => makeBuilder(table, 'upsert', payload, options),
+```
+
+Run: `npm test` — a suíte inteira deve continuar passando antes de você seguir.
 
 - [ ] **Step 1: Escrever os testes**
 
@@ -1767,7 +1793,7 @@ describe('syncAdsForAccount', () => {
     expect(calls).toHaveLength(2)
     // O upsert precisa declarar o conflito no índice parcial do sync, senão
     // a segunda rodada insere linha nova em vez de atualizar.
-    expect(calls.every((c) => c.filters.some(([op, arg]) => op === 'onConflict' && arg === 'workspace_id,external_campaign_id,period_start'))).toBe(true)
+    expect(calls.every((c) => (c.options as { onConflict?: string })?.onConflict === 'workspace_id,external_campaign_id,period_start')).toBe(true)
   })
 
   it('nunca escreve em linhas manuais (só upsert com source meta_sync)', async () => {
@@ -1930,7 +1956,7 @@ export async function syncAdsForAccount(
 }
 ```
 
-Se o helper de mock registrar `onConflict` de outra forma (ele está na lista `CHAIN_METHODS` de `tests/helpers/supabase-mock.ts`), ajuste a asserção do teste de idempotência ao formato real — o que importa é provar que o conflito declarado é o do índice parcial.
+O `onConflict` vai como segundo argumento do `.upsert()`, que é exatamente o que o Step 0 fez o mock gravar.
 
 - [ ] **Step 4: Rodar e ver passar**
 
