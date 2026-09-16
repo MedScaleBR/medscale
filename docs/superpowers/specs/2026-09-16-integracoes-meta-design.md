@@ -1,7 +1,7 @@
 # Integrações Meta: Embedded Signup do WhatsApp e Login com Facebook (Ads)
 
 Data: 2026-09-16
-Status: design aprovado (aguardando revisão do spec)
+Status: implementado (plano: docs/superpowers/plans/2026-09-16-integracoes-meta.md)
 
 Escopo: dois botões em `/configuracoes` — **"Conectar WhatsApp"**, que passa a ser a
 **única** forma de conectar o número da Clara (via Embedded Signup da Meta), e
