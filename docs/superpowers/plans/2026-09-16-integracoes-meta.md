@@ -1377,6 +1377,31 @@ git commit -m "feat(meta): OAuth do Facebook Ads com token longo"
 - Consumes: `getAdsAuthUrl`, `exchangeAdsCodeAndSave` (Task 7)
 - Produces: `GET /api/meta/ads/connect` (302), `GET /api/meta/ads/callback` (302 para `/configuracoes?meta_ads=connected|error`), `DELETE /api/meta/ads/disconnect`
 
+**Emenda (review da Task 7) — nonce anti-CSRF, obrigatório:**
+
+O `state` do OAuth é o `accountId` puro. Checar só "a sessão é membro do
+`accountId` do `state`" **não** fecha o buraco: o atacante consente no Facebook
+dele, pega um `code` válido, monta
+`/api/meta/ads/callback?code=<code do atacante>&state=<accountId da vítima>` e
+faz a vítima logada abrir o link. A sessão da vítima é legítima para aquele
+`accountId`, a checagem passa, e o token do **atacante** fica gravado na conta
+da vítima — login-CSRF clássico. (O mesmo buraco existe hoje em
+`app/api/google/callback/route.ts`; precedente não é absolvição.)
+
+Portanto, além da checagem de sessão/membership:
+
+- `GET /api/meta/ads/connect` gera um valor aleatório imprevisível de uso único
+  (`crypto.randomUUID()` serve) e o grava em cookie `httpOnly`, `secure`,
+  `sameSite: 'lax'`, `path: '/api/meta/ads'`, com vida curta (10 min), antes de
+  redirecionar para `getAdsAuthUrl`.
+- `GET /api/meta/ads/callback` lê o cookie, compara com o valor esperado e
+  **apaga o cookie** antes de qualquer troca de código. Se estiver ausente ou
+  divergente, redireciona para `/configuracoes?meta_ads=error` **sem** chamar
+  `exchangeAdsCodeAndSave`.
+- O teste do callback ganha um caso: sessão válida + `accountId` válido +
+  `code` válido, mas cookie ausente/divergente ⇒ `exchangeAdsCodeAndSave`
+  **não** é chamado e a resposta é o 302 de erro.
+
 - [ ] **Step 1: Escrever o teste do callback**
 
 Crie `tests/meta/ads-callback.test.ts`:
