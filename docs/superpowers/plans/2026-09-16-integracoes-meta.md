@@ -985,6 +985,10 @@ interface Props {
   configId: string
 }
 
+// Allowlist exata: `endsWith('facebook.com')` aceitaria `evilfacebook.com`, que
+// qualquer um registra, e o forjador passaria waba_id/phone_number_id nossos.
+const ORIGENS_META = ['https://www.facebook.com', 'https://web.facebook.com']
+
 export function WhatsAppConnectButton({ isConnected, whatsappNumber, isConfigured, appId, configId }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -994,7 +998,7 @@ export function WhatsAppConnectButton({ isConnected, whatsappNumber, isConfigure
   // o callback do FB.login traz só o `code`. Precisamos dos dois lados.
   useEffect(() => {
     const onMessage = (event: MessageEvent) => {
-      if (!event.origin.endsWith('facebook.com')) return
+      if (!ORIGENS_META.includes(event.origin)) return
       try {
         const data = JSON.parse(event.data)
         if (data.type !== 'WA_EMBEDDED_SIGNUP') return
