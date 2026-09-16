@@ -8,12 +8,19 @@ export default async function ConfiguracoesPage({
 }: {
   searchParams: Promise<{ google?: string; whatsapp?: string; meta_ads?: string }>
 }) {
-  const { google: googleStatus, whatsapp: whatsappStatus } = await searchParams
+  const { google: googleStatus, whatsapp: whatsappStatus, meta_ads: metaAdsStatus } = await searchParams
   const session = await resolveActiveSession()
   if (!session) return null
 
   const supabase = await createClient()
-  const [{ data: profile }, { data: botConfig }, { data: googleToken }, { data: workspaces }] = await Promise.all([
+  const [
+    { data: profile },
+    { data: botConfig },
+    { data: googleToken },
+    { data: workspaces },
+    { data: adsConnection },
+    { data: adAccountMaps },
+  ] = await Promise.all([
     supabase.from('profiles').select('*').eq('id', session.userId).single(),
     supabase
       .from('bot_config')
@@ -27,7 +34,18 @@ export default async function ConfiguracoesPage({
       .eq('account_id', session.accountId)
       .eq('is_active', true)
       .order('display_order'),
+    supabase
+      .from('meta_ads_connections')
+      .select('fb_user_id, is_valid, token_expires_at')
+      .eq('account_id', session.accountId)
+      .maybeSingle(),
+    supabase
+      .from('workspace_ad_accounts')
+      .select('workspace_id, ad_account_id, ad_account_name')
+      .eq('account_id', session.accountId),
   ])
+
+  const adAccountByWorkspace = new Map((adAccountMaps ?? []).map((m) => [m.workspace_id, m.ad_account_id]))
 
   return (
     <div className="space-y-6">
@@ -56,6 +74,16 @@ export default async function ConfiguracoesPage({
           Não foi possível conectar o WhatsApp. Tente novamente.
         </div>
       )}
+      {metaAdsStatus === 'connected' && (
+        <div className="rounded-lg border border-green-200 bg-green-50 px-4 py-2.5 text-sm text-green-700">
+          Facebook conectado com sucesso.
+        </div>
+      )}
+      {metaAdsStatus === 'error' && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-2.5 text-sm text-red-600">
+          Não foi possível conectar o Facebook. Tente novamente.
+        </div>
+      )}
 
       <SettingsClient
         initialProfile={{
@@ -77,6 +105,18 @@ export default async function ConfiguracoesPage({
           name: w.name,
           gcalCalendarId: w.gcal_calendar_id,
         }))}
+        metaAds={{
+          connected: Boolean(adsConnection),
+          // A expiração em si é detectada no uso (getValidAdsToken em
+          // /api/meta/ads/accounts), que marca is_valid=false via
+          // markAdsConnectionInvalid — aqui só refletimos essa flag.
+          isValid: Boolean(adsConnection?.is_valid),
+          workspaces: (workspaces ?? []).map((w) => ({
+            id: w.id,
+            name: w.name,
+            adAccountId: adAccountByWorkspace.get(w.id) ?? null,
+          })),
+        }}
         isOwner={session.role === 'owner'}
         canManageIntegrations={session.role === 'owner' || session.role === 'admin'}
         showRevenueCycle={session.userModules.includes('revenue_cycle')}

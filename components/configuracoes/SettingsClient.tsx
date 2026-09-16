@@ -10,6 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import { GoogleConnectButton } from './GoogleConnectButton'
 import { MetaIntegrationsCard } from './MetaIntegrationsCard'
 import { WorkspaceCalendarMap, type WorkspaceCalendarRow } from './WorkspaceCalendarMap'
+import type { AdAccountMapRow } from './AdAccountMap'
 
 interface SettingsClientProps {
   initialProfile: {
@@ -28,6 +29,12 @@ interface SettingsClientProps {
   metaConfigured: boolean
   google: { connected: boolean; email: string | null }
   workspaceCalendars: WorkspaceCalendarRow[]
+  metaAds: {
+    connected: boolean
+    /** false quando o token expirou/foi revogado (Meta respondeu 190). */
+    isValid: boolean
+    workspaces: AdAccountMapRow[]
+  }
   isOwner: boolean
   /** owner ou admin — pode configurar a Clara e a conexão do Google Calendar. */
   canManageIntegrations: boolean
@@ -43,6 +50,7 @@ export function SettingsClient({
   metaConfigured,
   google,
   workspaceCalendars,
+  metaAds,
   isOwner,
   canManageIntegrations,
   showRevenueCycle,
@@ -125,6 +133,7 @@ export function SettingsClient({
           appId: metaAppId,
           configId: metaConfigId,
         }}
+        ads={metaAds}
       />
 
       <Link
