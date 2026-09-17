@@ -18,7 +18,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { Plus } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Plus, RefreshCw } from 'lucide-react'
 import type { Database, AdChannel } from '@/types/database'
 
 type Campaign = Database['public']['Tables']['ad_campaigns']['Row']
@@ -47,8 +48,31 @@ export function CampaignsClient({ initialCampaigns }: { initialCampaigns: Campai
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
 
   const formatBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+
+  const handleSync = async () => {
+    setSyncing(true)
+    setSyncError(null)
+    try {
+      const res = await fetch('/api/meta/ads/sync', { method: 'POST' })
+      const json = await res.json()
+      if (!res.ok) {
+        setSyncError(json.error ?? 'Não foi possível sincronizar.')
+        return
+      }
+      const listRes = await fetch('/api/campaigns')
+      if (listRes.ok) {
+        setCampaigns(await listRes.json())
+      }
+    } catch {
+      setSyncError('Não foi possível sincronizar.')
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   const handleCreate = async () => {
     if (!form.channel || !form.period_start || !form.period_end) return
@@ -78,7 +102,12 @@ export function CampaignsClient({ initialCampaigns }: { initialCampaigns: Campai
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
+      <div className="flex items-center justify-end gap-3">
+        {syncError && <p className="text-xs text-red-500">{syncError}</p>}
+        <Button variant="outline" onClick={handleSync} disabled={syncing} className="gap-2">
+          <RefreshCw className={`h-4 w-4 ${syncing ? 'animate-spin' : ''}`} />
+          {syncing ? 'Atualizando...' : 'Atualizar agora'}
+        </Button>
         <Button
           onClick={() => setOpen(true)}
           className="gap-2 bg-[var(--cyan)] text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
@@ -110,6 +139,11 @@ export function CampaignsClient({ initialCampaigns }: { initialCampaigns: Campai
                   <td className="px-5 py-3 font-medium text-gray-900">
                     {CHANNEL_LABEL[c.channel]}
                     {c.campaign_name ? <span className="ml-1 text-gray-400">· {c.campaign_name}</span> : null}
+                    {c.source === 'meta_sync' && (
+                      <Badge className="ml-2 border-none bg-[var(--cyan-10)] align-middle text-[var(--cyan-dark)]">
+                        sincronizado
+                      </Badge>
+                    )}
                   </td>
                   <td className="px-5 py-3 text-gray-600">
                     {new Date(c.period_start).toLocaleDateString('pt-BR')} – {new Date(c.period_end).toLocaleDateString('pt-BR')}

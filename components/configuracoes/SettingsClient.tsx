@@ -6,10 +6,11 @@ import { ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { GoogleConnectButton } from './GoogleConnectButton'
+import { MetaIntegrationsCard } from './MetaIntegrationsCard'
 import { WorkspaceCalendarMap, type WorkspaceCalendarRow } from './WorkspaceCalendarMap'
+import type { AdAccountMapRow } from './AdAccountMap'
 
 interface SettingsClientProps {
   initialProfile: {
@@ -19,11 +20,21 @@ interface SettingsClientProps {
     phone: string | null
   }
   workspace: {
-    hasMetaToken: boolean
     whatsappNumber: string | null
   }
+  whatsappConnected: boolean
+  metaAppId: string
+  metaConfigId: string
+  /** false quando faltam NEXT_PUBLIC_META_APP_ID / config do Embedded Signup */
+  metaConfigured: boolean
   google: { connected: boolean; email: string | null }
   workspaceCalendars: WorkspaceCalendarRow[]
+  metaAds: {
+    connected: boolean
+    /** false quando o token expirou/foi revogado (Meta respondeu 190). */
+    isValid: boolean
+    workspaces: AdAccountMapRow[]
+  }
   isOwner: boolean
   /** owner ou admin — pode configurar a Clara e a conexão do Google Calendar. */
   canManageIntegrations: boolean
@@ -33,8 +44,13 @@ interface SettingsClientProps {
 export function SettingsClient({
   initialProfile,
   workspace,
+  whatsappConnected,
+  metaAppId,
+  metaConfigId,
+  metaConfigured,
   google,
   workspaceCalendars,
+  metaAds,
   isOwner,
   canManageIntegrations,
   showRevenueCycle,
@@ -109,6 +125,17 @@ export function SettingsClient({
 
       {canManageIntegrations && (
       <>
+      <MetaIntegrationsCard
+        whatsapp={{
+          connected: whatsappConnected,
+          number: workspace.whatsappNumber,
+          configured: metaConfigured,
+          appId: metaAppId,
+          configId: metaConfigId,
+        }}
+        ads={metaAds}
+      />
+
       <Link
         href="/configuracoes/bot"
         className="flex items-center justify-between rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)] transition-colors hover:border-[var(--cyan)]"
@@ -116,16 +143,10 @@ export function SettingsClient({
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-sm font-medium text-gray-900">Configurações da Clara (Chatbot)</h2>
-            {workspace.hasMetaToken ? (
-              <Badge className="border-none bg-green-50 text-green-700">
-                Conectado{workspace.whatsappNumber ? ` — ${workspace.whatsappNumber}` : ''}
-              </Badge>
-            ) : (
-              <Badge className="border-none bg-[var(--navy-06)] text-[var(--navy)]">Não configurado</Badge>
-            )}
+            <span className="text-xs font-normal text-gray-400">Personalidade e FAQ</span>
           </div>
           <p className="mt-0.5 text-xs text-gray-400">
-            Conexão com a Meta, endereço, contatos, convênios, preços, políticas, tom de voz e transferência para humano.
+            Endereço, contatos, convênios, preços, políticas, tom de voz e transferência para humano.
           </p>
         </div>
         <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />

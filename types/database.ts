@@ -24,6 +24,7 @@ export type RevenuePaymentMethod =
   | 'outro'
 export type RevenueSource = 'bot' | 'manual' | 'whatsapp_agent'
 export type AdChannel = 'instagram' | 'google' | 'facebook' | 'tiktok' | 'outro'
+export type AdCampaignSource = 'manual' | 'meta_sync'
 export type NumberSource = 'own' | 'medscale'
 // Origem de um custo variável da MedScale (ver supabase/migration_costs.sql).
 export type CostProvider =
@@ -712,6 +713,8 @@ export interface Database {
           impressions: number
           clicks: number
           leads: number
+          source: AdCampaignSource
+          external_campaign_id: string | null
           created_at: string
         }
         Insert: Partial<Database['public']['Tables']['ad_campaigns']['Row']> & {
@@ -757,7 +760,8 @@ export interface Database {
           whatsapp_number: string | null
           phone_number_id: string | null
           meta_token: string | null
-          meta_app_secret: string | null
+          waba_id: string | null
+          whatsapp_pin: string | null
           number_source: NumberSource
           onboarding_step: OnboardingStep
           webhook_verify_token: string
@@ -803,6 +807,60 @@ export interface Database {
             foreignKeyName: 'google_tokens_account_id_fkey'
             columns: ['account_id']
             referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      meta_ads_connections: {
+        Row: {
+          id: string
+          // Uma conexão do Facebook Ads por account (o mapeamento
+          // unidade -> conta de anúncio fica em workspace_ad_accounts).
+          account_id: string
+          fb_user_id: string
+          access_token: string
+          token_expires_at: string | null
+          scopes: string[]
+          connected_by: string | null
+          is_valid: boolean
+          connected_at: string
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['meta_ads_connections']['Row']> & {
+          account_id: string
+          fb_user_id: string
+          access_token: string
+        }
+        Update: Partial<Database['public']['Tables']['meta_ads_connections']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'meta_ads_connections_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      workspace_ad_accounts: {
+        Row: {
+          id: string
+          workspace_id: string
+          account_id: string
+          ad_account_id: string
+          ad_account_name: string | null
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['workspace_ad_accounts']['Row']> & {
+          workspace_id: string
+          account_id: string
+          ad_account_id: string
+        }
+        Update: Partial<Database['public']['Tables']['workspace_ad_accounts']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'workspace_ad_accounts_workspace_id_fkey'
+            columns: ['workspace_id']
+            referencedRelation: 'workspaces'
             referencedColumns: ['id']
           },
         ]

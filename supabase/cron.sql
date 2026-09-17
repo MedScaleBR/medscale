@@ -181,6 +181,26 @@ select cron.schedule(
   $$
 );
 
+-- META-ADS-SYNC: puxa insights de campanhas do Facebook Ads (workspace_ad_accounts)
+-- pra ad_campaigns, uma conta por vez — ver lib/meta/ads-sync.ts. Idempotente
+-- (índice uq_ad_campaigns_meta_sync), roda 1x/dia às 6h30; conexão com token
+-- expirado é pulada e marcada inválida, as demais seguem normalmente. Só afeta
+-- accounts que conectaram o Facebook em /configuracoes.
+select cron.schedule(
+  'meta-ads-sync',
+  '30 6 * * *',
+  $$
+    select net.http_post(
+      url     := 'https://app.medscalebr.com/api/cron/meta-ads-sync',
+      headers := jsonb_build_object(
+        'Content-Type',  'application/json',
+        'Authorization', 'Bearer ' || public.cron_secret()
+      ),
+      body    := '{}'::jsonb
+    );
+  $$
+);
+
 -- ============================================================
 -- 3. VERIFICAÇÃO
 -- ============================================================

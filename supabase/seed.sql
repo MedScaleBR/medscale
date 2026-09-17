@@ -54,7 +54,7 @@ begin
 
   -- Bot config (uma por account) ---------------------------------------
   -- is_active fica false/pending de propósito: sem um meta_token real em
-  -- bot_config (só a conexão de verdade via /api/bot/onboarding/verify-meta
+  -- bot_config (só a conexão de verdade via /api/whatsapp/embedded-signup
   -- seta os dois juntos), marcar como ativo aqui deixaria essa tela e a de
   -- Configurações divergentes (uma diz "ativo", a outra "não configurado")
   -- e esconderia o wizard de conexão por trás de "bot já ativo".

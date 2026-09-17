@@ -16,6 +16,8 @@ export interface RecordedCall {
   op: 'select' | 'insert' | 'update' | 'upsert' | 'delete'
   /** payload de insert/update/upsert */
   payload?: unknown
+  /** opções de insert/update/upsert, ex: { onConflict: 'a,b' } */
+  options?: unknown
   /** filtros aplicados, na ordem: ['eq', 'workspace_id', 'w1'] */
   filters: Array<[string, ...unknown[]]>
 }
@@ -74,8 +76,8 @@ export function createSupabaseMock(config: SupabaseMockConfig = {}): SupabaseMoc
     return responder
   }
 
-  function makeBuilder(table: string, op: RecordedCall['op'], payload?: unknown) {
-    const call: RecordedCall = { table, op, payload, filters: [] }
+  function makeBuilder(table: string, op: RecordedCall['op'], payload?: unknown, options?: unknown) {
+    const call: RecordedCall = { table, op, payload, options, filters: [] }
     calls.push(call)
 
     const settle = () => {
@@ -127,9 +129,9 @@ export function createSupabaseMock(config: SupabaseMockConfig = {}): SupabaseMoc
           ;(b.select as (...a: unknown[]) => unknown)(...args)
           return b
         },
-        insert: (payload: unknown) => makeBuilder(table, 'insert', payload),
-        update: (payload: unknown) => makeBuilder(table, 'update', payload),
-        upsert: (payload: unknown) => makeBuilder(table, 'upsert', payload),
+        insert: (payload: unknown, options?: unknown) => makeBuilder(table, 'insert', payload, options),
+        update: (payload: unknown, options?: unknown) => makeBuilder(table, 'update', payload, options),
+        upsert: (payload: unknown, options?: unknown) => makeBuilder(table, 'upsert', payload, options),
         delete: () => makeBuilder(table, 'delete'),
       }),
       storage: { from: vi.fn(() => storage) },
