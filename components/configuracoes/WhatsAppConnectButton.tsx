@@ -124,7 +124,11 @@ export function WhatsAppConnectButton({ isConnected, whatsappNumber, isConfigure
           config_id: configId,
           response_type: 'code',
           override_default_response_type: true,
-          extras: { sessionInfoVersion: '3' },
+          // featureType habilita o Coexistence: o cliente conecta o número que já
+          // usa no app do WhatsApp Business em vez de ser obrigado a migrar para
+          // um número novo. Sem isso a tela de seleção de WABA nunca oferece a
+          // opção "conectar conta existente do WhatsApp Business app".
+          extras: { sessionInfoVersion: '3', featureType: 'whatsapp_business_app_onboarding' },
         }
       )
     } catch (err) {
