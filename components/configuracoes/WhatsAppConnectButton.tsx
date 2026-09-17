@@ -78,38 +78,47 @@ export function WhatsAppConnectButton({ isConnected, whatsappNumber, isConfigure
     setError(null)
     sessionInfo.current = {}
     cancelled.current = false
+    const finishSignup = async (response: { authResponse?: { code?: string } }) => {
+      const code = response.authResponse?.code
+      const { waba_id, phone_number_id } = sessionInfo.current
+      if (!code || !waba_id || !phone_number_id) {
+        // Desistência é silenciosa; qualquer outro caminho sem dados é
+        // falha real (popup bloqueado, fluxo interrompido) e precisa
+        // aparecer — foi o que escondeu esse bug até agora.
+        if (!cancelled.current) {
+          setError(
+            'A conexão não foi concluída. Se nenhuma janela da Meta abriu, libere os popups deste site no navegador e tente de novo.'
+          )
+        }
+        setLoading(false)
+        return
+      }
+      const res = await fetch('/api/whatsapp/embedded-signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code, waba_id, phone_number_id }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        setError(json.error ?? 'Não foi possível concluir a conexão.')
+        setLoading(false)
+        return
+      }
+      // Navegação de página inteira: precisa recarregar os dados do servidor
+      // (workspace.whatsappNumber, whatsappConnected) que vêm por props do page.tsx.
+      // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+      window.location.href = '/configuracoes?whatsapp=connected'
+    }
     try {
       window.FB.login(
-        async (response) => {
-          const code = response.authResponse?.code
-          const { waba_id, phone_number_id } = sessionInfo.current
-          if (!code || !waba_id || !phone_number_id) {
-            // Desistência é silenciosa; qualquer outro caminho sem dados é
-            // falha real (popup bloqueado, fluxo interrompido) e precisa
-            // aparecer — foi o que escondeu esse bug até agora.
-            if (!cancelled.current) {
-              setError(
-                'A conexão não foi concluída. Se nenhuma janela da Meta abriu, libere os popups deste site no navegador e tente de novo.'
-              )
-            }
+        // O SDK valida o tipo do callback e rejeita async function
+        // ("Expression is of type asyncfunction, not function"), dentro de uma
+        // promise — sem stack útil e sem erro na tela. Tem que ser função comum.
+        (response) => {
+          finishSignup(response).catch((err: unknown) => {
+            setError(err instanceof Error ? err.message : 'Falha ao concluir a conexão.')
             setLoading(false)
-            return
-          }
-          const res = await fetch('/api/whatsapp/embedded-signup', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code, waba_id, phone_number_id }),
           })
-          const json = await res.json()
-          if (!res.ok) {
-            setError(json.error ?? 'Não foi possível concluir a conexão.')
-            setLoading(false)
-            return
-          }
-          // Navegação de página inteira: precisa recarregar os dados do servidor
-          // (workspace.whatsappNumber, whatsappConnected) que vêm por props do page.tsx.
-          // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-          window.location.href = '/configuracoes?whatsapp=connected'
         },
         {
           config_id: configId,
