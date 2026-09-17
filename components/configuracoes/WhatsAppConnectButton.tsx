@@ -3,13 +3,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
-
-declare global {
-  interface Window {
-    FB?: { init: (opts: Record<string, unknown>) => void; login: (cb: (r: { authResponse?: { code?: string } }) => void, opts: Record<string, unknown>) => void }
-    fbAsyncInit?: () => void
-  }
-}
+import { loadFbSdk } from '@/lib/meta/fb-sdk'
 
 interface Props {
   isConnected: boolean
@@ -28,6 +22,9 @@ export function WhatsAppConnectButton({ isConnected, whatsappNumber, isConfigure
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const sessionInfo = useRef<{ waba_id?: string; phone_number_id?: string }>({})
+  // Distingue desistência do usuário de popup que nunca abriu: sem isso as duas
+  // terminam no mesmo callback sem `code` e o botão fica mudo.
+  const cancelled = useRef(false)
 
   // O popup do Embedded Signup devolve WABA e Phone Number ID por postMessage —
   // o callback do FB.login traz só o `code`. Precisamos dos dois lados.
@@ -38,7 +35,10 @@ export function WhatsAppConnectButton({ isConnected, whatsappNumber, isConfigure
         const data = JSON.parse(event.data)
         if (data.type !== 'WA_EMBEDDED_SIGNUP') return
         if (data.event === 'FINISH') sessionInfo.current = data.data ?? {}
-        if (data.event === 'CANCEL') setLoading(false)
+        if (data.event === 'CANCEL') {
+          cancelled.current = true
+          setLoading(false)
+        }
         if (data.event === 'ERROR') {
           setError(data.data?.error_message ?? 'A Meta interrompeu a conexão.')
           setLoading(false)
@@ -51,33 +51,49 @@ export function WhatsAppConnectButton({ isConnected, whatsappNumber, isConfigure
     return () => window.removeEventListener('message', onMessage)
   }, [])
 
-  const loadSdk = () =>
-    new Promise<void>((resolve, reject) => {
-      if (window.FB) return resolve()
-      const script = document.createElement('script')
-      script.src = 'https://connect.facebook.net/pt_BR/sdk.js'
-      script.async = true
-      script.onload = () => {
-        window.FB?.init({ appId, autoLogAppEvents: true, xfbml: false, version: 'v22.0' })
-        resolve()
-      }
-      script.onerror = () => reject(new Error('Não foi possível carregar o SDK do Facebook.'))
-      document.body.appendChild(script)
-    })
+  // Carrega o SDK antes de qualquer clique. Dentro do handler o download
+  // consumiria a ativação do gesto e o Chrome bloquearia o popup em silêncio.
+  const [sdkReady, setSdkReady] = useState(false)
+  useEffect(() => {
+    if (!isConfigured || isConnected) return
+    let ativo = true
+    loadFbSdk(appId)
+      .then(() => {
+        if (ativo) setSdkReady(true)
+      })
+      .catch((err: unknown) => {
+        if (ativo) setError(err instanceof Error ? err.message : 'Falha ao carregar o SDK do Facebook.')
+      })
+    return () => {
+      ativo = false
+    }
+  }, [isConfigured, isConnected, appId])
 
-  const handleConnect = async () => {
+  const handleConnect = () => {
+    if (!window.FB) {
+      setError('O SDK do Facebook ainda não carregou. Aguarde um instante e tente de novo.')
+      return
+    }
     setLoading(true)
     setError(null)
     sessionInfo.current = {}
+    cancelled.current = false
     try {
-      await loadSdk()
-      window.FB!.login(
+      window.FB.login(
         async (response) => {
           const code = response.authResponse?.code
           const { waba_id, phone_number_id } = sessionInfo.current
           if (!code || !waba_id || !phone_number_id) {
+            // Desistência é silenciosa; qualquer outro caminho sem dados é
+            // falha real (popup bloqueado, fluxo interrompido) e precisa
+            // aparecer — foi o que escondeu esse bug até agora.
+            if (!cancelled.current) {
+              setError(
+                'A conexão não foi concluída. Se nenhuma janela da Meta abriu, libere os popups deste site no navegador e tente de novo.'
+              )
+            }
             setLoading(false)
-            return // usuário fechou o popup — não é erro
+            return
           }
           const res = await fetch('/api/whatsapp/embedded-signup', {
             method: 'POST',
@@ -138,10 +154,16 @@ export function WhatsAppConnectButton({ isConnected, whatsappNumber, isConfigure
     <div className="space-y-2">
       <Button
         onClick={handleConnect}
-        disabled={loading || !isConfigured}
+        disabled={loading || !isConfigured || !sdkReady}
         className="bg-[var(--cyan)] font-medium text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
       >
-        {!isConfigured ? 'Integração em aprovação na Meta' : loading ? 'Conectando...' : 'Conectar WhatsApp'}
+        {!isConfigured
+          ? 'Integração em aprovação na Meta'
+          : loading
+            ? 'Conectando...'
+            : !sdkReady
+              ? 'Carregando...'
+              : 'Conectar WhatsApp'}
       </Button>
       {error && <p className="text-sm text-red-500">{error}</p>}
     </div>
