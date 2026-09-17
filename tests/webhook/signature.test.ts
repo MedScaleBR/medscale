@@ -41,13 +41,11 @@ vi.mock('@/lib/crypto', () => ({
 import { POST, GET } from '@/app/api/whatsapp/webhook/route'
 
 const GLOBAL_SECRET = 'global-app-secret'
-const WORKSPACE_SECRET = 'account-own-app-secret'
 const PHONE_NUMBER_ID = 'pn-clinica-1'
 
 // Conexão WhatsApp da account (bot_config) — resolvida pelo phone_number_id.
 const BOT_CONN_ROW = {
   account_id: 'acc1',
-  meta_app_secret: `enc:${WORKSPACE_SECRET}`,
   phone_number_id: PHONE_NUMBER_ID,
   meta_token: 'enc:token-da-conta',
 }
@@ -118,13 +116,13 @@ describe('POST /api/whatsapp/webhook — validação de assinatura HMAC', () => 
     await expect(res.json()).resolves.toEqual({ status: 'ok' })
   })
 
-  it('deve retornar 200 quando a assinatura é válida com o meta_app_secret da workspace (número próprio)', async () => {
+  it('rejeita assinatura de um App que não é o da MedScale', async () => {
     const body = textMessagePayload()
-    // Sem o secret global configurado: só o App da própria clínica assina.
-    process.env.META_APP_SECRET = 'outro-secret-que-nao-assinou'
-    const res = await POST(makeRequest(body, makeSignature(body, WORKSPACE_SECRET)) as never)
+    const signature = `sha256=${createHmac('sha256', 'app-secret-de-terceiro').update(body).digest('hex')}`
 
-    expect(res.status).toBe(200)
+    const res = await POST(makeRequest(body, signature) as never)
+
+    expect(res.status).toBe(401)
   })
 
   it('deve retornar 401 quando a assinatura está ausente no header', async () => {

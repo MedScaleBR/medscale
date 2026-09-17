@@ -49,7 +49,7 @@ export async function PATCH(req: NextRequest) {
 
   // Personalidade/regras/preços da Clara valem para toda a conta e alimentam o
   // atendimento a todos os pacientes — só owner/admin edita (mesmo critério de
-  // /api/bot/onboarding/verify-meta).
+  // /api/whatsapp/embedded-signup).
   const roleCheck = requireRole(session, ['owner', 'admin'])
   if (roleCheck) return roleCheck
 
