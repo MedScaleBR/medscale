@@ -8,6 +8,15 @@ import { graphFetch, MetaApiError } from './graph'
 // (índice uq_ad_campaigns_meta_sync), logo reprocessar é barato.
 export const SYNC_WINDOW_DAYS = 7
 
+// As três janelas que o seletor da /trafego oferece. Lista fechada porque o
+// valor vira chamada paga na Meta: a rota recusa qualquer coisa fora daqui.
+export const SYNC_WINDOW_OPTIONS = [7, 30, 90] as const
+export type SyncWindow = (typeof SYNC_WINDOW_OPTIONS)[number]
+
+export function isSyncWindow(days: number): days is SyncWindow {
+  return (SYNC_WINDOW_OPTIONS as readonly number[]).includes(days)
+}
+
 export const LEAD_ACTION_TYPES = [
   'lead',
   'onsite_conversion.lead_grouped',
@@ -23,6 +32,52 @@ interface InsightRow {
   impressions?: string
   clicks?: string
   actions?: { action_type: string; value: string }[]
+}
+
+interface InsightsPage {
+  data?: InsightRow[]
+  paging?: { cursors?: { after?: string }; next?: string }
+}
+
+const PAGE_LIMIT = 500
+
+// Trava de segurança: se a Meta devolvesse cursor pra sempre, o loop rodaria
+// pra sempre. 20 páginas de 500 cobrem 10 mil linhas — muito além de qualquer
+// janela que a UI oferece.
+const MAX_PAGES = 20
+
+// `time_increment: '1'` gera uma linha por campanha POR DIA, então 90 dias com
+// meia dúzia de campanhas já passa de 500 e a Meta pagina. Ler só a primeira
+// resposta perdia o resto em silêncio — sem erro, sem log, só dado faltando.
+async function fetchAllInsights(
+  adAccountId: string,
+  token: string,
+  timeRange: string
+): Promise<InsightRow[]> {
+  const rows: InsightRow[] = []
+  let after: string | undefined
+
+  for (let page = 0; page < MAX_PAGES; page++) {
+    const data = await graphFetch<InsightsPage>(`/${adAccountId}/insights`, {
+      token,
+      params: {
+        level: 'campaign',
+        time_increment: '1',
+        time_range: timeRange,
+        fields: 'campaign_id,campaign_name,spend,impressions,clicks,actions',
+        limit: String(PAGE_LIMIT),
+        ...(after ? { after } : {}),
+      },
+    })
+
+    rows.push(...(data.data ?? []))
+
+    // `cursors.after` vem mesmo na última página; é `next` que diz se há mais.
+    after = data.paging?.next ? data.paging.cursors?.after : undefined
+    if (!after) break
+  }
+
+  return rows
 }
 
 // Number() de string vazia/undefined/lixo não numérico vira NaN, que some em
@@ -66,17 +121,7 @@ export async function syncAdsForAccount(
   for (const mapping of mappings) {
     let rows: InsightRow[]
     try {
-      const data = await graphFetch<{ data: InsightRow[] }>(`/${mapping.ad_account_id}/insights`, {
-        token,
-        params: {
-          level: 'campaign',
-          time_increment: '1',
-          time_range: timeRange,
-          fields: 'campaign_id,campaign_name,spend,impressions,clicks,actions',
-          limit: '500',
-        },
-      })
-      rows = data.data ?? []
+      rows = await fetchAllInsights(mapping.ad_account_id, token, timeRange)
     } catch (err) {
       if (err instanceof MetaApiError && err.isTokenExpired) {
         await markAdsConnectionInvalid(accountId)

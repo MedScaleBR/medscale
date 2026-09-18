@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireWorkspaceSession, requireRole } from '@/lib/session/api'
-import { syncAdsForAccount } from '@/lib/meta/ads-sync'
+import { syncAdsForAccount, SYNC_WINDOW_DAYS, isSyncWindow } from '@/lib/meta/ads-sync'
 
 export async function POST(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
@@ -10,7 +10,14 @@ export async function POST(req: NextRequest) {
   const roleCheck = requireRole(session, ['owner', 'admin'])
   if (roleCheck) return roleCheck
 
-  const { synced, skipped } = await syncAdsForAccount(session.accountId)
+  // O seletor de período da /trafego manda `days`; sem ele vale a janela curta
+  // do cron, que é a que a Meta ainda reescreve por atribuição.
+  const days = Number(req.nextUrl.searchParams.get('days') ?? SYNC_WINDOW_DAYS)
+  if (!isSyncWindow(days)) {
+    return NextResponse.json({ error: 'Período inválido.' }, { status: 400 })
+  }
+
+  const { synced, skipped } = await syncAdsForAccount(session.accountId, { days })
 
   if (skipped === 'no_token') {
     return NextResponse.json({ error: 'Conecte sua conta do Facebook primeiro.' }, { status: 409 })

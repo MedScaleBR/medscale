@@ -11,11 +11,17 @@ vi.mock('@/lib/session/api', async (importOriginal) => {
 })
 
 const syncAdsForAccount = vi.hoisted(() => vi.fn())
-vi.mock('@/lib/meta/ads-sync', () => ({ syncAdsForAccount }))
+// Parcial: só o sync é dublê. As constantes de janela vêm do módulo real pra
+// o teste não validar `days` contra uma lista inventada aqui.
+vi.mock('@/lib/meta/ads-sync', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/meta/ads-sync')>()
+  return { ...actual, syncAdsForAccount }
+})
 
 import { POST } from '@/app/api/meta/ads/sync/route'
 
-const req = () => new NextRequest('http://localhost/api/meta/ads/sync', { method: 'POST' })
+const req = (query = '') =>
+  new NextRequest(`http://localhost/api/meta/ads/sync${query}`, { method: 'POST' })
 
 beforeEach(() => {
   g.session = { userId: 'u1', accountId: 'acc1', workspaceId: 'w1', role: 'owner', modules: [] }
@@ -30,7 +36,25 @@ describe('POST /api/meta/ads/sync', () => {
 
     expect(res.status).toBe(200)
     await expect(res.json()).resolves.toEqual({ ok: true, synced: 5 })
-    expect(syncAdsForAccount).toHaveBeenCalledWith('acc1')
+    expect(syncAdsForAccount).toHaveBeenCalledWith('acc1', { days: 7 })
+  })
+
+  it('sincroniza a janela pedida pelo seletor de período', async () => {
+    syncAdsForAccount.mockResolvedValue({ synced: 9, skipped: null })
+
+    const res = await POST(req('?days=90'))
+
+    expect(res.status).toBe(200)
+    expect(syncAdsForAccount).toHaveBeenCalledWith('acc1', { days: 90 })
+  })
+
+  // Sem lista fechada, um `days=3650` viraria 3650 dias de insights por conta
+  // de anúncio — chamada cara na Meta que ninguém pediu.
+  it('recusa uma janela fora das opções da tela', async () => {
+    const res = await POST(req('?days=3650'))
+
+    expect(res.status).toBe(400)
+    expect(syncAdsForAccount).not.toHaveBeenCalled()
   })
 
   it('sem conexão devolve 409 pedindo pra conectar', async () => {
