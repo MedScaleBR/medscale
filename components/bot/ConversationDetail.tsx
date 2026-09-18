@@ -131,7 +131,12 @@ export function ConversationDetail({
   const info = statusInfo(status, botPaused, Boolean(archivedAt))
 
   return (
-    <div key={conversationId} className="flex h-dvh flex-col bg-white md:h-full">
+    // h-full sozinho, sem par h-dvh/md:h-full: variante de media query não
+    // soma especificidade, então quem vencia era só a ordem no CSS gerado — o
+    // h-dvh ganhava mesmo no desktop, o painel ficava 216px mais alto que o
+    // card e o overflow-hidden do pai comia o rodapé e a caixa de resposta.
+    // Quem define a altura é o pai: grid no desktop, fixed inset-0 no mobile.
+    <div key={conversationId} className="flex h-full flex-col bg-white">
       <div className="flex items-center gap-2 border-b border-[var(--navy-06)] px-4 py-3 md:gap-3 md:px-5">
         {onBack && (
           <button
