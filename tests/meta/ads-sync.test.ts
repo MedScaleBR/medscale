@@ -20,6 +20,27 @@ import { syncAdsForAccount, extractLeads } from '@/lib/meta/ads-sync'
 
 const insights = (rows: unknown[]) => new Response(JSON.stringify({ data: rows }), { status: 200 })
 
+/** Resposta paginada: `after` não-nulo significa que ainda há página adiante. */
+const page = (rows: unknown[], after: string | null) =>
+  new Response(
+    JSON.stringify({
+      data: rows,
+      paging: after ? { cursors: { after }, next: 'https://graph.facebook.com/next' } : {},
+    }),
+    { status: 200 }
+  )
+
+const row = (campaignId: string, date: string) => ({
+  campaign_id: campaignId,
+  campaign_name: campaignId,
+  date_start: date,
+  date_stop: date,
+  spend: '10',
+  impressions: '100',
+  clicks: '5',
+  actions: [{ action_type: 'lead', value: '1' }],
+})
+
 beforeEach(() => {
   g.token = 'tok'
   g.invalidated = []
@@ -183,5 +204,35 @@ describe('syncAdsForAccount', () => {
 
     expect(result.skipped).toBe('token_expired')
     expect(g.invalidated).toEqual(['acc1'])
+  })
+
+  it('segue o cursor e grava as linhas de todas as páginas', async () => {
+    // Uma janela longa com várias campanhas passa das 500 linhas por resposta.
+    // Sem seguir o cursor, as páginas seguintes somem sem erro nenhum.
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(page([row('c-1', '2026-09-10')], 'cursor-2'))
+      .mockResolvedValueOnce(page([row('c-2', '2026-09-11')], null))
+
+    const result = await syncAdsForAccount('acc1')
+
+    expect(result).toEqual({ synced: 2, skipped: null })
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2)
+    expect(new URL(vi.mocked(fetch).mock.calls[1][0] as string).searchParams.get('after')).toBe(
+      'cursor-2'
+    )
+  })
+
+  it('respeita a janela de dias pedida no time_range', async () => {
+    vi.mocked(fetch).mockResolvedValue(page([row('c-1', '2026-09-10')], null))
+
+    await syncAdsForAccount('acc1', { days: 90 })
+
+    const timeRange = JSON.parse(
+      new URL(vi.mocked(fetch).mock.calls[0][0] as string).searchParams.get('time_range') ?? '{}'
+    )
+    const spanDays = Math.round(
+      (Date.parse(timeRange.until) - Date.parse(timeRange.since)) / 86_400_000
+    )
+    expect(spanDays).toBe(90)
   })
 })

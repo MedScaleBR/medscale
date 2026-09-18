@@ -11,9 +11,22 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
-import { Archive, ArchiveRestore, ChevronLeft, Lock, MoreVertical, Send } from 'lucide-react'
+import {
+  Archive,
+  ArchiveRestore,
+  Bot,
+  CalendarCheck,
+  CalendarDays,
+  ChevronLeft,
+  Lock,
+  MessageCircle,
+  MoreVertical,
+  Send,
+} from 'lucide-react'
 import type { MessageRole, ConversationStatus } from '@/types/database'
 import { InitialsAvatar } from './InitialsAvatar'
+import { ConversationContextBar } from './ConversationContextBar'
+import { ScheduleDialog } from './ScheduleDialog'
 
 export interface DetailMessage {
   id: string
@@ -26,14 +39,21 @@ interface ConversationDetailProps {
   conversationId: string
   patientPhone: string
   patientName: string | null
+  patientId: string | null
+  patientTags: string[]
+  patientNotes: string | null
+  lastVisit: string | null
+  nextAppointment: string | null
   status: ConversationStatus
   botPaused: boolean
   archivedAt: string | null
   messages: DetailMessage[]
   onSend: (message: string) => Promise<void>
   onResolve: () => Promise<void>
-  onReactivateBot: () => Promise<void>
+  onToggleBotPaused: (paused: boolean) => Promise<void>
   onToggleArchived: (archived: boolean) => Promise<void>
+  onNotesSaved: (notes: string) => void
+  onScheduled: (scheduledAt: string) => void
   onBack?: () => void
 }
 
@@ -42,6 +62,12 @@ interface ConversationDetailProps {
 const RINGS =
   'radial-gradient(circle at 28% 22%, var(--cyan-10) 0, transparent 42%), repeating-radial-gradient(circle at 50% 32%, transparent 0 46px, rgba(27,48,104,0.018) 46px 47px)'
 
+const QUICK_REPLIES = [
+  'Perfeito, te confirmo em breve!',
+  'Consigo te encaixar amanhã às 10h.',
+  'Pode me enviar seu convênio, por favor?',
+]
+
 type Tone = 'cyan' | 'amber' | 'navy'
 
 const PILL: Record<Tone, string> = {
@@ -49,6 +75,9 @@ const PILL: Record<Tone, string> = {
   amber: 'bg-amber-100 text-amber-700',
   navy: 'bg-[var(--navy-06)] text-[var(--navy)]',
 }
+
+const ICON_BUTTON =
+  'flex size-8 items-center justify-center rounded-lg border border-[var(--navy-06)] bg-white text-gray-500 transition-colors hover:bg-[var(--navy-06)] disabled:opacity-50'
 
 function statusInfo(status: ConversationStatus, botPaused: boolean, archived: boolean): {
   tone: Tone
@@ -78,20 +107,28 @@ export function ConversationDetail({
   conversationId,
   patientPhone,
   patientName,
+  patientId,
+  patientTags,
+  patientNotes,
+  lastVisit,
+  nextAppointment,
   status,
   botPaused,
   archivedAt,
   messages,
   onSend,
   onResolve,
-  onReactivateBot,
+  onToggleBotPaused,
   onToggleArchived,
+  onNotesSaved,
+  onScheduled,
   onBack,
 }: ConversationDetailProps) {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
-  const [reactivating, setReactivating] = useState(false)
+  const [pausing, setPausing] = useState(false)
   const [archiving, setArchiving] = useState(false)
+  const [scheduleOpen, setScheduleOpen] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -109,12 +146,12 @@ export function ConversationDetail({
     }
   }
 
-  const handleReactivate = async () => {
-    setReactivating(true)
+  const handleTogglePause = async () => {
+    setPausing(true)
     try {
-      await onReactivateBot()
+      await onToggleBotPaused(!botPaused)
     } finally {
-      setReactivating(false)
+      setPausing(false)
     }
   }
 
@@ -150,27 +187,57 @@ export function ConversationDetail({
         <InitialsAvatar label={title} seed={conversationId} />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-[var(--navy)]">{title}</p>
-          <p className="truncate text-xs text-gray-400">
-            {patientPhone || 'Sandbox'} · {messages.length} {messages.length === 1 ? 'mensagem' : 'mensagens'}
-          </p>
+          <p className="truncate text-xs text-gray-400">{patientPhone || 'Sandbox'}</p>
         </div>
+        <span
+          title={info.hint}
+          className={cn(
+            // Visível também no mobile: a barra de status do rodapé saiu, e sem
+            // ela esta pílula é o único lugar que diz em que pé está a conversa.
+            'inline-flex w-fit shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium',
+            PILL[info.tone]
+          )}
+        >
+          <Lock className="h-3 w-3" />
+          {info.label}
+        </span>
 
         {/* Ações inline no desktop */}
-        <div className="ml-auto hidden shrink-0 items-center gap-2 md:flex">
+        <div className="ml-auto hidden shrink-0 items-center gap-1.5 md:flex">
+          <button
+            onClick={handleTogglePause}
+            disabled={pausing}
+            aria-pressed={botPaused}
+            title={botPaused ? 'Reativar o bot nesta conversa' : 'Pausar o bot nesta conversa'}
+            className={cn(
+              ICON_BUTTON,
+              botPaused && 'border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100'
+            )}
+          >
+            <Bot className="h-4 w-4" />
+          </button>
           {status !== 'resolved' && (
-            <Button variant="outline" size="sm" onClick={onResolve}>
-              Marcar como resolvida
-            </Button>
+            <button
+              onClick={onResolve}
+              title="Marcar como resolvida"
+              aria-label="Marcar como resolvida"
+              className={ICON_BUTTON}
+            >
+              <CalendarCheck className="h-4 w-4" />
+            </button>
           )}
-          <Button
-            variant="outline"
-            size="sm"
+          <button
             onClick={handleToggleArchived}
             disabled={archiving}
-            className="gap-1.5"
+            title={archivedAt ? 'Desarquivar' : 'Arquivar'}
+            aria-label={archivedAt ? 'Desarquivar' : 'Arquivar'}
+            className={ICON_BUTTON}
           >
-            {archivedAt ? <ArchiveRestore className="h-3.5 w-3.5" /> : <Archive className="h-3.5 w-3.5" />}
-            {archivedAt ? 'Desarquivar' : 'Arquivar'}
+            {archivedAt ? <ArchiveRestore className="h-4 w-4" /> : <Archive className="h-4 w-4" />}
+          </button>
+          <Button size="sm" onClick={() => setScheduleOpen(true)} className="gap-1.5">
+            <CalendarDays className="h-3.5 w-3.5" />
+            Agendar
           </Button>
         </div>
 
@@ -184,6 +251,10 @@ export function ConversationDetail({
               <MoreVertical className="h-5 w-5" />
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => setScheduleOpen(true)}>Agendar consulta</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleTogglePause} disabled={pausing}>
+                {botPaused ? 'Reativar bot' : 'Pausar bot'}
+              </DropdownMenuItem>
               {status !== 'resolved' && (
                 <DropdownMenuItem onClick={onResolve}>Marcar como resolvida</DropdownMenuItem>
               )}
@@ -194,6 +265,33 @@ export function ConversationDetail({
           </DropdownMenu>
         </div>
       </div>
+
+      <ConversationContextBar
+        key={patientId ?? conversationId}
+        patientId={patientId}
+        tags={patientTags}
+        lastVisit={lastVisit}
+        nextAppointment={nextAppointment}
+        notes={patientNotes}
+        onNotesSaved={onNotesSaved}
+      />
+
+      {botPaused && (
+        <div className="flex items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 md:px-5">
+          <p className="text-xs text-amber-700">
+            Bot pausado nessa conversa — não responde automaticamente até você reativar.
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleTogglePause}
+            disabled={pausing}
+            className="ml-auto shrink-0 border-amber-300 bg-white text-amber-700 hover:bg-amber-100"
+          >
+            {pausing ? 'Reativando...' : 'Reativar bot'}
+          </Button>
+        </div>
+      )}
 
       <div
         ref={scrollRef}
@@ -257,31 +355,22 @@ export function ConversationDetail({
         })}
       </div>
 
-      <div className="flex flex-col gap-1.5 border-t border-[var(--navy-06)] px-4 py-2.5 text-xs text-gray-500 md:flex-row md:flex-wrap md:items-center md:gap-x-2 md:gap-y-1 md:px-5">
-        <span
-          className={cn(
-            'inline-flex w-fit items-center gap-1 rounded-full px-2 py-0.5 font-medium',
-            PILL[info.tone]
-          )}
-        >
-          <Lock className="h-3 w-3" />
-          {info.label}
-        </span>
-        <span>{info.hint}</span>
-        {botPaused && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleReactivate}
-            disabled={reactivating}
-            className="mt-1 w-full shrink-0 border-amber-300 bg-white text-amber-700 hover:bg-amber-100 md:mt-0 md:ml-auto md:w-auto"
-          >
-            {reactivating ? 'Reativando...' : 'Reativar bot'}
-          </Button>
-        )}
-      </div>
-
       <div className="flex items-end gap-2 border-t border-[var(--navy-06)] p-3">
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="Respostas rápidas"
+            className="flex size-11 shrink-0 items-center justify-center rounded-lg border border-[var(--navy-06)] bg-white text-gray-500 hover:bg-[var(--navy-06)]"
+          >
+            <MessageCircle className="h-4 w-4" />
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="max-w-[16rem]">
+            {QUICK_REPLIES.map((reply) => (
+              <DropdownMenuItem key={reply} onClick={() => setDraft(reply)} className="whitespace-normal">
+                {reply}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <Textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
@@ -303,6 +392,15 @@ export function ConversationDetail({
           Enviar
         </Button>
       </div>
+
+      <ScheduleDialog
+        open={scheduleOpen}
+        onOpenChange={setScheduleOpen}
+        patientName={patientName ?? patientPhone}
+        patientPhone={patientPhone}
+        patientId={patientId}
+        onScheduled={onScheduled}
+      />
     </div>
   )
 }

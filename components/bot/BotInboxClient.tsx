@@ -79,6 +79,9 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
                 status: 'handoff' as ConversationStatus,
                 bot_paused: true,
                 last_message: message,
+                last_message_at: saved.sent_at ?? new Date().toISOString(),
+                // Respondemos: a conversa deixa de estar esperando a equipe.
+                unread: false,
                 messages: [...c.messages, saved],
               }
             : c
@@ -101,17 +104,34 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
     }
   }
 
-  const handleReactivateBot = async () => {
+  const handleToggleBotPaused = async (paused: boolean) => {
     if (!selected) return
     const res = await fetch(`/api/bot/conversations/${selected.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ bot_paused: false }),
+      body: JSON.stringify({ bot_paused: paused }),
     })
     if (res.ok) {
-      trackBotResumed(analyticsBase)
-      setConversations((prev) => prev.map((c) => (c.id === selected.id ? { ...c, bot_paused: false } : c)))
+      if (paused) trackBotPausedManually(analyticsBase)
+      else trackBotResumed(analyticsBase)
+      setConversations((prev) => prev.map((c) => (c.id === selected.id ? { ...c, bot_paused: paused } : c)))
     }
+  }
+
+  // A nota mora na ficha do paciente, não na conversa: todas as conversas do
+  // mesmo paciente mostram a mesma nota e precisam acompanhar a edição.
+  const handleNotesSaved = (notes: string) => {
+    if (!selected?.patient_id) return
+    setConversations((prev) =>
+      prev.map((c) => (c.patient_id === selected.patient_id ? { ...c, patient_notes: notes } : c))
+    )
+  }
+
+  const handleScheduled = (scheduledAt: string) => {
+    if (!selected) return
+    setConversations((prev) =>
+      prev.map((c) => (c.id === selected.id ? { ...c, next_appointment: scheduledAt } : c))
+    )
   }
 
   const handleToggleArchived = async (archived: boolean) => {
@@ -155,14 +175,21 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
             conversationId={selected.id}
             patientPhone={selected.patient_phone}
             patientName={selected.patient_name}
+            patientId={selected.patient_id}
+            patientTags={selected.patient_tags}
+            patientNotes={selected.patient_notes}
+            lastVisit={selected.last_visit}
+            nextAppointment={selected.next_appointment}
             status={selected.status}
             botPaused={selected.bot_paused}
             archivedAt={selected.archived_at}
             messages={selected.messages}
             onSend={handleSend}
             onResolve={handleResolve}
-            onReactivateBot={handleReactivateBot}
+            onToggleBotPaused={handleToggleBotPaused}
             onToggleArchived={handleToggleArchived}
+            onNotesSaved={handleNotesSaved}
+            onScheduled={handleScheduled}
             onBack={() => setMobilePane('list')}
           />
         ) : (
