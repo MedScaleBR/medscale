@@ -32,7 +32,15 @@ export function loadFbSdk(appId: string): Promise<void> {
     script.src = SDK_SRC
     script.async = true
     script.onload = () => {
-      window.FB?.init({ appId, autoLogAppEvents: true, xfbml: false, version: SDK_VERSION })
+      // fedCM: false é obrigatório aqui. Sem essa opção o SDK consulta
+      // connect.facebook.net/app_config/json/<appId>/, que devolve
+      // {"fedcm":{"default":true}} para o nosso app, e aí `FB.login` chama
+      // `navigator.credentials.get()` ANTES de abrir o popup — a janela do
+      // Embedded Signup só aparece quando o FedCM falha, dezenas de segundos
+      // depois. E se o FedCM desse certo seria pior: ele devolve um access
+      // token comum, sem o `code` e sem o `config_id` do Embedded Signup, então
+      // nunca chegariam waba_id/phone_number_id e a conexão falharia.
+      window.FB?.init({ appId, autoLogAppEvents: true, xfbml: false, fedCM: false, version: SDK_VERSION })
       resolve()
     }
     script.onerror = () => {

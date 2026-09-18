@@ -51,6 +51,21 @@ describe('loadFbSdk', () => {
     expect(fb.init).toHaveBeenCalledWith(expect.objectContaining({ appId: '1391295809860867' }))
   })
 
+  it('desliga o FedCM na inicialização', async () => {
+    const { scripts, win } = fakeDom()
+
+    const promise = loadFbSdk('123')
+    sdkArrives(scripts[0], win)
+    await promise
+
+    // Com o FedCM ligado (o padrão do nosso app, servido pela Meta em
+    // /app_config/json/<appId>/), o `FB.login` chama navigator.credentials.get()
+    // antes do window.open e a janela do Embedded Signup demora dezenas de
+    // segundos para aparecer — quando aparece.
+    const fb = win.FB as { init: ReturnType<typeof vi.fn> }
+    expect(fb.init).toHaveBeenCalledWith(expect.objectContaining({ fedCM: false }))
+  })
+
   it('não injeta o script duas vezes em chamadas concorrentes', async () => {
     const { scripts, win } = fakeDom()
 
