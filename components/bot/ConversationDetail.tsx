@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { parseRichText } from '@/lib/bot/rich-text'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import {
@@ -36,8 +37,10 @@ interface ConversationDetailProps {
   onBack?: () => void
 }
 
+// Fundo discreto: os anéis são marca, não decoração da conversa — fortes
+// demais, competem com o texto das mensagens.
 const RINGS =
-  'radial-gradient(circle at 28% 22%, var(--cyan-10) 0, transparent 42%), repeating-radial-gradient(circle at 50% 32%, transparent 0 46px, rgba(27,48,104,0.035) 46px 47px)'
+  'radial-gradient(circle at 28% 22%, var(--cyan-10) 0, transparent 42%), repeating-radial-gradient(circle at 50% 32%, transparent 0 46px, rgba(27,48,104,0.018) 46px 47px)'
 
 type Tone = 'cyan' | 'amber' | 'navy'
 
@@ -189,16 +192,16 @@ export function ConversationDetail({
 
       <div
         ref={scrollRef}
-        className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-[#F4F6FB] px-5 py-6"
+        className="min-h-0 flex-1 overflow-y-auto bg-[#F4F6FB] px-5 py-6"
         style={{ backgroundImage: RINGS }}
       >
         {messages.length === 0 && (
           <p className="py-10 text-center text-sm text-gray-400">Nenhuma mensagem nesta conversa.</p>
         )}
-        {messages.map((m) => {
+        {messages.map((m, i) => {
           if (m.role === 'system') {
             return (
-              <div key={m.id} className="flex justify-center">
+              <div key={m.id} className="mt-4 flex justify-center first:mt-0">
                 <span className="rounded-full bg-[var(--navy-06)] px-3 py-1 text-[11px] text-gray-500">
                   {m.content}
                 </span>
@@ -206,20 +209,43 @@ export function ConversationDetail({
             )
           }
           const incoming = m.role === 'user'
+          // Mensagens seguidas do mesmo lado viram um bloco: só a primeira tem
+          // o canto de "bico" e só a última mostra a hora. Repetir os dois em
+          // cada balão é o que deixava a conversa visualmente picotada.
+          const startsRun = messages[i - 1]?.role !== m.role
+          const endsRun = messages[i + 1]?.role !== m.role
           return (
-            <div key={m.id} className={cn('flex', incoming ? 'justify-start' : 'justify-end')}>
+            <div
+              key={m.id}
+              className={cn(
+                'flex first:mt-0',
+                startsRun ? 'mt-4' : 'mt-0.5',
+                incoming ? 'justify-start' : 'justify-end'
+              )}
+            >
               <div
                 className={cn(
-                  'max-w-[78%] rounded-2xl px-3.5 py-2 text-sm whitespace-pre-wrap break-words',
+                  'max-w-[85%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words sm:max-w-[46ch]',
                   incoming
-                    ? 'rounded-tl-sm bg-white text-[var(--navy-dark)] shadow-[var(--shadow-sm)]'
-                    : 'rounded-tr-sm border border-[var(--cyan-20)] bg-[var(--cyan-10)] text-[var(--navy-dark)]'
+                    ? 'bg-white text-[var(--navy-dark)] shadow-[var(--shadow-sm)]'
+                    : 'border border-[var(--cyan-20)] bg-[var(--cyan-10)] text-[var(--navy-dark)]',
+                  startsRun && (incoming ? 'rounded-tl-sm' : 'rounded-tr-sm')
                 )}
               >
-                {m.content}
-                <span className="mt-1 block text-right text-[10px] text-gray-400">
-                  {new Date(m.sent_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                </span>
+                {parseRichText(m.content).map((seg, s) =>
+                  seg.bold ? (
+                    <strong key={s} className="font-semibold">
+                      {seg.text}
+                    </strong>
+                  ) : (
+                    <Fragment key={s}>{seg.text}</Fragment>
+                  )
+                )}
+                {endsRun && (
+                  <span className="mt-1 block text-right text-[10px] leading-none text-gray-400">
+                    {new Date(m.sent_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                  </span>
+                )}
               </div>
             </div>
           )
