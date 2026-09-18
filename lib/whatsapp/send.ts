@@ -1,3 +1,5 @@
+import { toWhatsAppMarkup } from '@/lib/bot/rich-text'
+
 interface SendMessageParams {
   to: string // formato E.164: +5511999999999
   message: string
@@ -19,7 +21,9 @@ export async function sendWhatsAppMessage({ to, message, phoneNumberId, token }:
       recipient_type: 'individual',
       to,
       type: 'text',
-      text: { body: message },
+      // Porta única de saída de texto livre (agente, financeiro, handoff e
+      // resposta manual): normalizar aqui cobre todos de uma vez.
+      text: { body: toWhatsAppMarkup(message) },
     }),
   })
 
