@@ -130,7 +130,7 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
   }
 
   return (
-    <div className="grid h-[calc(100vh-160px)] grid-cols-1 gap-0 overflow-hidden rounded-xl border border-[var(--navy-06)] bg-white shadow-[var(--shadow-sm)] md:grid-cols-[340px_1fr]">
+    <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 overflow-hidden rounded-xl border border-[var(--navy-06)] bg-white shadow-[var(--shadow-sm)] md:grid-cols-[340px_1fr]">
       {/* LISTA — sempre no desktop; no mobile só quando mobilePane === 'list' */}
       <div
         className={cn(

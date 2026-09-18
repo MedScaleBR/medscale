@@ -34,7 +34,7 @@ export default async function BotPage() {
   })
 
   return (
-    <div className="space-y-6">
+    <div className="flex h-full min-h-0 flex-col gap-6">
       <div>
         <h1 className="text-xl font-medium text-gray-900">Bot WhatsApp</h1>
         <p className="text-sm text-gray-400">Conversas conduzidas pelo agente e disponíveis para atendimento humano.</p>

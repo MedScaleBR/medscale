@@ -54,7 +54,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
         <FeedbackProvider
           initialOpen={shouldShowFeedbackPrompt({ dismissedAt: profile?.feedback_prompt_dismissed_at ?? null })}
         >
-          <div className="flex min-h-screen bg-[var(--navy-06)]">
+          {/* h-dvh + overflow-hidden: a rolagem mora no <main>, não na página.
+              Sem isso, telas de altura cheia (caixa de entrada do bot) empurram
+              o rodapé para fora da janela e ele fica inalcançável. */}
+          <div className="flex h-dvh overflow-hidden bg-[var(--navy-06)]">
             <Sidebar session={session} accounts={accounts} />
             <div className="flex min-w-0 flex-1 flex-col">
               <Topbar
