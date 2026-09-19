@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { buildLeads, ATTRIBUTION_WINDOW_DAYS } from '@/lib/trafego/attribution'
+import { buildLeads, leadsWithinPeriod, ATTRIBUTION_WINDOW_DAYS } from '@/lib/trafego/attribution'
+import type { AttributedLead } from '@/lib/trafego/attribution'
 
 const ATTR = {
   patient_phone: '+5511999999999',
@@ -122,5 +123,44 @@ describe('buildLeads', () => {
 
   it('a janela de atribuição é de 90 dias', () => {
     expect(ATTRIBUTION_WINDOW_DAYS).toBe(90)
+  })
+})
+
+describe('leadsWithinPeriod', () => {
+  const today = new Date('2026-09-18T15:00:00Z')
+  const lead = (leadAt: string): AttributedLead => ({
+    campaignId: 'c1',
+    campaignName: 'x',
+    channel: 'facebook',
+    patientPhone: '+5511999999999',
+    leadAt,
+    appointments: [],
+    paidRevenue: 0,
+    forecastRevenue: 0,
+  })
+
+  // A janela inclui hoje, como em `withinPeriod`: 7 dias vai de hoje até seis
+  // dias atrás. As duas telas precisam contar o mesmo período.
+  it('mantém o lead de hoje e o do sexto dia atrás numa janela de 7', () => {
+    const kept = leadsWithinPeriod(
+      [lead('2026-09-18T09:00:00Z'), lead('2026-09-12T23:00:00Z')],
+      7,
+      today
+    )
+
+    expect(kept).toHaveLength(2)
+  })
+
+  it('descarta o lead que caiu fora da janela', () => {
+    const kept = leadsWithinPeriod([lead('2026-09-11T09:00:00Z')], 7, today)
+
+    expect(kept).toHaveLength(0)
+  })
+
+  // Hora do dia não pode decidir: o lead das 23h de hoje é de hoje.
+  it('compara por dia, não por hora cheia', () => {
+    const kept = leadsWithinPeriod([lead('2026-09-18T23:59:00Z')], 7, today)
+
+    expect(kept).toHaveLength(1)
   })
 })

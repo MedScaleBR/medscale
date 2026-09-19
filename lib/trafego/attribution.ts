@@ -63,6 +63,10 @@ export interface BuildLeadsInput {
   revenue: RevenueRow[]
 }
 
+function utcMidnight(date: Date): number {
+  return Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate())
+}
+
 function toNumber(value: number | string | null | undefined): number {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
@@ -87,6 +91,27 @@ export function phoneKey(phone: string): string {
   }
 
   return withCountry
+}
+
+/**
+ * Recorta os leads pela janela do seletor, com a mesma conta de
+ * `withinPeriod`: inclui hoje, então 7 dias vai de hoje até seis dias atrás.
+ *
+ * Compara meia-noite com meia-noite porque `occurred_at` é instante, não data:
+ * medir a partir da hora cheia jogaria o lead das 23h de hoje para fora da
+ * janela por ser "futuro" em relação à meia-noite.
+ */
+export function leadsWithinPeriod(
+  leads: AttributedLead[],
+  days: number,
+  today: Date
+): AttributedLead[] {
+  const todayMidnight = utcMidnight(today)
+
+  return leads.filter((lead) => {
+    const age = Math.floor((todayMidnight - utcMidnight(new Date(lead.leadAt))) / DAY_MS)
+    return age >= 0 && age < days
+  })
 }
 
 export function buildLeads(input: BuildLeadsInput): AttributedLead[] {
