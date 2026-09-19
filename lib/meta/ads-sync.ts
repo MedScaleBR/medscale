@@ -80,6 +80,33 @@ async function fetchAllInsights(
   return rows
 }
 
+interface AdRow {
+  ad_id?: string
+  ad_name?: string
+  adset_name?: string
+  campaign_id?: string
+}
+
+/** Segunda passada no mesmo endpoint, agora em `level: 'ad'`. Só precisamos dos
+ *  identificadores, então `time_increment` fica de fora: uma linha por anúncio
+ *  no período inteiro, não uma por dia. */
+async function fetchAdMap(
+  adAccountId: string,
+  token: string,
+  timeRange: string
+): Promise<AdRow[]> {
+  const data = await graphFetch<{ data?: AdRow[] }>(`/${adAccountId}/insights`, {
+    token,
+    params: {
+      level: 'ad',
+      time_range: timeRange,
+      fields: 'ad_id,ad_name,adset_name,campaign_id',
+      limit: String(PAGE_LIMIT),
+    },
+  })
+  return data.data ?? []
+}
+
 // Number() de string vazia/undefined/lixo não numérico vira NaN, que some em
 // silêncio dentro de uma soma (NaN + n = NaN) e quebra a coluna not-null no
 // upsert — por isso todo valor que vem da Meta como string passa por aqui.
@@ -158,6 +185,34 @@ export async function syncAdsForAccount(
       continue
     }
     synced += payload.length
+
+    // O mapa é acessório: gasto e cliques já foram gravados acima e continuam
+    // valendo sem ele. Um erro aqui não pode derrubar o sync da conta.
+    try {
+      const ads = await fetchAdMap(mapping.ad_account_id, token, timeRange)
+      const adPayload = ads
+        .filter((ad) => ad.ad_id && ad.campaign_id)
+        .map((ad) => ({
+          account_id: accountId,
+          ad_id: ad.ad_id!,
+          campaign_id: ad.campaign_id!,
+          ad_name: ad.ad_name ?? null,
+          adset_name: ad.adset_name ?? null,
+          synced_at: new Date().toISOString(),
+        }))
+
+      if (adPayload.length > 0) {
+        const { error: mapError } = await supabase
+          .from('meta_ad_map')
+          .upsert(adPayload, { onConflict: 'account_id,ad_id' })
+        if (mapError) throw new Error(mapError.message)
+      }
+    } catch (err) {
+      Sentry.captureException(err, {
+        tags: { area: 'meta', flow: 'ads_sync_ad_map' },
+        extra: { adAccount: mapping.ad_account_id },
+      })
+    }
   }
 
   return { synced, skipped: null }

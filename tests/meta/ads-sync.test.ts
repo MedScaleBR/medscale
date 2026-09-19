@@ -216,10 +216,13 @@ describe('syncAdsForAccount', () => {
     const result = await syncAdsForAccount('acc1')
 
     expect(result).toEqual({ synced: 2, skipped: null })
-    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(2)
-    expect(new URL(vi.mocked(fetch).mock.calls[1][0] as string).searchParams.get('after')).toBe(
-      'cursor-2'
-    )
+    // Duas páginas em level=campaign; a terceira chamada é o mapa de anúncios,
+    // que roda uma vez por conta e não pagina.
+    const campaignCalls = vi
+      .mocked(fetch)
+      .mock.calls.filter((c) => new URL(c[0] as string).searchParams.get('level') === 'campaign')
+    expect(campaignCalls).toHaveLength(2)
+    expect(new URL(campaignCalls[1][0] as string).searchParams.get('after')).toBe('cursor-2')
   })
 
   it('respeita a janela de dias pedida no time_range', async () => {
@@ -234,5 +237,60 @@ describe('syncAdsForAccount', () => {
       (Date.parse(timeRange.until) - Date.parse(timeRange.since)) / 86_400_000
     )
     expect(spanDays).toBe(90)
+  })
+})
+
+// O `referral` do WhatsApp traz o ID do ANÚNCIO; `ad_campaigns` guarda o ID da
+// CAMPANHA. Sem este mapa as duas metades da atribuição nunca se encontram.
+describe('syncAdsForAccount — mapa anúncio -> campanha', () => {
+  it('grava o mapa anuncio -> campanha junto do sync', async () => {
+    vi.mocked(fetch)
+      // 1ª chamada: insights por campanha (o que já existia).
+      .mockResolvedValueOnce(page([row('c1', '2026-09-17')], null))
+      // 2ª chamada: insights por anúncio, só para o mapa.
+      .mockResolvedValueOnce(insights([{ ad_id: 'a1', ad_name: 'Criativo A', adset_name: 'Conjunto A', campaign_id: 'c1' }]))
+
+    await syncAdsForAccount('acc1', { days: 7 })
+
+    const upsert = g.supabase.callsTo('meta_ad_map', 'upsert')[0]
+    expect(upsert.payload).toMatchObject([
+      { account_id: 'acc1', ad_id: 'a1', campaign_id: 'c1', ad_name: 'Criativo A', adset_name: 'Conjunto A' },
+    ])
+    expect((upsert.options as { onConflict?: string })?.onConflict).toBe('account_id,ad_id')
+  })
+
+  it('pede o nível de anúncio sem time_increment, uma linha por anúncio no período', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(page([row('c1', '2026-09-17')], null))
+      .mockResolvedValueOnce(insights([{ ad_id: 'a1', campaign_id: 'c1' }]))
+
+    await syncAdsForAccount('acc1', { days: 7 })
+
+    const url = new URL(vi.mocked(fetch).mock.calls[1][0] as string)
+    expect(url.searchParams.get('level')).toBe('ad')
+    expect(url.searchParams.get('time_increment')).toBeNull()
+  })
+
+  it('descarta linha de anúncio sem ad_id ou sem campaign_id', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(page([row('c1', '2026-09-17')], null))
+      .mockResolvedValueOnce(insights([{ ad_id: 'a1', campaign_id: 'c1' }, { ad_id: 'a2' }, { campaign_id: 'c1' }]))
+
+    await syncAdsForAccount('acc1', { days: 7 })
+
+    expect(g.supabase.callsTo('meta_ad_map', 'upsert')[0].payload).toHaveLength(1)
+  })
+
+  // O mapa é acessório: se ele falhar, os números de gasto/cliques que já foram
+  // gravados continuam valendo. Derrubar o sync inteiro por causa dele seria pior.
+  it('não derruba o sync quando o nível de anúncio falha', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(page([row('c1', '2026-09-17')], null))
+      .mockRejectedValueOnce(new Error('meta fora do ar'))
+
+    const result = await syncAdsForAccount('acc1', { days: 7 })
+
+    expect(result).toEqual({ synced: 1, skipped: null })
+    expect(g.supabase.callsTo('meta_ad_map', 'upsert')).toHaveLength(0)
   })
 })
