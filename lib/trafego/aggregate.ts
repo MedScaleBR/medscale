@@ -56,12 +56,19 @@ export interface CampaignRow extends CampaignLike {
   campaign_name: string | null
   clicks: number | null
   source: string
+  external_campaign_id?: string | null
 }
 
 export interface CampaignTotal extends Summary {
   channel: string
   campaign_name: string | null
   clicks: number
+  /**
+   * ID da campanha na Meta. É a chave que liga esta linha à atribuição, que
+   * chega por ID de anúncio traduzido em `meta_ad_map`. Nulo em campanha
+   * lançada à mão, que não tem correspondente lá.
+   */
+  externalId: string | null
   /** Veio do sync da Meta em algum dia do período — vale o selo na tabela. */
   synced: boolean
 }
@@ -84,12 +91,17 @@ export function byCampaign(rows: CampaignRow[]): CampaignTotal[] {
       clicks: 0,
       leads: 0,
       cpl: null,
+      externalId: null,
       synced: false,
     }
     total.spend += toNumber(row.spend)
     total.clicks += toNumber(row.clicks)
     total.leads += toNumber(row.leads)
     total.synced ||= row.source === 'meta_sync'
+    // Atributo, não parte da chave: um dia lançado à mão na mesma campanha vem
+    // com o id nulo e, se entrasse na chave, quebraria a linha em duas. O
+    // primeiro id não-nulo manda.
+    total.externalId ??= row.external_campaign_id ?? null
     totals.set(key, total)
   }
 

@@ -7,6 +7,7 @@ import { buildUnsupportedTypeMessage } from '@/lib/finance/respond'
 import { decryptToken } from '@/lib/crypto'
 import { checkRateLimit, RATE_LIMIT_NOTICE_MESSAGE } from '@/lib/rate-limit/webhook'
 import { sendWhatsAppMessage } from '@/lib/whatsapp/send'
+import { parseReferral, recordAttribution } from '@/lib/whatsapp/referral'
 
 // Valida a assinatura HMAC enviada pela Meta para garantir que o payload
 // realmente veio da Meta e não foi forjado. `secret` é o App Secret do App
@@ -120,6 +121,14 @@ export async function POST(req: NextRequest) {
 
   // A Meta exige resposta em <20s — o processamento roda após a resposta HTTP.
   after(async () => {
+    // Antes do rate limit, de propósito: o `referral` só existe nesta mensagem
+    // e a Meta não o devolve depois. Descartar a atribuição junto com uma
+    // mensagem barrada perderia para sempre o anúncio que pagou por esse lead.
+    const referral = parseReferral(message)
+    if (referral) {
+      await recordAttribution({ accountId, patientPhone: from, referral })
+    }
+
     // Rate limiting por (account, número) ANTES de qualquer processamento.
     const rateLimit = await checkRateLimit(accountId, from)
     if (!rateLimit.allowed) {

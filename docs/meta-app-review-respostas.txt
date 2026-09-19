@@ -1,0 +1,258 @@
+========================================================================
+ANALISE DO APP (META APP REVIEW) - RESPOSTAS PRONTAS PARA COLAR
+========================================================================
+Cada bloco abaixo corresponde a um campo do formulario. Copie do
+"INICIO DA RESPOSTA" ate o "FIM DA RESPOSTA" e cole no campo indicado.
+Antes de enviar, substitua tudo que estiver entre << >> e apague estas
+linhas de instrucao (elas nao fazem parte da resposta).
+
+
+========================================================================
+CAMPO 1 - "Onde podemos encontrar este app?"
+========================================================================
+
+--- INICIO DA RESPOSTA ---
+
+https://medscalebr.com
+
+O MedScale e um aplicativo web (SaaS) acessivel por qualquer navegador,
+sem necessidade de instalacao. Nao ha aplicativo em loja (App Store ou
+Google Play), portanto nao existem links de loja a informar.
+
+--- FIM DA RESPOSTA ---
+
+ANTES DE ENVIAR:
+- Confirme que https://medscalebr.com/login abre a tela de login do
+  painel. Se o dominio raiz servir o site institucional e o painel
+  estiver em outro endereco, troque a URL aqui e nos campos 2 e 5 - o
+  analista precisa chegar a tela de login sem procurar.
+- Rode a URL no Depurador de Compartilhamento da Meta.
+- Garanta que nao ha protecao de deploy (Vercel Deployment Protection)
+  nem senha bloqueando a URL.
+
+
+========================================================================
+CAMPO 2 - "Forneca instrucoes sobre como acessar o app"
+========================================================================
+
+--- INICIO DA RESPOSTA ---
+
+SOBRE O APP
+
+O MedScale e um sistema de gestao para clinicas e consultorios medicos no
+Brasil: agenda, cadastro de pacientes, financeiro, atendimento por
+WhatsApp e acompanhamento de campanhas de anuncios. Todas as integracoes
+com a Meta ficam em uma unica tela: Configuracoes > Integracoes Meta.
+
+CREDENCIAIS DE ACESSO
+
+URL de login: https://medscalebr.com/login
+E-mail: <<e-mail da conta de teste>>
+Senha: <<senha da conta de teste>>
+Perfil: Owner (acesso total, inclusive as integracoes)
+
+A conta ja vem com dados de exemplo (pacientes, agendamentos e campanhas)
+e permanecera ativa por, no minimo, um ano apos este envio.
+
+PASSO A PASSO PARA O TESTE
+
+1. Acesse https://medscalebr.com/login e entre com o e-mail e a senha
+   acima. O botao "Entrar com Google" e opcional e nao e necessario para
+   a analise.
+
+2. No menu lateral, clique em "Configuracoes".
+
+3. Localize o card "Integracoes Meta". Ele reune duas conexoes
+   independentes, descritas nos itens A e B abaixo.
+
+A) ANUNCIOS DO FACEBOOK (permissoes ads_read e business_management)
+
+   A1. Clique no botao "Login com Facebook".
+
+   A2. O app redireciona para o dialogo de OAuth do Facebook
+       (www.facebook.com/<versao>/dialog/oauth), solicitando as
+       permissoes ads_read e business_management.
+
+   A3. Aceite o consentimento. O navegador retorna ao MedScale e a tela
+       exibe a mensagem "Facebook conectado com sucesso".
+
+   A4. Ainda em Configuracoes, use o mapeamento "conta de anuncio >
+       unidade" para escolher qual conta de anuncios alimenta cada
+       unidade da clinica.
+
+   A5. Abra "Trafego" no menu lateral. A tela lista as campanhas com
+       gasto, impressoes e resultados lidos pela Marketing API, com
+       seletor de periodo de ate 90 dias. A sincronizacao tambem roda
+       automaticamente por rotina agendada.
+
+B) WHATSAPP DA ASSISTENTE (Embedded Signup do WhatsApp Business)
+
+   B1. Clique no botao "Conectar WhatsApp".
+
+   B2. Abre o fluxo de Embedded Signup do WhatsApp Business, via SDK
+       JavaScript do Facebook (FB.login com config_id, Login do Facebook
+       para Empresas).
+
+   B3. Ao concluir o fluxo, o app troca o code por um token de negocio,
+       assina o aplicativo na WABA, registra o numero de telefone e passa
+       a enviar e receber mensagens pela Cloud API.
+
+   B4. Depois de conectado, as mensagens recebidas no numero aparecem na
+       tela "Atendimento", respondidas pela assistente virtual
+       (agendamento, confirmacao e remarcacao de consultas).
+
+4. Para desfazer qualquer uma das conexoes, use o botao "Desconectar" no
+   mesmo card: o app encerra o vinculo e apaga os tokens armazenados.
+
+OBSERVACOES PARA O ANALISTA
+
+- Toda a interface esta em portugues do Brasil.
+- As integracoes com a Meta so aparecem para usuarios com perfil owner ou
+  admin da conta. A conta de teste fornecida ja e owner.
+- Os tokens sao armazenados de forma criptografada e vinculados a uma
+  unica conta de cliente. O fluxo de OAuth e protegido por cookie de uso
+  unico contra CSRF.
+
+--- FIM DA RESPOSTA ---
+
+ANTES DE ENVIAR:
+- Crie a conta de teste em /registrar, promova a owner e deixe dados de
+  exemplo visiveis.
+- Se quiser que o analista teste os anuncios ponta a ponta, conceda
+  acesso de leitura a uma conta de anuncios de teste no Business Manager
+  para o usuario de teste do Facebook.
+- Se nao houver numero WhatsApp Business disponivel para o analista,
+  acrescente ao final do item B: "Caso o analista nao disponha de um
+  numero WhatsApp Business para concluir esta etapa, enviamos em anexo um
+  video gravado do fluxo completo." - e anexe o video.
+
+
+========================================================================
+CAMPO 3 - "Confirmacao de uso das APIs da Meta ou integracoes que
+           pertencem ao Facebook Login"
+========================================================================
+
+--- INICIO DA RESPOSTA ---
+
+Sim, o MedScale utiliza o Login do Facebook para Empresas e as APIs da
+Meta. Importante: o Login do Facebook NAO e usado para autenticar
+usuarios no produto. O login no MedScale e feito por e-mail e senha ou
+por conta Google. O Facebook nunca funciona como provedor de identidade,
+e o aplicativo NAO solicita as permissoes email, public_profile,
+user_friends, user_gender, user_birthday nem qualquer outra permissao de
+dados pessoais de perfil.
+
+O Login do Facebook aparece unicamente como porta de entrada para o
+consentimento de ativos de negocio, em dois fluxos:
+
+1) ANUNCIOS DO FACEBOOK
+   Onde: Configuracoes > Integracoes Meta > botao "Login com Facebook".
+   Permissoes: ads_read e business_management.
+   Finalidade: ler as metricas das campanhas (gasto, impressoes e
+   resultados) das contas de anuncio que o proprio cliente autoriza, e
+   exibi-las na tela "Trafego" ao lado dos dados de consultas agendadas.
+   O acesso e somente de leitura: o aplicativo nao cria, nao edita e nao
+   pausa campanhas.
+
+2) WHATSAPP BUSINESS (Embedded Signup)
+   Onde: Configuracoes > Integracoes Meta > botao "Conectar WhatsApp".
+   Permissoes: whatsapp_business_management e
+   whatsapp_business_messaging, definidas na configuracao do Login do
+   Facebook para Empresas.
+   Finalidade: conectar a conta do WhatsApp Business (WABA) do cliente,
+   registrar o numero de telefone e enviar e receber mensagens pela Cloud
+   API, para o atendimento e a confirmacao de consultas da clinica.
+
+Em ambos os fluxos, quem concede o consentimento e o proprio responsavel
+pela clinica, sobre os ativos dele, dentro da conta dele no MedScale.
+Nenhum dado obtido e compartilhado com terceiros nem utilizado fora da
+conta que autorizou a conexao.
+
+--- FIM DA RESPOSTA ---
+
+
+========================================================================
+CAMPO 4 - "O Login do Facebook esta integrado a esta plataforma?"
+========================================================================
+
+Marque a opcao: SIM
+
+Motivo (nao ha campo de texto aqui, mas a justificativa esta no Campo 3):
+esta integrado como Login do Facebook para Empresas, usado apenas para
+obter consentimento de acesso a ativos de negocio - contas de anuncio e
+WhatsApp Business - e nao como metodo de login de usuarios no aplicativo.
+
+
+========================================================================
+CAMPO 5 - "Codigos de acesso ou credenciais de teste (app pago ou por
+           assinatura)"
+========================================================================
+
+--- INICIO DA RESPOSTA ---
+
+O MedScale e um SaaS por assinatura. Para que a analise cubra todos os
+recursos, disponibilizamos uma conta de teste com o plano completo ja
+liberado, sem necessidade de pagamento:
+
+URL de login: https://medscalebr.com/login
+E-mail: <<e-mail da conta de teste>>
+Senha: <<senha da conta de teste>>
+Plano: completo, sem cobranca (conta destinada a analise)
+Perfil: Owner (acesso total, inclusive as integracoes com a Meta)
+
+Usuario de teste do Facebook registrado no aplicativo:
+E-mail: <<e-mail do usuario de teste, se aplicavel>>
+Senha: <<senha do usuario de teste>>
+
+Essas credenciais permanecerao ativas por, no minimo, um ano apos este
+envio. Nao ha compras dentro do aplicativo nem recursos adicionais
+bloqueados por pagamento alem do acesso a conta.
+
+--- FIM DA RESPOSTA ---
+
+
+========================================================================
+CAMPO 6 - "Codigos de presente para download do app"
+========================================================================
+
+--- INICIO DA RESPOSTA ---
+
+Nao se aplica. O MedScale e um aplicativo web acessado pelo navegador e
+nao e distribuido por App Store, Google Play ou qualquer outra loja de
+aplicativos. Nao existe custo de download nem codigo de presente a
+fornecer. O acesso completo e feito com as credenciais informadas no
+campo anterior.
+
+--- FIM DA RESPOSTA ---
+
+
+========================================================================
+CAMPO 7 - "Restricoes geograficas (geo-blocking ou geo-fencing)"
+========================================================================
+
+--- INICIO DA RESPOSTA ---
+
+Nao ha restricao geografica. O aplicativo nao aplica geo-blocking nem
+geo-fencing: a URL pode ser acessada de qualquer pais, sem VPN e sem
+qualquer procedimento de contorno. Nenhuma funcionalidade exige que o
+usuario esteja no Brasil.
+
+Dois pontos apenas informativos, que nao bloqueiam a analise:
+
+- A interface esta integralmente em portugues do Brasil, pois o produto
+  atende clinicas brasileiras. Recomendamos o tradutor automatico do
+  navegador, se necessario.
+- Numeros de telefone e documentos seguem o formato brasileiro nos
+  cadastros, mas isso nao impede o acesso nem o teste a partir de outro
+  pais.
+
+--- FIM DA RESPOSTA ---
+
+
+========================================================================
+LEMBRETE INTERNO (NAO ENVIAR A META)
+========================================================================
+A conexao em producao ainda falhava com "Error validating client secret"
+na troca do code. Se o analista clicar em "Login com Facebook" e cair
+nesse erro, a analise e reprovada. Resolva o redeploy sem cache e teste o
+fluxo ponta a ponta ANTES de enviar este formulario.

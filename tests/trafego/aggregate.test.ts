@@ -134,3 +134,33 @@ describe('byCampaign', () => {
     expect(rows.map((r) => r.campaign_name)).toEqual(['Cara', 'Barata'])
   })
 })
+
+// A atribuição chega com o ID EXTERNO da campanha (é o que o mapa de anúncios
+// devolve), mas a tabela de gasto agrupa por canal + nome. Sem carregar o ID
+// na linha agregada, o ROI da Tarefa 7 não tem como casar as duas metades.
+describe('byCampaign — id externo', () => {
+  it('carrega o id externo da campanha na linha agregada', () => {
+    const [row] = byCampaign([
+      campaign({ campaign_name: 'Implantes', external_campaign_id: 'c1', source: 'meta_sync' }),
+    ])
+
+    expect(row.externalId).toBe('c1')
+  })
+
+  // Campanha manual não tem id externo, e o dia manual não pode apagar o id
+  // que veio do sync: senão a linha perde o vínculo com o ROI.
+  it('mantém o id externo quando um dia manual entra na mesma campanha', () => {
+    const [row] = byCampaign([
+      campaign({ campaign_name: 'Implantes', external_campaign_id: null, source: 'manual' }),
+      campaign({ campaign_name: 'Implantes', external_campaign_id: 'c1', source: 'meta_sync' }),
+    ])
+
+    expect(row).toMatchObject({ externalId: 'c1', spend: 200 })
+  })
+
+  it('deixa o id nulo na campanha puramente manual', () => {
+    const [row] = byCampaign([campaign({ campaign_name: 'Manual', external_campaign_id: null })])
+
+    expect(row.externalId).toBeNull()
+  })
+})

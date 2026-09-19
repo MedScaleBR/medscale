@@ -19,21 +19,19 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
-import { Plus, RefreshCw, Wallet, Users, Receipt } from 'lucide-react'
+import { Plus, RefreshCw, Wallet, Users, Receipt, TrendingUp } from 'lucide-react'
 import { KpiCard } from '@/components/trafego/KpiCard'
 import { LeadsChart } from '@/components/trafego/LeadsChart'
+import { FunnelCard } from '@/components/trafego/FunnelCard'
+import { AttributionList } from '@/components/trafego/AttributionList'
 import { byCampaign, leadsByBucket, summarize, withinPeriod } from '@/lib/trafego/aggregate'
+import { leadsWithinPeriod, type AttributedLead } from '@/lib/trafego/attribution'
+import { channelLabel } from '@/lib/trafego/channels'
+import { funnelSteps } from '@/lib/trafego/funnel'
+import { roiByCampaign } from '@/lib/trafego/roi'
 import type { Database, AdChannel } from '@/types/database'
 
 type Campaign = Database['public']['Tables']['ad_campaigns']['Row']
-
-const CHANNEL_LABEL: Record<string, string> = {
-  instagram: 'Instagram',
-  google: 'Google Ads',
-  facebook: 'Facebook',
-  tiktok: 'TikTok',
-  outro: 'Outro',
-}
 
 const PERIODS = [
   { days: 7, label: 'Últimos 7 dias', subtitle: 'Por dia' },
@@ -56,11 +54,22 @@ const ALL = 'todos'
 
 const formatBRL = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
+/** "2,4x". Nulo (sem investimento ou sem campanha) vira travessão, não "0x". */
+const formatRoi = (roi: number | null | undefined) =>
+  roi === null || roi === undefined ? '—' : `${roi.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}x`
+
+// Escala da barra do KPI: 5x é onde ela enche. Acima disso satura em vez de
+// escapar do card — o número ao lado continua dizendo quanto foi de verdade.
+const ROI_FULL_BAR = 5
+
 export function CampaignsClient({
   initialCampaigns,
+  leads,
   today,
 }: {
   initialCampaigns: Campaign[]
+  /** Leads que vieram de anúncio, já com consultas e receita atribuídas. */
+  leads: AttributedLead[]
   /** ISO vindo do servidor: se o cliente calculasse `new Date()` na hidratação,
    *  os rótulos do gráfico poderiam divergir do HTML renderizado. */
   today: string
@@ -80,15 +89,33 @@ export function CampaignsClient({
     const now = new Date(today)
     const inPeriod = withinPeriod(campaigns, days, now)
     const filtered = channel === ALL ? inPeriod : inPeriod.filter((c) => c.channel === channel)
+    const rows = byCampaign(filtered)
+
+    // Os leads acompanham os mesmos filtros da tabela; o de canal descarta
+    // quem ainda não tem campanha mapeada, porque aí o canal é desconhecido.
+    const leadsInPeriod = leadsWithinPeriod(leads, days, now)
+    const leadsFiltered =
+      channel === ALL ? leadsInPeriod : leadsInPeriod.filter((l) => l.channel === channel)
+
+    const roi = roiByCampaign(leadsFiltered, rows)
+    const spend = summarize(filtered).spend
+    const revenue = leadsFiltered.reduce((sum, lead) => sum + lead.paidRevenue, 0)
+
     return {
       // Os canais do filtro saem dos dados: oferecer "Google Ads" numa conta que
       // só roda Meta é prometer um filtro que sempre volta vazio.
       channels: [...new Set(inPeriod.map((c) => c.channel))].sort(),
       summary: summarize(filtered),
       buckets: leadsByBucket(filtered, days, now),
-      rows: byCampaign(filtered),
+      rows,
+      leads: leadsFiltered,
+      funnel: funnelSteps(leadsFiltered),
+      roi,
+      // ROI geral da janela, com a mesma regra da coluna: sem investimento não
+      // há retorno a calcular.
+      totalRoi: spend > 0 ? revenue / spend : null,
     }
-  }, [campaigns, days, channel, today])
+  }, [campaigns, leads, days, channel, today])
 
   const handleSync = async () => {
     setSyncing(true)
@@ -174,7 +201,7 @@ export function CampaignsClient({
                     : 'border-[var(--navy-06)] bg-white text-[var(--text-muted)]'
                 }`}
               >
-                {value === ALL ? 'Todos' : (CHANNEL_LABEL[value] ?? value)}
+                {value === ALL ? 'Todos' : channelLabel(value)}
               </button>
             )
           })}
@@ -195,7 +222,7 @@ export function CampaignsClient({
         </div>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiCard label="Investimento total" value={formatBRL(view.summary.spend)} icon={Wallet} />
         <KpiCard label="Leads gerados" value={String(view.summary.leads)} icon={Users} />
         <KpiCard
@@ -203,9 +230,23 @@ export function CampaignsClient({
           value={view.summary.cpl === null ? '—' : formatBRL(view.summary.cpl)}
           icon={Receipt}
         />
+        <KpiCard
+          label="ROI (retorno sobre investimento)"
+          value={formatRoi(view.totalRoi)}
+          icon={TrendingUp}
+          bar={{
+            pct: Math.min(100, ((view.totalRoi ?? 0) / ROI_FULL_BAR) * 100),
+            color: 'var(--success)',
+          }}
+        />
       </div>
 
-      <LeadsChart buckets={view.buckets} subtitle={period.subtitle} />
+      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+        <LeadsChart buckets={view.buckets} subtitle={period.subtitle} />
+        <FunnelCard steps={view.funnel} days={days} />
+      </div>
+
+      <AttributionList leads={view.leads} />
 
       <div className="overflow-hidden rounded-[14px] border border-[var(--navy-06)] bg-white shadow-[var(--shadow-sm)]">
         {view.rows.length === 0 ? (
@@ -223,6 +264,7 @@ export function CampaignsClient({
                   <th className="px-5 py-3 text-right font-normal">Cliques</th>
                   <th className="px-5 py-3 text-right font-normal">Leads</th>
                   <th className="px-5 py-3 text-right font-normal">CPL</th>
+                  <th className="px-5 py-3 text-right font-normal">ROI</th>
                 </tr>
               </thead>
               <tbody>
@@ -240,7 +282,7 @@ export function CampaignsClient({
                       )}
                     </td>
                     <td className="px-5 py-3 text-[var(--text-body)]">
-                      {CHANNEL_LABEL[row.channel] ?? row.channel}
+                      {channelLabel(row.channel)}
                     </td>
                     <td className="px-5 py-3 text-right text-[var(--text-body)]">
                       {formatBRL(row.spend)}
@@ -250,6 +292,9 @@ export function CampaignsClient({
                     <td className="px-5 py-3 text-right text-[var(--text-body)]">
                       {row.cpl === null ? '—' : formatBRL(row.cpl)}
                     </td>
+                    <td className="px-5 py-3 text-right text-[var(--text-body)]">
+                      {formatRoi(row.externalId ? view.roi.get(row.externalId)?.roi : null)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -257,6 +302,13 @@ export function CampaignsClient({
           </div>
         )}
       </div>
+
+      {/* Consulta por convênio não gera lançamento de receita, então o ROI
+          sai subestimado em quem atende convênio. Dizer isso na tela evita
+          que uma campanha boa seja desligada por um número incompleto. */}
+      <p className="text-xs text-[var(--text-muted)]">
+        ROI considera apenas receita particular registrada e paga.
+      </p>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-sm">
