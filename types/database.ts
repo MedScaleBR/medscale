@@ -865,6 +865,69 @@ export interface Database {
           },
         ]
       }
+      lead_attributions: {
+        Row: {
+          id: string
+          account_id: string
+          // Só é preenchido depois que a conversa existe; o referral chega
+          // antes disso, na primeira mensagem.
+          conversation_id: string | null
+          patient_phone: string
+          // ID do anúncio, não da campanha — a tradução vive em meta_ad_map.
+          source_id: string
+          source_type: string
+          ctwa_clid: string | null
+          headline: string | null
+          body: string | null
+          source_url: string | null
+          occurred_at: string
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['lead_attributions']['Row']> & {
+          account_id: string
+          patient_phone: string
+          source_id: string
+        }
+        Update: Partial<Database['public']['Tables']['lead_attributions']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'lead_attributions_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'lead_attributions_conversation_id_fkey'
+            columns: ['conversation_id']
+            referencedRelation: 'conversations'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      meta_ad_map: {
+        Row: {
+          account_id: string
+          ad_id: string
+          campaign_id: string
+          ad_name: string | null
+          adset_name: string | null
+          synced_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['meta_ad_map']['Row']> & {
+          account_id: string
+          ad_id: string
+          campaign_id: string
+        }
+        Update: Partial<Database['public']['Tables']['meta_ad_map']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'meta_ad_map_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       webhook_logs: {
         Row: {
           id: string
