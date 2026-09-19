@@ -93,6 +93,44 @@ export function phoneKey(phone: string): string {
   return withCountry
 }
 
+export interface CampaignLeads {
+  campaignId: string | null
+  campaignName: string | null
+  channel: string | null
+  leads: number
+  /** Fatia do total de leads do período, em 0–100. */
+  pct: number
+}
+
+/**
+ * Quantos leads cada campanha trouxe. Os leads de anúncio ainda sem mapa caem
+ * numa linha só, de campanha nula, em vez de sumirem: se sumissem, a soma da
+ * lista não bateria com o total de leads mostrado ao lado dela.
+ */
+export function leadsByCampaign(leads: AttributedLead[]): CampaignLeads[] {
+  const lines = new Map<string, CampaignLeads>()
+
+  for (const lead of leads) {
+    const key = lead.campaignId ?? ''
+    const line = lines.get(key) ?? {
+      campaignId: lead.campaignId,
+      campaignName: lead.campaignName,
+      channel: lead.channel,
+      leads: 0,
+      pct: 0,
+    }
+    line.leads += 1
+    lines.set(key, line)
+  }
+
+  const list = [...lines.values()]
+  for (const line of list) {
+    line.pct = (line.leads / leads.length) * 100
+  }
+
+  return list.sort((a, b) => b.leads - a.leads)
+}
+
 /**
  * Recorta os leads pela janela do seletor, com a mesma conta de
  * `withinPeriod`: inclui hoje, então 7 dias vai de hoje até seis dias atrás.

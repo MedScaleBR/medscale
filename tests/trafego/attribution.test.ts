@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildLeads, leadsWithinPeriod, ATTRIBUTION_WINDOW_DAYS } from '@/lib/trafego/attribution'
+import { buildLeads, leadsByCampaign, leadsWithinPeriod, ATTRIBUTION_WINDOW_DAYS } from '@/lib/trafego/attribution'
 import type { AttributedLead } from '@/lib/trafego/attribution'
 
 const ATTR = {
@@ -162,5 +162,48 @@ describe('leadsWithinPeriod', () => {
     const kept = leadsWithinPeriod([lead('2026-09-18T23:59:00Z')], 7, today)
 
     expect(kept).toHaveLength(1)
+  })
+})
+
+describe('leadsByCampaign', () => {
+  const lead = (over: Partial<AttributedLead>): AttributedLead => ({
+    campaignId: 'c1',
+    campaignName: 'Implantes',
+    channel: 'facebook',
+    patientPhone: '+5511999999999',
+    leadAt: '2026-09-01T10:00:00Z',
+    appointments: [],
+    paidRevenue: 0,
+    forecastRevenue: 0,
+    ...over,
+  })
+
+  it('agrupa por campanha e calcula o percentual sobre o total', () => {
+    const lines = leadsByCampaign([
+      lead({}),
+      lead({}),
+      lead({ campaignId: 'c2', campaignName: 'Clareamento' }),
+      lead({ campaignId: 'c2', campaignName: 'Clareamento' }),
+      lead({ campaignId: 'c2', campaignName: 'Clareamento' }),
+    ])
+
+    expect(lines[0]).toMatchObject({ campaignId: 'c2', leads: 3, pct: 60 })
+    expect(lines[1]).toMatchObject({ campaignId: 'c1', leads: 2, pct: 40 })
+  })
+
+  // Anúncio fora do mapa vira uma linha só, em vez de sumir: se sumisse, a
+  // soma da lista não bateria com o total de leads logo acima dela.
+  it('junta os leads sem campanha numa linha própria', () => {
+    const lines = leadsByCampaign([
+      lead({ campaignId: null, campaignName: null, channel: null }),
+      lead({ campaignId: null, campaignName: null, channel: null }),
+    ])
+
+    expect(lines).toHaveLength(1)
+    expect(lines[0]).toMatchObject({ campaignId: null, leads: 2, pct: 100 })
+  })
+
+  it('sem lead nenhum devolve lista vazia, não uma linha zerada', () => {
+    expect(leadsByCampaign([])).toEqual([])
   })
 })
