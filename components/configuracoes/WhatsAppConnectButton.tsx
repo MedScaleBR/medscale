@@ -7,6 +7,8 @@ import { loadFbSdk } from '@/lib/meta/fb-sdk'
 
 interface Props {
   isConnected: boolean
+  /** número conectado pelo app do WhatsApp Business (Coexistence) */
+  isCoexistence: boolean
   whatsappNumber: string | null
   /** false quando faltam NEXT_PUBLIC_META_APP_ID / config do Embedded Signup */
   isConfigured: boolean
@@ -14,14 +16,19 @@ interface Props {
   configId: string
 }
 
+// A Meta não deixa desregistrar pela API um número em Coexistence: o nosso
+// "Desconectar" só tira a Clara do WABA; o vínculo em si sai pelo app.
+const INSTRUCAO_DESCONEXAO_COEXISTENCE =
+  'Para desvincular o número da Meta de vez, abra o app do WhatsApp Business e vá em Configurações > Conta > Plataforma comercial.'
+
 // Allowlist exata: `endsWith('facebook.com')` aceitaria `evilfacebook.com`, que
 // qualquer um registra, e o forjador passaria waba_id/phone_number_id nossos.
 const ORIGENS_META = ['https://www.facebook.com', 'https://web.facebook.com']
 
-export function WhatsAppConnectButton({ isConnected, whatsappNumber, isConfigured, appId, configId }: Props) {
+export function WhatsAppConnectButton({ isConnected, isCoexistence, whatsappNumber, isConfigured, appId, configId }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const sessionInfo = useRef<{ waba_id?: string; phone_number_id?: string }>({})
+  const sessionInfo = useRef<{ waba_id?: string; phone_number_id?: string; coexistence?: boolean }>({})
   // Distingue desistência do usuário de popup que nunca abriu: sem isso as duas
   // terminam no mesmo callback sem `code` e o botão fica mudo.
   const cancelled = useRef(false)
@@ -35,6 +42,16 @@ export function WhatsAppConnectButton({ isConnected, whatsappNumber, isConfigure
         const data = JSON.parse(event.data)
         if (data.type !== 'WA_EMBEDDED_SIGNUP') return
         if (data.event === 'FINISH') sessionInfo.current = data.data ?? {}
+        // Coexistence termina com outro evento e manda só o waba_id — o número
+        // o backend busca no próprio WABA.
+        if (data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
+          sessionInfo.current = { ...(data.data ?? {}), coexistence: true }
+        }
+        if (data.event === 'FINISH_ONLY_WABA') {
+          setError('A conta foi criada, mas nenhum número foi adicionado. Conecte de novo e escolha um número.')
+          cancelled.current = true
+          setLoading(false)
+        }
         if (data.event === 'CANCEL') {
           cancelled.current = true
           setLoading(false)
@@ -80,8 +97,8 @@ export function WhatsAppConnectButton({ isConnected, whatsappNumber, isConfigure
     cancelled.current = false
     const finishSignup = async (response: { authResponse?: { code?: string } }) => {
       const code = response.authResponse?.code
-      const { waba_id, phone_number_id } = sessionInfo.current
-      if (!code || !waba_id || !phone_number_id) {
+      const { waba_id, phone_number_id, coexistence } = sessionInfo.current
+      if (!code || !waba_id || (!phone_number_id && !coexistence)) {
         // Desistência é silenciosa; qualquer outro caminho sem dados é
         // falha real (popup bloqueado, fluxo interrompido) e precisa
         // aparecer — foi o que escondeu esse bug até agora.
@@ -96,7 +113,7 @@ export function WhatsAppConnectButton({ isConnected, whatsappNumber, isConfigure
       const res = await fetch('/api/whatsapp/embedded-signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ code, waba_id, phone_number_id }),
+        body: JSON.stringify({ code, waba_id, phone_number_id, coexistence }),
       })
       const json = await res.json()
       if (!res.ok) {
@@ -138,7 +155,8 @@ export function WhatsAppConnectButton({ isConnected, whatsappNumber, isConfigure
   }
 
   const handleDisconnect = async () => {
-    if (!confirm('Desconectar o WhatsApp? A Clara para de responder os pacientes.')) return
+    const aviso = 'Desconectar o WhatsApp? A Clara para de responder os pacientes.'
+    if (!confirm(isCoexistence ? `${aviso}\n\n${INSTRUCAO_DESCONEXAO_COEXISTENCE}` : aviso)) return
     setLoading(true)
     await fetch('/api/bot/onboarding/disconnect', { method: 'DELETE' })
     window.location.reload()
@@ -146,19 +164,26 @@ export function WhatsAppConnectButton({ isConnected, whatsappNumber, isConfigure
 
   if (isConnected) {
     return (
-      <div className="flex items-center gap-3">
-        <Badge className="border-none bg-green-50 text-green-700">
-          ✓ Conectado{whatsappNumber ? ` — ${whatsappNumber}` : ''}
-        </Badge>
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={handleDisconnect}
-          disabled={loading}
-          className="border-red-200 text-red-500 hover:text-red-700"
-        >
-          Desconectar
-        </Button>
+      <div className="space-y-2">
+        <div className="flex items-center gap-3">
+          <Badge className="border-none bg-green-50 text-green-700">
+            ✓ Conectado{whatsappNumber ? ` — ${whatsappNumber}` : ''}
+          </Badge>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleDisconnect}
+            disabled={loading}
+            className="border-red-200 text-red-500 hover:text-red-700"
+          >
+            Desconectar
+          </Button>
+        </div>
+        {isCoexistence && (
+          <p className="text-xs text-gray-400">
+            Este número continua funcionando no app do WhatsApp Business. {INSTRUCAO_DESCONEXAO_COEXISTENCE}
+          </p>
+        )}
       </div>
     )
   }

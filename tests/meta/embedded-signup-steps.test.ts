@@ -4,6 +4,7 @@ import {
   subscribeAppToWaba,
   registerPhoneNumber,
   fetchPhoneNumberInfo,
+  fetchWabaPhoneNumberId,
   generatePin,
 } from '@/lib/meta/embedded-signup'
 
@@ -76,5 +77,18 @@ describe('passos do Embedded Signup', () => {
     for (let i = 0; i < 50; i++) {
       expect(generatePin()).toMatch(/^\d{6}$/)
     }
+  })
+
+  it('busca o número do WABA no coexistence', async () => {
+    vi.mocked(fetch).mockResolvedValue(ok({ data: [{ id: 'pn-9' }] }))
+
+    await expect(fetchWabaPhoneNumberId('waba-1', 'tok')).resolves.toBe('pn-9')
+    expect(String(vi.mocked(fetch).mock.calls[0][0])).toContain('/waba-1/phone_numbers')
+  })
+
+  it('WABA sem número erra com mensagem clara', async () => {
+    vi.mocked(fetch).mockResolvedValue(ok({ data: [] }))
+
+    await expect(fetchWabaPhoneNumberId('waba-1', 'tok')).rejects.toThrow(/nenhum número/i)
   })
 })

@@ -10,6 +10,7 @@ import {
   subscribeAppToWaba,
   registerPhoneNumber,
   fetchPhoneNumberInfo,
+  fetchWabaPhoneNumberId,
   generatePin,
   isEmbeddedSignupConfigured,
 } from '@/lib/meta/embedded-signup'
@@ -29,19 +30,27 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Integração do WhatsApp ainda não liberada pela Meta.' }, { status: 503 })
   }
 
-  const { code, waba_id, phone_number_id } = await req.json()
-  if (!code || !waba_id || !phone_number_id) {
+  // `coexistence`: o cliente conectou o número que já usa no app do WhatsApp
+  // Business. A Meta devolve só o WABA e o número já vem registrado.
+  const body = await req.json()
+  const { code, waba_id } = body
+  const coexistence = body.coexistence === true
+  let phone_number_id: string | undefined = body.phone_number_id
+  if (!code || !waba_id || (!phone_number_id && !coexistence)) {
     return NextResponse.json({ error: 'code, waba_id e phone_number_id são obrigatórios' }, { status: 400 })
   }
 
-  const pin = generatePin()
+  // Coexistence não tem PIN: o /register seria recusado (o número já está
+  // registrado) e a Meta manda pular esse passo.
+  const pin = coexistence ? null : generatePin()
 
   let businessToken: string
   let info: { displayPhoneNumber: string | null; verifiedName: string | null }
   try {
     businessToken = await exchangeEmbeddedSignupCode(code)
     await subscribeAppToWaba(waba_id, businessToken)
-    await registerPhoneNumber(phone_number_id, pin, businessToken)
+    if (!phone_number_id) phone_number_id = await fetchWabaPhoneNumberId(waba_id, businessToken)
+    if (pin) await registerPhoneNumber(phone_number_id, pin, businessToken)
     info = await fetchPhoneNumberInfo(phone_number_id, businessToken)
   } catch (err) {
     Sentry.captureException(err, { tags: { area: 'meta', flow: 'embedded_signup' } })
@@ -55,7 +64,7 @@ export async function POST(req: NextRequest) {
       waba_id,
       phone_number_id,
       meta_token: encryptToken(businessToken),
-      whatsapp_pin: encryptToken(pin),
+      whatsapp_pin: pin ? encryptToken(pin) : null,
       whatsapp_number: info.displayPhoneNumber,
       number_source: 'own',
       is_active: true,

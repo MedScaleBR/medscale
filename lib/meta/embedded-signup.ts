@@ -64,6 +64,20 @@ export async function registerPhoneNumber(phoneNumberId: string, pin: string, to
   }
 }
 
+/**
+ * No Coexistence o popup devolve só o `waba_id` — o número vem do próprio WABA.
+ * O WABA criado a partir do app do WhatsApp Business tem exatamente um número.
+ */
+export async function fetchWabaPhoneNumberId(wabaId: string, token: string): Promise<string> {
+  const data = await graphFetch<{ data?: { id: string }[] }>(`/${wabaId}/phone_numbers`, {
+    token,
+    params: { fields: 'id' },
+  })
+  const id = data.data?.[0]?.id
+  if (!id) throw new Error('Nenhum número encontrado no WhatsApp Business conectado.')
+  return id
+}
+
 export async function fetchPhoneNumberInfo(
   phoneNumberId: string,
   token: string

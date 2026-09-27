@@ -6,6 +6,8 @@ import { AdAccountMap, type AdAccountMapRow } from './AdAccountMap'
 interface MetaIntegrationsCardProps {
   whatsapp: {
     connected: boolean
+    /** número conectado pelo app do WhatsApp Business (Coexistence) */
+    coexistence: boolean
     number: string | null
     /** false quando faltam NEXT_PUBLIC_META_APP_ID / config do Embedded Signup */
     configured: boolean
@@ -38,6 +40,7 @@ export function MetaIntegrationsCard({ whatsapp, ads }: MetaIntegrationsCardProp
         <div className="mt-3">
           <WhatsAppConnectButton
             isConnected={whatsapp.connected}
+            isCoexistence={whatsapp.coexistence}
             whatsappNumber={whatsapp.number}
             isConfigured={whatsapp.configured}
             appId={whatsapp.appId}
