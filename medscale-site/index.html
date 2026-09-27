@@ -684,6 +684,41 @@
     .faq-a strong { color: var(--navy); font-weight: 600; }
 
     /* ── Sócios ───────────────────────────────────────────────────────── */
+    /* ── Sócios: três retratos ────────────────────────────────────────── */
+    .fnd-grid {
+      display: grid; gap: 22px;
+      grid-template-columns: 1fr;
+    }
+    @media (min-width: 640px) { .fnd-grid { grid-template-columns: repeat(3, 1fr); gap: 18px; } }
+    .fnd {
+      display: flex; flex-direction: column;
+    }
+    .fnd-foto {
+      position: relative; border-radius: 18px; overflow: hidden;
+      background: var(--navy-dark); aspect-ratio: 4 / 5;
+      box-shadow: var(--shadow-md);
+      transition: transform .25s ease, box-shadow .25s ease;
+    }
+    .fnd:hover .fnd-foto { transform: translateY(-5px); box-shadow: var(--shadow-lg); }
+    .fnd-foto img {
+      width: 100%; height: 100%; object-fit: cover; object-position: center top;
+      display: block;
+    }
+    /* Véu inferior: amarra os três e garante leitura se algum dia houver texto sobre a foto */
+    .fnd-foto::after {
+      content: ''; position: absolute; inset: auto 0 0 0; height: 38%;
+      background: linear-gradient(to top, rgba(11,23,53,.55) 0%, transparent 100%);
+      pointer-events: none;
+    }
+    .fnd-nome {
+      margin: 16px 0 2px; font-size: 1.0625rem; font-weight: 700;
+      color: var(--navy); letter-spacing: -0.01em; line-height: 1.3;
+    }
+    .fnd-cargo {
+      margin: 0; font-size: .8125rem; font-weight: 600;
+      color: var(--cyan-dark); letter-spacing: .04em; text-transform: uppercase;
+    }
+
     .fnd-figure {
       margin: 0; position: relative;
       border-radius: 20px; overflow: hidden;
@@ -1253,7 +1288,7 @@
           </p>
           <p class="text-sm mt-4" style="color:rgba(255,255,255,.40)">
             Prefere escrever direto?
-            <a href="mailto:medscalebr@gmail.com" class="font-semibold no-underline" style="color:var(--cyan)">medscalebr@gmail.com</a>
+            <a href="mailto:contato@medscalebr.com" class="font-semibold no-underline" style="color:var(--cyan)">contato@medscalebr.com</a>
           </p>
         </div>
 
@@ -1478,7 +1513,7 @@
                 <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
                   <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                 </svg>
-                Informações confidenciais, usadas apenas conforme nossa <a href="/politica-privacidade.html" target="_blank" rel="noopener" style="text-decoration:underline">Política de Privacidade</a>.
+                Informações confidenciais. Nunca compartilhadas com terceiros.
               </p>
 
               <!-- Error message -->
@@ -1530,6 +1565,59 @@
           </div><!-- /steps wrapper -->
 
         </div><!-- /form card -->
+      </div>
+    </section>
+
+    <!-- ────────────────────────────────────────────────────── SÓCIOS ── -->
+    <section id="socios" class="section" style="background:#fff; border-top:1px solid #E2E8F0"
+             aria-labelledby="socios-heading">
+      <div class="max-w-4xl mx-auto">
+
+        <div class="text-center mb-12 reveal">
+          <p class="text-xs font-semibold tracking-widest mb-3 uppercase" style="color:var(--cyan)">Quem está por trás</p>
+          <h2 id="socios-heading" class="font-black mb-5"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            Quem vende é quem executa
+          </h2>
+          <!-- TODO: trocar pelo texto de origem real da empresa -->
+          <p class="text-lg leading-relaxed mx-auto" style="color:#64748B; max-width:620px">
+            A MedScale nasceu de uma constatação simples: o médico é formado para cuidar de gente —
+            não para gerir marketing, agenda, secretária e finanças ao mesmo tempo. Montamos a empresa
+            que faz essa parte inteira. Quando você contrata, fala direto com a gente.
+          </p>
+        </div>
+
+        <div class="fnd-grid">
+
+          <div class="fnd reveal">
+            <div class="fnd-foto">
+              <img src="socio-giuliano.jpg" alt="Giuliano Torres, co-fundador da MedScale"
+                   width="720" height="900" loading="lazy" decoding="async">
+            </div>
+            <h3 class="fnd-nome">Giuliano Torres</h3>
+            <p class="fnd-cargo">Co-fundador</p>
+          </div>
+
+          <div class="fnd reveal d1">
+            <div class="fnd-foto">
+              <img src="socio-joao.jpg" alt="João Victor Teixeira, co-fundador da MedScale"
+                   width="720" height="900" loading="lazy" decoding="async">
+            </div>
+            <h3 class="fnd-nome">João Victor Teixeira</h3>
+            <p class="fnd-cargo">Co-fundador</p>
+          </div>
+
+          <div class="fnd reveal d2">
+            <div class="fnd-foto">
+              <img src="socio-eduardo.jpg" alt="Eduardo Bordignon, co-fundador da MedScale"
+                   width="720" height="900" loading="lazy" decoding="async">
+            </div>
+            <h3 class="fnd-nome">Eduardo Bordignon</h3>
+            <p class="fnd-cargo">Co-fundador</p>
+          </div>
+
+        </div>
+
       </div>
     </section>
 
@@ -2324,51 +2412,6 @@
     </section>
     ──────────────────────────────────────────────────────────────────── -->
 
-    <!--
-    ── SÓCIOS (fora do ar — aguardando definição societária) ────────────
-         Para reativar: apague esta linha de abertura e a de fechamento
-         lá embaixo. Antes disso, conferir:
-           1. a headline "Três sócios, um telefone" (muda se forem dois)
-           2. os nomes na figcaption
-           3. a foto socios-medscale.jpg, que mostra três pessoas
-           4. o parágrafo de origem, que ainda é texto genérico meu
-
-    <section id="socios" class="section" style="background:#fff; border-top:1px solid #E2E8F0"
-             aria-labelledby="socios-heading">
-      <div class="max-w-4xl mx-auto">
-
-        <div class="text-center mb-12 reveal">
-          <p class="text-xs font-semibold tracking-widest mb-3 uppercase" style="color:var(--cyan)">Quem está por trás</p>
-          <h2 id="socios-heading" class="font-black mb-5"
-              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
-            Três sócios, um telefone
-          </h2>
-          <p class="text-lg leading-relaxed mx-auto" style="color:#64748B; max-width:620px">
-            A MedScale nasceu de uma constatação simples: o médico é formado para cuidar de gente —
-            não para gerir marketing, agenda, secretária e finanças ao mesmo tempo. Montamos a empresa
-            que faz essa parte inteira. Quando você contrata, fala direto com a gente.
-          </p>
-        </div>
-
-        <figure class="fnd-figure reveal">
-          <img src="socios-medscale.jpg"
-               alt="Os três co-fundadores da MedScale no escritório"
-               width="1600" height="1073"
-               loading="lazy" decoding="async">
-          <figcaption>
-            <span class="fnd-role">Co-fundadores</span>
-            <span class="fnd-names">
-              Giuliano Torres
-              <i aria-hidden="true">·</i> Arthur Costa
-              <i aria-hidden="true">·</i> João Victor Teixeira
-            </span>
-          </figcaption>
-        </figure>
-
-      </div>
-    </section>
-    ──────────────────────────────────────────────────────────────────── -->
-
     <!-- ───────────────────────────────────────────────────────── FAQ ── -->
     <section id="faq" class="section-sm" style="background:#F8FAFC; border-top:1px solid #E2E8F0"
              aria-labelledby="faq-heading">
@@ -2496,7 +2539,7 @@
 
         <p class="text-center text-sm mt-10 reveal" style="color:#64748B">
           Ficou alguma dúvida? Escreva para
-          <a href="mailto:medscalebr@gmail.com" class="font-semibold no-underline" style="color:var(--cyan-dark)">medscalebr@gmail.com</a>
+          <a href="mailto:contato@medscalebr.com" class="font-semibold no-underline" style="color:var(--cyan-dark)">contato@medscalebr.com</a>
         </p>
 
       </div>
@@ -2545,6 +2588,7 @@
         <span class="text-xs font-semibold tracking-widest" style="color:rgba(255,255,255,.25)">ASSESSORIA MÉDICA</span>
       </div>
       <p class="text-xs text-center" style="color:rgba(255,255,255,.30)">
+        MedScale Tecnologia LTDA · CNPJ 69.106.377/0001-26<br>
         © 2026 MedScale. Todos os direitos reservados.<br>
         Conteúdos em conformidade com o Conselho Federal de Medicina (CFM).
       </p>
@@ -2554,10 +2598,10 @@
            style="color:rgba(255,255,255,.55)">
           Acessar a plataforma
         </a>
-        <a href="mailto:medscalebr@gmail.com"
+        <a href="mailto:contato@medscalebr.com"
            class="text-xs no-underline transition-colors"
            style="color:rgba(255,255,255,.30)">
-          medscalebr@gmail.com
+          contato@medscalebr.com
         </a>
         <a href="/politica-privacidade.html"
            class="text-xs no-underline transition-colors"
@@ -2568,7 +2612,7 @@
         <a href="/exclusao-dados.html"
            class="text-xs no-underline transition-colors"
            style="color:rgba(255,255,255,.30)"
-           aria-label="Exclusão de Dados do Usuário">
+           aria-label="Exclusão de Dados">
           Exclusão de Dados
         </a>
         <a href="https://instagram.com/medscalebrasil"

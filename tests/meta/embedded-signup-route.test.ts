@@ -32,16 +32,17 @@ vi.mock('@/lib/meta/embedded-signup', () => ({
   exchangeEmbeddedSignupCode: () => step('exchange', 'token-negocio'),
   subscribeAppToWaba: () => step('subscribe'),
   registerPhoneNumber: () => step('register'),
+  fetchWabaPhoneNumberId: () => step('lookup', 'pn-waba'),
   fetchPhoneNumberInfo: () => step('info', { displayPhoneNumber: '+55 11 98888-0000', verifiedName: 'Clínica X' }),
   generatePin: () => '123456',
 }))
 
 import { POST } from '@/app/api/whatsapp/embedded-signup/route'
 
-const req = () =>
+const req = (body: Record<string, unknown> = { code: 'c1', waba_id: 'waba-1', phone_number_id: 'pn-1' }) =>
   new NextRequest('http://localhost/api/whatsapp/embedded-signup', {
     method: 'POST',
-    body: JSON.stringify({ code: 'c1', waba_id: 'waba-1', phone_number_id: 'pn-1' }),
+    body: JSON.stringify(body),
     headers: { 'Content-Type': 'application/json' },
   })
 
@@ -103,5 +104,25 @@ describe('POST /api/whatsapp/embedded-signup', () => {
     )
 
     expect(res.status).toBe(400)
+  })
+
+  it('coexistence busca o número no WABA, pula o register e não guarda PIN', async () => {
+    const res = await POST(req({ code: 'c1', waba_id: 'waba-1', coexistence: true }))
+
+    expect(res.status).toBe(200)
+    expect(g.steps).toEqual(['exchange', 'subscribe', 'lookup', 'info'])
+    expect(g.supabase.callsTo('bot_config', 'upsert')[0].payload).toMatchObject({
+      waba_id: 'waba-1',
+      phone_number_id: 'pn-waba',
+      whatsapp_pin: null,
+      is_active: true,
+    })
+  })
+
+  it('sem coexistence, phone_number_id continua obrigatório', async () => {
+    const res = await POST(req({ code: 'c1', waba_id: 'waba-1' }))
+
+    expect(res.status).toBe(400)
+    expect(g.steps).toEqual([])
   })
 })

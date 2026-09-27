@@ -24,7 +24,7 @@ export default async function ConfiguracoesPage({
     supabase.from('profiles').select('*').eq('id', session.userId).single(),
     supabase
       .from('bot_config')
-      .select('whatsapp_number, meta_token, phone_number_id')
+      .select('whatsapp_number, meta_token, phone_number_id, whatsapp_pin, number_source')
       .eq('account_id', session.accountId)
       .maybeSingle(),
     supabase.from('google_tokens').select('google_email').eq('account_id', session.accountId).maybeSingle(),
@@ -96,6 +96,9 @@ export default async function ConfiguracoesPage({
           whatsappNumber: botConfig?.whatsapp_number ?? null,
         }}
         whatsappConnected={Boolean(botConfig?.meta_token && botConfig?.phone_number_id)}
+        // Coexistence é o único caminho que conecta número próprio sem PIN: o
+        // número já vem registrado pelo app do WhatsApp Business.
+        whatsappCoexistence={botConfig?.number_source === 'own' && !botConfig?.whatsapp_pin}
         metaAppId={process.env.NEXT_PUBLIC_META_APP_ID ?? ''}
         metaConfigId={process.env.META_ES_CONFIG_ID ?? ''}
         metaConfigured={isEmbeddedSignupConfigured()}

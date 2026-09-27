@@ -23,6 +23,8 @@ interface SettingsClientProps {
     whatsappNumber: string | null
   }
   whatsappConnected: boolean
+  /** número conectado pelo app do WhatsApp Business (Coexistence) */
+  whatsappCoexistence: boolean
   metaAppId: string
   metaConfigId: string
   /** false quando faltam NEXT_PUBLIC_META_APP_ID / config do Embedded Signup */
@@ -45,6 +47,7 @@ export function SettingsClient({
   initialProfile,
   workspace,
   whatsappConnected,
+  whatsappCoexistence,
   metaAppId,
   metaConfigId,
   metaConfigured,
@@ -128,6 +131,7 @@ export function SettingsClient({
       <MetaIntegrationsCard
         whatsapp={{
           connected: whatsappConnected,
+          coexistence: whatsappCoexistence,
           number: workspace.whatsappNumber,
           configured: metaConfigured,
           appId: metaAppId,
