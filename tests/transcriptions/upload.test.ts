@@ -3,11 +3,12 @@ import { createSupabaseMock, type SupabaseMockConfig, type SupabaseMock } from '
 
 const g = vi.hoisted(() => ({
   supabase: null as unknown as SupabaseMock,
+  admin: null as unknown as SupabaseMock,
   session: null as null | { userId: string; accountId: string; workspaceId: string; role: string; modules: string[] },
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
-  createAdminClient: () => g.supabase.client,
+  createAdminClient: () => g.admin.client,
   createClient: async () => g.supabase.client,
 }))
 vi.mock('@/lib/session/api', async () => {
@@ -32,6 +33,7 @@ function setup(config: SupabaseMockConfig = {}) {
     transcriptions: { insert: { data: { id: 't-nova' } }, select: { data: null } },
     ...config,
   })
+  g.admin = createSupabaseMock({})
   return g.supabase
 }
 
@@ -201,10 +203,13 @@ describe('POST /api/transcriptions — criação do registro depois do upload', 
       consent_confirmed: true,
       status: 'pending',
     })
-    expect(supabase.rpc).toHaveBeenCalledWith(
+    // O disparo sai pelo service role: anon/authenticated não têm EXECUTE em
+    // trigger_transcription_* (a função anexa o CRON_SECRET no header).
+    expect(g.admin.rpc).toHaveBeenCalledWith(
       'trigger_transcription_process',
       expect.objectContaining({ p_transcription_id: 't-nova' })
     )
+    expect(supabase.rpc).not.toHaveBeenCalled()
   })
 
   it('deve retornar 500 quando o insert falha, sem disparar o processamento', async () => {
@@ -215,7 +220,7 @@ describe('POST /api/transcriptions — criação do registro depois do upload', 
 
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toMatchObject({ error: 'Falha ao criar registro' })
-    expect(supabase.rpc).not.toHaveBeenCalled()
+    expect(g.admin.rpc).not.toHaveBeenCalled()
   })
 
   it('deve aceitar gravação sem consulta associada', async () => {

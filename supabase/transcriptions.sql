@@ -156,8 +156,10 @@ begin
 end;
 $$;
 
-grant execute on function public.trigger_transcription_process(uuid, text) to authenticated, service_role;
-grant execute on function public.trigger_transcription_generate(uuid, text) to authenticated, service_role;
+revoke execute on function public.trigger_transcription_process(uuid, text) from public, anon, authenticated;
+grant execute on function public.trigger_transcription_process(uuid, text) to service_role;
+revoke execute on function public.trigger_transcription_generate(uuid, text) from public, anon, authenticated;
+grant execute on function public.trigger_transcription_generate(uuid, text) to service_role;
 
 -- ============================================================
 -- 5. CRON — limpeza de áudios antigos

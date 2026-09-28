@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
 
 // Re-dispara o pipeline a partir do início após um `status = 'error'`. As
@@ -35,7 +35,9 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
 
-  const { error: triggerError } = await supabase.rpc('trigger_transcription_process', {
+  // Service role: trigger_transcription_* anexa o CRON_SECRET e não é
+  // executável por authenticated (migration_revoke_secret_rpcs.sql).
+  const { error: triggerError } = await createAdminClient().rpc('trigger_transcription_process', {
     p_transcription_id: id,
     p_app_url: process.env.NEXT_PUBLIC_APP_URL ?? '',
   })
