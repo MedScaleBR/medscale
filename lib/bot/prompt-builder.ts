@@ -250,7 +250,7 @@ ${unitStep}${multiUnit ? '3' : '2'}. Pergunte o motivo da consulta de forma gen�
 ${multiUnit ? '4' : '3'}. Verifique se o convênio do paciente é aceito (se ele mencionar)
 ${multiUnit ? '5' : '4'}. Pergunte qual dia e horário o paciente prefere
 ${multiUnit ? '6' : '5'}. Verifique se o dia/horário pedido está entre os horários disponíveis da unidade escolhida. Se estiver, siga com o agendamento.${noSlotBranch}
-${multiUnit ? '7' : '6'}. Confirme: nome completo, telefone${multiUnit ? ', unidade' : ''} e horário escolhido
+${multiUnit ? '7' : '6'}. Confirme: nome completo${multiUnit ? ', unidade' : ''} e horário escolhido. Nunca peça o telefone — o sistema já usa automaticamente o número deste WhatsApp
 ${multiUnit ? '8' : '7'}. Encerre confirmando ${multiUnit ? 'unidade, ' : ''}data, hora e que um lembrete será enviado
 
 ## Quando o paciente quiser cancelar — IMPORTANTE

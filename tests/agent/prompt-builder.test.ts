@@ -51,6 +51,14 @@ function build(config: Partial<BotConfig> = {}, overrides: Overrides = {}) {
   })
 }
 
+describe('buildDynamicSystemPrompt — fluxo de agendamento', () => {
+  it('não deve pedir o telefone, que já vem do WhatsApp', () => {
+    const prompt = build()
+    expect(prompt).not.toContain('nome completo, telefone')
+    expect(prompt).toContain('Nunca peça o telefone')
+  })
+})
+
 describe('buildDynamicSystemPrompt — convênios e valores', () => {
   it('deve informar atendimento só particular quando não há convênios', () => {
     expect(build({ insurancePlans: [], acceptsPrivate: true })).toContain('Atendimento apenas particular')
