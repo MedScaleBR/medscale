@@ -1818,8 +1818,10 @@ grant all on all sequences in schema public to service_role;
 alter default privileges in schema public grant all on tables to service_role;
 alter default privileges in schema public grant all on sequences to service_role;
 
-grant execute on function public.trigger_transcription_process(uuid, text) to authenticated, service_role;
-grant execute on function public.trigger_transcription_generate(uuid, text) to authenticated, service_role;
+revoke execute on function public.trigger_transcription_process(uuid, text) from public, anon, authenticated;
+grant execute on function public.trigger_transcription_process(uuid, text) to service_role;
+revoke execute on function public.trigger_transcription_generate(uuid, text) from public, anon, authenticated;
+grant execute on function public.trigger_transcription_generate(uuid, text) to service_role;
 
 -- 'anon' propositalmente não recebe grants — nenhuma tabela deste app deve
 -- ser lida por usuários não autenticados.

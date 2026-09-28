@@ -55,10 +55,14 @@ create or replace function public.cron_secret()
 returns text language sql security definer stable as $$
   select decrypted_secret from vault.decrypted_secrets where name = 'cron_secret';
 $$;
+-- Sem isto o PostgREST expõe o secret em /rest/v1/rpc/cron_secret para a anon
+-- key (ver migration_revoke_secret_rpcs.sql).
+revoke execute on function public.cron_secret() from public, anon, authenticated;
+grant execute on function public.cron_secret() to service_role;
 
 -- ============================================================
 -- 2. CRON JOBS
--- Substitua a URL base (https://app.medscalebr.com) pelo domínio de produção
+-- Substitua a URL base (https://medscalebr.com) pelo domínio de produção
 -- real, se for diferente. Em staging, crie jobs separados com nomes distintos
 -- apontando para a URL de staging.
 -- ============================================================
@@ -69,7 +73,7 @@ select cron.schedule(
   '0 * * * *',
   $$
     select net.http_post(
-      url     := 'https://app.medscalebr.com/api/cron/reminders',
+      url     := 'https://medscalebr.com/api/cron/reminders',
       headers := jsonb_build_object(
         'Content-Type',  'application/json',
         'Authorization', 'Bearer ' || public.cron_secret()
@@ -85,7 +89,7 @@ select cron.schedule(
   '30 * * * *',
   $$
     select net.http_post(
-      url     := 'https://app.medscalebr.com/api/cron/noshow',
+      url     := 'https://medscalebr.com/api/cron/noshow',
       headers := jsonb_build_object(
         'Content-Type',  'application/json',
         'Authorization', 'Bearer ' || public.cron_secret()
@@ -101,7 +105,7 @@ select cron.schedule(
   '15 * * * *',
   $$
     select net.http_post(
-      url     := 'https://app.medscalebr.com/api/cron/waitlist',
+      url     := 'https://medscalebr.com/api/cron/waitlist',
       headers := jsonb_build_object(
         'Content-Type',  'application/json',
         'Authorization', 'Bearer ' || public.cron_secret()
@@ -121,7 +125,7 @@ select cron.schedule(
   '50 * * * *',
   $$
     select net.http_post(
-      url     := 'https://app.medscalebr.com/api/cron/reconcile-calendar',
+      url     := 'https://medscalebr.com/api/cron/reconcile-calendar',
       headers := jsonb_build_object(
         'Content-Type',  'application/json',
         'Authorization', 'Bearer ' || public.cron_secret()
@@ -138,7 +142,7 @@ select cron.schedule(
   '0 3 * * *',
   $$
     select net.http_post(
-      url     := 'https://app.medscalebr.com/api/cron/cleanup-recordings',
+      url     := 'https://medscalebr.com/api/cron/cleanup-recordings',
       headers := jsonb_build_object(
         'Content-Type',  'application/json',
         'Authorization', 'Bearer ' || public.cron_secret()
@@ -171,7 +175,7 @@ select cron.schedule(
   '5 * * * *',
   $$
     select net.http_post(
-      url     := 'https://app.medscalebr.com/api/cron/daily-revenue-summary',
+      url     := 'https://medscalebr.com/api/cron/daily-revenue-summary',
       headers := jsonb_build_object(
         'Content-Type',  'application/json',
         'Authorization', 'Bearer ' || public.cron_secret()
@@ -191,7 +195,7 @@ select cron.schedule(
   '30 6 * * *',
   $$
     select net.http_post(
-      url     := 'https://app.medscalebr.com/api/cron/meta-ads-sync',
+      url     := 'https://medscalebr.com/api/cron/meta-ads-sync',
       headers := jsonb_build_object(
         'Content-Type',  'application/json',
         'Authorization', 'Bearer ' || public.cron_secret()
