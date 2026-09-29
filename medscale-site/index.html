@@ -4,12 +4,14 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="A MedScale assume todo o crescimento do seu consultório — marketing, agenda, secretária com IA e tecnologia. Você cuida do paciente, a gente cuida do resto.">
-  <meta property="og:title" content="MedScale — Sua agenda cheia. Seu tempo de volta.">
+  <meta property="og:title" content="MedScale — Você cuida do paciente. A gente cuida do resto.">
   <meta property="og:description" content="Assessoria médica especialista em crescimento de consultórios. Marketing, tráfego, secretária com IA e inteligência financeira sob um único parceiro.">
   <meta property="og:type" content="website">
-  <title>MedScale — A empresa por trás do médico | Sua agenda cheia. Seu tempo de volta.</title>
+  <title>MedScale — Você cuida do paciente. A gente cuida do resto.</title>
 
   <!-- Preconnect for fonts -->
+  <link rel="icon" type="image/png" href="/logo-icon.png">
+  <link rel="apple-touch-icon" href="/logo-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
@@ -100,56 +102,97 @@
     /* ── Alpine cloak ─────────────────────────────────────────────────── */
     [x-cloak] { display: none !important; }
 
-    /* ── Agenda do hero — horários vazios que vão sendo ocupados ─────── */
-    .agenda-field {
+    /* ── Aurora do hero: campo de luz que respira atrás do texto ──────────
+       Manchas grandes de luz em gradiente radial, cada uma com seu próprio
+       ritmo, derivando e inflando devagar. São radial-gradient em vez de
+       blur() de propósito: o degradê já nasce suave, então a animação é só
+       transform — composta na GPU e sem custo de repintura. Os tempos são
+       primos entre si para o conjunto nunca repetir o mesmo arranjo. */
+    .aurora {
       position: absolute; inset: 0; z-index: 0;
-      pointer-events: none; overflow: hidden;
-      display: flex; align-items: center; justify-content: center;
+      overflow: hidden; pointer-events: none;
     }
-    .agenda {
-      width: min(1000px, 92vw);
-      display: flex; flex-direction: column; gap: 10px;
-      opacity: .55;
-      -webkit-mask-image: radial-gradient(ellipse 70% 62% at 50% 50%, #000 38%, transparent 78%);
-              mask-image: radial-gradient(ellipse 70% 62% at 50% 50%, #000 38%, transparent 78%);
+    .aur {
+      position: absolute; border-radius: 50%;
+      will-change: transform; transform: translate3d(0,0,0);
     }
-    /* Cabeçalho: sete marcas de dia */
-    .agenda-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px; }
-    .agenda-days i {
-      height: 3px; border-radius: 2px;
-      background: rgba(255,255,255,.14);
+    .aur-1 {
+      width: 78vw; height: 58vw; left: -20vw; top: -16vw;
+      background: radial-gradient(circle at 50% 50%, rgba(0,185,216,.22), transparent 68%);
+      animation: aur-1 29s ease-in-out infinite alternate;
     }
-    .agenda-grid {
-      display: grid; grid-template-columns: repeat(7, 1fr); gap: 10px;
+    .aur-2 {
+      width: 66vw; height: 54vw; right: -18vw; top: -22vw;
+      background: radial-gradient(circle at 50% 50%, rgba(49,105,201,.20), transparent 70%);
+      animation: aur-2 37s ease-in-out infinite alternate;
     }
-    .slot {
-      aspect-ratio: 2.5 / 1; border-radius: 5px;
-      background: rgba(255,255,255,.045);
-      border: 1px solid rgba(255,255,255,.05);
+    .aur-3 {
+      width: 72vw; height: 50vw; left: 4vw; bottom: -26vw;
+      background: radial-gradient(circle at 50% 50%, rgba(92,217,238,.14), transparent 68%);
+      animation: aur-3 43s ease-in-out infinite alternate;
     }
-    .slot.book { animation: slot-fill 15s ease-in-out infinite both; }
-    @keyframes slot-fill {
-      0%, 3%    { background: rgba(255,255,255,.045); border-color: rgba(255,255,255,.05); box-shadow: none; }
-      9%, 68%   { background: rgba(0,185,216,.38);    border-color: rgba(0,185,216,.55);   box-shadow: 0 0 12px rgba(0,185,216,.22); }
-      84%, 100% { background: rgba(255,255,255,.045); border-color: rgba(255,255,255,.05); box-shadow: none; }
+    .aur-4 {
+      width: 58vw; height: 46vw; right: -10vw; bottom: -20vw;
+      background: radial-gradient(circle at 50% 50%, rgba(27,48,104,.80), transparent 62%);
+      animation: aur-4 31s ease-in-out infinite alternate;
     }
+
+    @keyframes aur-1 { from { transform: translate3d(0,0,0)        scale(1);    }
+                       to   { transform: translate3d(9vw,7vh,0)    scale(1.16); } }
+    @keyframes aur-2 { from { transform: translate3d(0,0,0)        scale(1.1);  }
+                       to   { transform: translate3d(-11vw,9vh,0)  scale(.92);  } }
+    @keyframes aur-3 { from { transform: translate3d(0,0,0)        scale(.94);  }
+                       to   { transform: translate3d(13vw,-8vh,0)  scale(1.14); } }
+    @keyframes aur-4 { from { transform: translate3d(0,0,0)        scale(1.06); }
+                       to   { transform: translate3d(-8vw,-6vh,0)  scale(.9);   } }
+
+    /* Brilho que cruza de viés bem de vez em quando, só para o fundo não
+       parecer congelado entre um ciclo e outro das manchas. */
+    .aur-brilho {
+      position: absolute; top: -50%; left: -60%;
+      width: 40%; height: 200%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,.05), transparent);
+      transform: rotate(14deg);
+      animation: aur-brilho 19s ease-in-out infinite;
+    }
+    @keyframes aur-brilho {
+      0%, 62%  { transform: translateX(0) rotate(14deg); }
+      100%     { transform: translateX(420%) rotate(14deg); }
+    }
+
+    /* Véu de navy no miolo: segura o contraste da headline e mantém a luz
+       viva nas bordas, onde não há texto. */
+    /* Grade de pontos com uma faixa de luz varrendo na diagonal. Em canvas
+       porque são centenas de pontos por quadro: um só nó no DOM, sem
+       centenas de animações CSS concorrentes. */
+    .onda-grade {
+      position: absolute; inset: 0; z-index: 0;
+      width: 100%; height: 100%; pointer-events: none;
+    }
+
+    .aur-veu {
+      position: absolute; inset: 0; z-index: 0; pointer-events: none;
+      background: radial-gradient(ellipse 60% 52% at 50% 44%,
+                  rgba(7,16,42,.60) 0%, rgba(7,16,42,.30) 46%, transparent 78%);
+    }
+
     @media (max-width: 640px) {
-      .agenda { gap: 7px; opacity: .42; }
-      .agenda-days, .agenda-grid { gap: 7px; }
+      /* Na tela estreita as manchas precisam ser maiores em vw para cobrir,
+         e um pouco mais discretas porque o texto ocupa quase tudo. */
+      .aur-1, .aur-2, .aur-3, .aur-4 { width: 128vw; height: 96vw; }
+      .aurora { opacity: .82; }
     }
+
     @media (prefers-reduced-motion: reduce) {
-      .slot.book { animation: none; background: rgba(0,185,216,.20); border-color: rgba(0,185,216,.30); }
+      .aur, .aur-brilho { animation: none; }
+      .aur-brilho { display: none; }
     }
 
     /* ── Hero ─────────────────────────────────────────────────────────── */
     .hero {
       position: relative; overflow: hidden;
       background-color: var(--navy-dark);
-      background-image:
-        radial-gradient(ellipse 55% 70% at 12% 65%, rgba(0,185,216,.18) 0%, transparent 60%),
-        radial-gradient(ellipse 45% 55% at 88% 12%, rgba(0,185,216,.10) 0%, transparent 50%),
-        radial-gradient(ellipse 35% 45% at 60% 88%, rgba(27,48,104,.6) 0%, transparent 50%),
-        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Ccircle cx='14' cy='14' r='1' fill='white' fill-opacity='.04'/%3E%3C/svg%3E");
+      /* Sem gradiente estático: a cor do hero vem toda da .aurora. */
     }
 
     /* ── Text gradient ────────────────────────────────────────────────── */
@@ -500,8 +543,11 @@
     .nav-login svg { flex-shrink: 0; opacity: .8; }
 
     /* Ícone do logo encolhe no mobile para caber nav + login + CTA */
-    .nav-logo-img { width: 69px; height: auto; flex-shrink: 0; }
-    @media (max-width: 480px) { .nav-logo-img { width: 54px; } }
+    /* Dimensionada pela altura: a assinatura é larga (3,9:1) e é a altura
+       que precisa respirar dentro da nav de 64px. */
+    .nav-logo-img { height: 46px; width: auto; flex-shrink: 0; }
+    @media (max-width: 640px) { .nav-logo-img { height: 40px; } }
+    @media (max-width: 380px) { .nav-logo-img { height: 34px; } }
     @media (max-width: 419px) { .nav-login { padding: 0 11px; gap: 6px; } }
 
     /* Abaixo de 640px o CTA sai da barra do topo: quem manda é a barra
@@ -526,6 +572,53 @@
     .sticky-cta .btn { margin-left: auto; flex-shrink: 0; min-height: 42px; padding: 0 18px; }
     @media (min-width: 640px) { .sticky-cta { display: none; } }
     @media (prefers-reduced-motion: reduce) { .sticky-cta { transition: none; } }
+
+    /* ── Rodapé ───────────────────────────────────────────────────────
+       No celular tudo empilha e centraliza; os links quebram em várias
+       linhas em vez de estourar a largura da tela. */
+    .ft-inner {
+      max-width: 64rem; margin: 0 auto;
+      display: flex; flex-direction: column; align-items: center;
+      gap: 24px; text-align: center;
+    }
+    .ft-top {
+      width: 100%;
+      display: flex; flex-direction: column; align-items: center; gap: 20px;
+    }
+    .ft-brand {
+      display: flex; align-items: center; justify-content: center;
+      flex-wrap: wrap; gap: 4px 10px;
+    }
+    .ft-brand .ft-nome { font-size: 1.125rem; font-weight: 900; color: #fff; }
+    .ft-brand .ft-tag {
+      font-size: .6875rem; font-weight: 600; letter-spacing: .18em;
+      color: rgba(255,255,255,.25);
+    }
+    .ft-links {
+      display: flex; flex-wrap: wrap; justify-content: center;
+      gap: 10px 20px; max-width: 100%;
+    }
+    .ft-links a {
+      font-size: .75rem; line-height: 1.4; white-space: nowrap;
+      text-decoration: none; color: rgba(255,255,255,.32);
+      transition: color .2s ease;
+    }
+    .ft-links a:hover, .ft-links a:focus-visible { color: rgba(255,255,255,.85); }
+    .ft-links a.ft-destaque { font-weight: 600; color: rgba(255,255,255,.55); }
+    .ft-links a.ft-social { font-size: .8125rem; font-weight: 500; color: rgba(255,255,255,.38); }
+    .ft-legal {
+      margin: 0; font-size: .6875rem; line-height: 1.8;
+      color: rgba(255,255,255,.28);
+      padding-top: 20px; width: 100%;
+      border-top: 1px solid rgba(255,255,255,.06);
+    }
+
+    @media (min-width: 880px) {
+      .ft-inner { gap: 20px; }
+      .ft-top { flex-direction: row; justify-content: space-between; align-items: center; }
+      .ft-links { justify-content: flex-end; gap: 10px 22px; }
+      .ft-legal { text-align: left; }
+    }
 
     /* Compensa a nav fixa ao pular por âncora */
     section[id], div[id] { scroll-margin-top: 84px; }
@@ -954,17 +1047,12 @@
     <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
 
       <a href="#" aria-label="MedScale — página inicial" class="flex items-center gap-3 no-underline">
-        <!-- Símbolo real do logo (M + seta + cruz) cropado do logo.png, fundo transparente -->
-        <img src="logo-icon.png"
-             alt=""
-             aria-hidden="true"
-             width="69" height="48"
+        <!-- Assinatura oficial: símbolo + wordmark, montada a partir da arte
+             original sem a tagline, que seria ilegível no tamanho da nav. -->
+        <img src="/logo-nav.png"
+             alt="MedScale"
+             width="538" height="138"
              class="nav-logo-img">
-
-        <!-- Wordmark (o ícone sozinho segura a marca em tela estreita) -->
-        <span class="nav-wordmark text-white font-black text-xl tracking-tight leading-none">
-          Med<span style="color:var(--cyan)">Scale</span>
-        </span>
         <span class="hidden xl:block text-xs font-semibold tracking-widest" style="color:rgba(255,255,255,.35); padding-top:2px">
           ASSESSORIA MÉDICA
         </span>
@@ -1001,23 +1089,26 @@
     <!-- ─────────────────────────────────────────────────────── HERO ── -->
     <section class="hero" aria-labelledby="hero-h1" style="padding: 140px 24px 96px">
 
-      <!-- Agenda enchendo ao fundo. Decorativa: escondida de leitores de tela. -->
-      <div class="agenda-field" aria-hidden="true">
-        <div class="agenda">
-          <div class="agenda-days">
-            <i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-          </div>
-          <div class="agenda-grid" id="agenda-grid"></div>
-        </div>
+      <!-- Campo de luz ao fundo. Decorativo: fora do leitor de tela. -->
+      <div class="aurora" aria-hidden="true">
+        <span class="aur aur-1"></span>
+        <span class="aur aur-2"></span>
+        <span class="aur aur-3"></span>
+        <span class="aur aur-4"></span>
+        <span class="aur-brilho"></span>
       </div>
+      <canvas class="onda-grade" id="onda-grade" aria-hidden="true"></canvas>
+      <div class="aur-veu" aria-hidden="true"></div>
 
       <div class="max-w-3xl mx-auto text-center" style="position:relative; z-index:1">
 
-        <!-- Headline -->
+        <!-- Headline. O espaço inquebrável prende "do resto": sem ele, em
+             telas estreitas a quebra deixa "resto" sozinho na última linha. -->
         <h1 id="hero-h1" class="font-black text-white leading-tight mb-6"
-            style="font-size: clamp(2.4rem, 6vw, 4rem); letter-spacing: -0.02em">
-          Sua agenda cheia.<br>
-          <span class="text-gradient">Seu tempo de volta.</span>
+            style="font-size: clamp(2.4rem, 6vw, 4rem); letter-spacing: -0.02em;
+                   text-wrap: balance">
+          Você cuida do paciente.<br>
+          <span class="text-gradient">A gente cuida do&nbsp;resto.</span>
         </h1>
 
         <!-- Sub -->
@@ -1039,8 +1130,10 @@
           </a>
         </div>
 
-        <!-- Micro social -->
-        <p class="mt-7 text-sm" style="color:rgba(255,255,255,.35)">
+        <!-- Micro social. A sombra existe porque o traçado passa por trás
+             desta linha; é mais limpo destacar o texto do que apagar a animação. -->
+        <p class="mt-7 text-sm" style="color:rgba(255,255,255,.42);
+           text-shadow:0 1px 3px rgba(7,16,42,.98), 0 0 16px rgba(7,16,42,.92), 0 0 30px rgba(7,16,42,.7)">
           Sem fidelidade · Diagnóstico gratuito · Cancele quando quiser
         </p>
       </div>
@@ -1260,8 +1353,8 @@
         <p class="text-xs font-semibold tracking-widest mb-4 uppercase" style="color:var(--cyan)">A virada</p>
         <h2 id="virada-heading" class="font-black leading-tight mb-6"
             style="font-size:clamp(1.9rem,4.5vw,3rem); color:#fff; letter-spacing:-0.02em">
-          Você cuida do paciente.<br>
-          <span class="text-gradient">A MedScale cuida do resto.</span>
+          Sua agenda cheia.<br>
+          <span class="text-gradient">Seu tempo de volta.</span>
         </h2>
         <p class="text-lg leading-relaxed m-0" style="color:rgba(255,255,255,.65)">
           Marketing, tráfego, conteúdo, site, secretária treinada, agendamento e controle financeiro —
@@ -1591,7 +1684,7 @@
 
           <div class="fnd reveal">
             <div class="fnd-foto">
-              <img src="socio-giuliano.jpg" alt="Giuliano Torres, co-fundador da MedScale"
+              <img src="/socio-giuliano.jpg" alt="Giuliano Torres, co-fundador da MedScale"
                    width="720" height="900" loading="lazy" decoding="async">
             </div>
             <h3 class="fnd-nome">Giuliano Torres</h3>
@@ -1600,7 +1693,7 @@
 
           <div class="fnd reveal d1">
             <div class="fnd-foto">
-              <img src="socio-joao.jpg" alt="João Victor Teixeira, co-fundador da MedScale"
+              <img src="/socio-joao.jpg" alt="João Victor Teixeira, co-fundador da MedScale"
                    width="720" height="900" loading="lazy" decoding="async">
             </div>
             <h3 class="fnd-nome">João Victor Teixeira</h3>
@@ -1609,7 +1702,7 @@
 
           <div class="fnd reveal d2">
             <div class="fnd-foto">
-              <img src="socio-eduardo.jpg" alt="Eduardo Bordignon, co-fundador da MedScale"
+              <img src="/socio-eduardo.jpg" alt="Eduardo Bordignon, co-fundador da MedScale"
                    width="720" height="900" loading="lazy" decoding="async">
             </div>
             <h3 class="fnd-nome">Eduardo Bordignon</h3>
@@ -2580,49 +2673,31 @@
   <!-- ─────────────────────────────────────────────────────── FOOTER ── -->
   <footer style="background:var(--navy-dark); padding:40px 24px; border-top:1px solid rgba(255,255,255,.08)"
           role="contentinfo">
-    <div class="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4">
-      <div class="flex items-center gap-2.5">
-        <span class="font-black text-lg" style="color:#fff">
-          Med<span style="color:var(--cyan)">Scale</span>
-        </span>
-        <span class="text-xs font-semibold tracking-widest" style="color:rgba(255,255,255,.25)">ASSESSORIA MÉDICA</span>
+    <div class="ft-inner">
+
+      <div class="ft-top">
+        <div class="ft-brand">
+          <span class="ft-nome">Med<span style="color:var(--cyan)">Scale</span></span>
+          <span class="ft-tag">ASSESSORIA MÉDICA</span>
+        </div>
+
+        <nav class="ft-links" aria-label="Links do rodapé">
+          <a href="https://medscalebr.com/login" class="ft-destaque">Acessar a plataforma</a>
+          <a href="mailto:contato@medscalebr.com">contato@medscalebr.com</a>
+          <a href="/politica-privacidade.html">Política de Privacidade</a>
+          <a href="/exclusao-dados.html">Exclusão de Dados</a>
+          <a href="https://instagram.com/medscalebrasil" class="ft-social"
+             target="_blank" rel="noopener noreferrer"
+             aria-label="MedScale no Instagram (abre em nova aba)">@medscalebrasil</a>
+        </nav>
       </div>
-      <p class="text-xs text-center" style="color:rgba(255,255,255,.30)">
-        MedScale Tecnologia LTDA · CNPJ 69.106.377/0001-26<br>
+
+      <p class="ft-legal">
+        MedScale Tecnologia LTDA · <span style="white-space:nowrap">CNPJ 69.106.377/0001-26</span><br>
         © 2026 MedScale. Todos os direitos reservados.<br>
         Conteúdos em conformidade com o Conselho Federal de Medicina (CFM).
       </p>
-      <div class="flex items-center gap-5">
-        <a href="https://medscalebr.com/login"
-           class="text-xs font-semibold no-underline transition-colors"
-           style="color:rgba(255,255,255,.55)">
-          Acessar a plataforma
-        </a>
-        <a href="mailto:contato@medscalebr.com"
-           class="text-xs no-underline transition-colors"
-           style="color:rgba(255,255,255,.30)">
-          contato@medscalebr.com
-        </a>
-        <a href="/politica-privacidade.html"
-           class="text-xs no-underline transition-colors"
-           style="color:rgba(255,255,255,.30)"
-           aria-label="Política de Privacidade">
-          Política de Privacidade
-        </a>
-        <a href="/exclusao-dados.html"
-           class="text-xs no-underline transition-colors"
-           style="color:rgba(255,255,255,.30)"
-           aria-label="Exclusão de Dados">
-          Exclusão de Dados
-        </a>
-        <a href="https://instagram.com/medscalebrasil"
-           class="text-sm font-medium no-underline transition-colors"
-           style="color:rgba(255,255,255,.35)"
-           target="_blank" rel="noopener noreferrer"
-           aria-label="MedScale no Instagram (abre em nova aba)">
-          @medscalebrasil
-        </a>
-      </div>
+
     </div>
   </footer>
 
@@ -2813,31 +2888,226 @@
       }
     });
 
-    /* ── Agenda do hero: 7 dias × 6 horários, enchendo em looping ────── */
+    /* ── Fundo do hero: sistema orbital ───────────────────────────────────
+       Quatro elipses inclinadas em torno de um centro, cada uma girando no
+       seu sentido e no seu tempo. Nelas correm nós pequenos — que fazem a
+       textura do fundo — e os 6 pilares em cápsula, que carregam o sentido:
+       seis frentes girando em torno do médico.
+
+       As elipses giram como corpo rígido, então os nós mantêm o espaçamento
+       entre si. É isso que faz o conjunto ser lido como sistema em vez de
+       pontos soltos piscando. */
     document.addEventListener('DOMContentLoaded', () => {
-      const grid = document.getElementById('agenda-grid');
-      if (!grid) return;
+      const cv = document.getElementById('onda-grade');
+      if (!cv || !cv.getContext) return;
 
-      const DIAS = 7, HORARIOS = 6, CICLO = 15;
-      const frag = document.createDocumentFragment();
+      const ctx = cv.getContext('2d');
+      const parado = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-      for (let h = 0; h < HORARIOS; h++) {
-        for (let d = 0; d < DIAS; d++) {
-          const slot = document.createElement('i');
-          slot.className = 'slot';
+      const PILARES = [
+        'M21 12a9 9 0 11-18 0 9 9 0 0118 0zM3.6 9h16.8M3.6 15h16.8M12 3a15 15 0 010 18a15 15 0 010-18z',
+        'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z',
+        'M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z',
+        'M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
+        'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
+        'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z'
+      ].map(d => new Path2D(d));
 
-          // Sexta e sábado enchem primeiro; fim de tarde depois. Deixa ~30%
-          // dos horários vagos, senão parece grade cheia em vez de agenda.
-          const prioridade = (d >= 4 ? 0 : 1) + (h >= 4 ? 0.6 : 0);
-          if (Math.random() > 0.30) {
-            slot.classList.add('book');
-            const atraso = (Math.random() * 6 + prioridade * 1.6) % (CICLO * 0.55);
-            slot.style.animationDelay = atraso.toFixed(2) + 's';
-          }
-          frag.appendChild(slot);
+      let L = 0, A = 0, cx = 0, cy = 0, elipses = [], icone = 0, capsula = 0;
+      let zonas = [];   // linhas de texto e botões a evitar
+      let raf = 0, visivel = true;
+
+      const medir = () => {
+        const r = cv.getBoundingClientRect();
+        L = Math.round(r.width); A = Math.round(r.height);
+        if (!L || !A) return false;
+
+        const dpr = Math.min(devicePixelRatio || 1, 2);
+        cv.width = L * dpr; cv.height = A * dpr;
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+        const estreito = L < 720;
+        icone   = estreito ? 16 : 20;
+        capsula = estreito ? 34 : 42;
+
+        cx = L * 0.5; cy = A * 0.48;
+
+        /* Mede o texto direto do DOM, linha a linha. Usar o retângulo do
+           bloco inteiro seria simples mas desperdiça espaço: a headline é
+           centrada e bem mais estreita que a coluna, e ainda há os vãos
+           entre título, subtítulo, botões e microcopy. Com as caixas reais
+           de cada linha os pilares circulam por esses vãos. */
+        zonas = [];
+        const bloco = cv.parentElement && cv.parentElement.querySelector('.max-w-3xl');
+        if (bloco) {
+          const guarda = (rc) => {
+            if (rc.width < 4 || rc.height < 4) return;
+            zonas.push({ x0: rc.left - r.left, y0: rc.top - r.top,
+                         x1: rc.right - r.left, y1: rc.bottom - r.top });
+          };
+          // linhas de texto: Range dá a caixa de cada linha, não a do bloco
+          bloco.querySelectorAll('h1, p').forEach(el => {
+            const rg = document.createRange();
+            rg.selectNodeContents(el);
+            Array.from(rg.getClientRects()).forEach(guarda);
+          });
+          // botões: aqui vale a caixa inteira do elemento
+          bloco.querySelectorAll('a').forEach(el => guarda(el.getBoundingClientRect()));
         }
+
+        /* O raio das duas elipses com ícone é escolhido para os extremos
+           horizontais caírem nas margens laterais: largo o bastante para
+           passar por fora da coluna de texto, estreito o bastante para não
+           sair da tela. Como numa elipse o ponto anda mais devagar perto do
+           extremo, os pilares justamente demoram ali. As outras levam só
+           nós, que por serem minúsculos podem cruzar o texto. */
+        elipses = [
+          { rx: L * 0.34, ry: A * 0.44, t:  18, dur:  64, dir:  1, nos: 5, pil: [0, 3] },
+          { rx: L * 0.41, ry: A * 0.47, t:  -8, dur:  86, dir: -1, nos: 6, pil: [1, 4] },
+          { rx: L * 0.48, ry: A * 0.38, t:  12, dur: 112, dir:  1, nos: 6, pil: [2, 5] },
+          { rx: L * 0.64, ry: A * 0.30, t: -15, dur: 140, dir: -1, nos: 8, pil: null },
+          { rx: L * 0.82, ry: A * 0.22, t:   6, dur: 170, dir: -1, nos: 9, pil: null }
+        ];
+
+        // ângulos fixos, distribuídos: nada de sorteio a cada quadro
+        for (const e of elipses) {
+          e.pontos = [];
+          for (let i = 0; i < e.nos; i++) {
+            e.pontos.push({
+              a: (360 / e.nos) * i + e.t * 1.7,
+              r: 1.1 + ((i * 7) % 5) * 0.34      // tamanhos variados, determinísticos
+            });
+          }
+        }
+        return true;
+      };
+
+      // posição na elipse já inclinada
+      const ponto = (e, grau) => {
+        const a = grau * Math.PI / 180;
+        const tt = e.t * Math.PI / 180, ct = Math.cos(tt), st = Math.sin(tt);
+        const ex = Math.cos(a) * e.rx, ey = Math.sin(a) * e.ry;
+        return { x: cx + ex * ct - ey * st, y: cy + ex * st + ey * ct };
+      };
+
+      // esmaece ao encostar na borda, em vez de ser cortado
+      const borda = (x, y, m) => {
+        const fx = Math.min(x + m, L - x + m) / (m * 2);
+        const fy = Math.min(y + m, A - y + m) / (m * 2);
+        return Math.max(0, Math.min(1, Math.min(fx, fy)));
+      };
+
+      /* 0 em cima do texto, 1 longe dele — apaga o pilar em vez de deixá-lo
+         pousar sobre a headline ou os botões. */
+      const longeDoTexto = (x, y) => {
+        if (!zonas.length) return 1;
+        let d = Infinity;
+        for (const z of zonas) {
+          const dx = Math.max(z.x0 - x, x - z.x1, 0);
+          const dy = Math.max(z.y0 - y, y - z.y1, 0);
+          const dd = Math.hypot(dx, dy);
+          if (dd < d) d = dd;
+          if (d === 0) break;
+        }
+        return Math.max(0, Math.min(1, (d - capsula * 0.32) / (capsula * 0.52)));
+      };
+
+      const desenhaIcone = (x, y, idx, alfa) => {
+        const h = capsula / 2, rr = capsula * 0.30;
+        ctx.beginPath();
+        if (ctx.roundRect) ctx.roundRect(x - h, y - h, capsula, capsula, rr);
+        else ctx.rect(x - h, y - h, capsula, capsula);
+        ctx.fillStyle   = `rgba(11,23,53,${0.74 * alfa})`;
+        ctx.strokeStyle = `rgba(0,185,216,${0.36 * alfa})`;
+        ctx.lineWidth = 1;
+        ctx.fill(); ctx.stroke();
+
+        ctx.save();
+        ctx.translate(x - icone / 2, y - icone / 2);
+        ctx.scale(icone / 24, icone / 24);
+        ctx.strokeStyle = `rgba(92,217,238,${0.82 * alfa})`;
+        ctx.lineWidth = 1.7 * 24 / icone;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        ctx.stroke(PILARES[idx]);
+        ctx.restore();
+      };
+
+      const quadro = (ms) => {
+        const t = ms / 1000;
+        ctx.clearRect(0, 0, L, A);
+
+        // ── caminhos
+        ctx.lineWidth = 1;
+        for (const e of elipses) {
+          ctx.beginPath();
+          ctx.ellipse(cx, cy, e.rx, e.ry, e.t * Math.PI / 180, 0, 6.2832);
+          ctx.strokeStyle = 'rgba(255,255,255,.055)';
+          ctx.stroke();
+        }
+
+        // ── nós correndo nos caminhos
+        for (const e of elipses) {
+          const giro = (t / e.dur) * 360 * e.dir;
+          for (const n of e.pontos) {
+            const p = ponto(e, n.a + giro);
+            const al = borda(p.x, p.y, 26) * 0.66;
+            if (al < 0.01) continue;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, n.r, 0, 6.2832);
+            ctx.fillStyle = `rgba(120,222,245,${al})`;
+            ctx.fill();
+          }
+        }
+
+        /* ── os 6 pilares
+           Calcula todos antes de desenhar: elipses diferentes eventualmente
+           cruzam, e duas cápsulas empilhadas parecem defeito. Quando isso
+           acontece, a de trás cede. */
+        const pilares = [];
+        for (const e of elipses) {
+          if (!e.pil) continue;
+          const giro = (t / e.dur) * 360 * e.dir;
+          e.pil.forEach((idx, k) => {
+            const p = ponto(e, 20 + k * (360 / e.pil.length) + giro);
+            const al = borda(p.x, p.y, capsula * 0.85) * longeDoTexto(p.x, p.y);
+            if (al > 0.01) pilares.push({ x: p.x, y: p.y, idx, al });
+          });
+        }
+
+        const perto = capsula * 1.15;
+        for (let i = 0; i < pilares.length; i++) {
+          for (let j = i + 1; j < pilares.length; j++) {
+            const a = pilares[i], b = pilares[j];
+            const d = Math.hypot(a.x - b.x, a.y - b.y);
+            if (d >= perto) continue;
+            // quem já está mais apagado cede o lugar
+            const alvo = a.al <= b.al ? a : b;
+            alvo.al *= Math.max(0, d / perto - 0.15);
+          }
+        }
+
+        for (const q of pilares) if (q.al > 0.01) desenhaIcone(q.x, q.y, q.idx, q.al);
+      };
+
+      const laco = (ms) => { quadro(ms); raf = requestAnimationFrame(laco); };
+      const tocar  = () => { if (!raf && visivel && !parado) raf = requestAnimationFrame(laco); };
+      const pausar = () => { if (raf) { cancelAnimationFrame(raf); raf = 0; } };
+
+      if (!medir()) return;
+      if (parado) quadro(2400); else tocar();
+
+      if ('IntersectionObserver' in window) {
+        new IntersectionObserver(([e]) => {
+          visivel = e.isIntersecting;
+          visivel ? tocar() : pausar();
+        }, { threshold: 0 }).observe(cv);
       }
-      grid.appendChild(frag);
+
+      let tm;
+      addEventListener('resize', () => {
+        clearTimeout(tm);
+        tm = setTimeout(() => { if (medir() && parado) quadro(2400); }, 180);
+      });
     });
 
     /* ── Mapa de cobertura (7 dias × 24 h) ────────────────────────────── */
