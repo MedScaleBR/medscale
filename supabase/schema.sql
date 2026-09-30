@@ -20,6 +20,8 @@ drop trigger if exists on_auth_user_created on auth.users;
 drop table if exists
   public.cost_events,
   public.feedback,
+  public.tiss_guides,
+  public.tiss_batches,
   public.finance_suggestion_settings,
   public.finance_suggestion_dismissals,
   public.finance_goals,
@@ -48,6 +50,9 @@ drop table if exists
   public.messages,
   public.conversations,
   public.appointments,
+  public.patient_insurances,
+  public.insurer_procedures,
+  public.health_insurers,
   public.patients,
   public.profiles,
   public.account_tasks,
@@ -60,6 +65,8 @@ drop table if exists
 cascade;
 
 drop type if exists public.transcription_status cascade;
+drop type if exists public.tiss_guide_status cascade;
+drop type if exists public.tiss_batch_status cascade;
 
 drop function if exists public.is_medscale_admin() cascade;
 drop function if exists public.is_account_owner(uuid) cascade;
@@ -80,6 +87,10 @@ drop function if exists public.enforce_reserve_movement_account() cascade;
 drop function if exists public.normalize_finance_projection_period() cascade;
 drop function if exists public.normalize_finance_dismissal_period() cascade;
 drop function if exists public.enforce_finance_category_ref() cascade;
+drop function if exists public.enforce_billing_account() cascade;
+drop function if exists public.next_tiss_number(uuid, text) cascade;
+drop function if exists public.finalize_tiss_batch(uuid, uuid, bigint, text, text, text, text, bigint, uuid, uuid[]) cascade;
+drop function if exists public.mark_tiss_batch_sent(uuid) cascade;
 
 -- ============================================================
 -- 1. EXTENSÕES
@@ -137,6 +148,10 @@ create table public.workspaces (
   -- Calendário Google desta unidade dentro da conexão única da account
   -- (google_tokens é por account). NULL = usar o calendário "primary".
   gcal_calendar_id        text,
+  -- Identificação do prestador no faturamento TISS (módulo "billing").
+  cnes            text check (cnes is null or cnes ~ '^\d{7}$'),
+  cnpj            text check (cnpj is null or cnpj ~ '^\d{14}$'),
+  legal_name      text,                              -- razão social
   is_active       boolean not null default true,
   is_default      boolean not null default false,     -- workspace padrão do account
   display_order   int not null default 0,
@@ -203,6 +218,8 @@ create table public.profiles (
   avatar_url        text,
   phone             text,
   crm               text,                             -- registro médico pessoal
+  crm_uf            text check (crm_uf is null or crm_uf ~ '^[A-Z]{2}$'), -- UF do conselho (TISS)
+  cbo_code          text,                             -- CBO-S do profissional (TISS)
   specialty         text,
   last_workspace_id uuid references public.workspaces(id) on delete set null,
   -- Última interação com o balão de feedback (envio OU "agora não"). O
@@ -563,6 +580,55 @@ create table public.procedure_catalog (
   updated_at    timestamptz not null default now()
 );
 
+-- Faturamento TISS (módulo "billing") — operadoras por account, tabela TUSS
+-- por operadora e convênios do paciente. Ver supabase/billing.sql.
+create table public.health_insurers (
+  id                    uuid primary key default gen_random_uuid(),
+  account_id            uuid not null references public.accounts(id) on delete cascade,
+  name                  text not null,
+  ans_registry          text not null check (ans_registry ~ '^\d{6}$'),
+  provider_code         text not null,           -- código do prestador na operadora
+  tiss_version          text not null default '4.03.00',
+  default_consult_guide text not null default 'consulta'
+                        check (default_consult_guide in ('consulta','sp_sadt')),
+  batch_weekdays        int[] not null default '{1,2,3,4,5}', -- 0=domingo, fuso SP
+  batch_hour            int not null default 18 check (batch_hour between 0 and 23),
+  -- O XSD da ANS aceita no máximo 100 guias em guiasTISS.
+  max_guides_per_batch  int not null default 100 check (max_guides_per_batch between 1 and 100),
+  next_guide_number     bigint not null default 1,
+  next_batch_number     bigint not null default 1,
+  is_active             boolean not null default true,
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now(),
+  unique (account_id, ans_registry)
+);
+
+create table public.insurer_procedures (
+  id          uuid primary key default gen_random_uuid(),
+  insurer_id  uuid not null references public.health_insurers(id) on delete cascade,
+  account_id  uuid not null references public.accounts(id) on delete cascade, -- desnormalizado p/ RLS
+  tuss_code   text not null,
+  description text not null,
+  price_cents int  not null check (price_cents >= 0),
+  guide_type  text not null check (guide_type in ('consulta','sp_sadt')),
+  is_active   boolean not null default true,
+  unique (insurer_id, tuss_code)
+);
+
+create table public.patient_insurances (
+  id          uuid primary key default gen_random_uuid(),
+  account_id  uuid not null references public.accounts(id) on delete cascade,
+  patient_id  uuid not null references public.patients(id) on delete cascade,
+  insurer_id  uuid not null references public.health_insurers(id) on delete restrict,
+  card_number text not null,
+  plan_name   text,
+  valid_until date,
+  is_primary  boolean not null default false,
+  created_at  timestamptz not null default now(),
+  updated_at  timestamptz not null default now(),
+  unique (patient_id, insurer_id, card_number)
+);
+
 -- Consultas / agendamentos
 create table public.appointments (
   id              uuid default uuid_generate_v4() primary key,
@@ -591,6 +657,16 @@ create table public.appointments (
   -- bot_config.insurance_plans). NULL = particular. Consulta por convênio não
   -- gera revenue_entry; entra nas telas de receita só como contagem.
   health_plan     text,
+  -- Faturamento TISS (módulo "billing"). Numa consulta de convênio,
+  -- health_plan continua recebendo o nome da operadora (fica fora do ciclo de
+  -- receita); insurer_id guarda a operadora mesmo sem carteirinha.
+  billing_type         text not null default 'particular'
+                       check (billing_type in ('particular','convenio')),
+  insurer_id           uuid references public.health_insurers(id) on delete set null,
+  patient_insurance_id uuid references public.patient_insurances(id) on delete set null,
+  insurer_procedure_id uuid references public.insurer_procedures(id) on delete set null,
+  authorization_number text,
+  authorization_date   date,
   gcal_event_id   text,
   reminder_sent   boolean default false,
   created_at      timestamptz not null default now(),
@@ -604,6 +680,49 @@ create table public.appointments (
 create unique index appointments_gcal_event_id_key
   on public.appointments (gcal_event_id)
   where gcal_event_id is not null;
+
+-- Guias TISS e lotes XML (módulo "billing"). Só owner/admin (RLS).
+create type public.tiss_guide_status as enum ('draft','ready','batched','sent','cancelled');
+create type public.tiss_batch_status as enum ('generated','sent','error');
+
+create table public.tiss_batches (
+  id            uuid primary key default gen_random_uuid(),
+  account_id    uuid not null references public.accounts(id) on delete cascade,
+  insurer_id    uuid not null references public.health_insurers(id) on delete restrict,
+  batch_number  bigint not null,
+  tiss_version  text not null,
+  guide_type    text not null check (guide_type in ('consulta','sp_sadt')), -- um lote TISS só tem um tipo de guia
+  status        public.tiss_batch_status not null default 'generated',
+  xml_path      text,          -- bucket privado 'tiss-batches'; nunca exposto ao client
+  hash_md5      text,
+  guide_count   int not null default 0,
+  total_cents   bigint not null default 0,
+  error_message text,          -- só mensagem do validador, sem dados de paciente
+  created_by    uuid references public.profiles(id) on delete set null, -- null = cron
+  sent_at       timestamptz,
+  sent_by       uuid references public.profiles(id) on delete set null,
+  created_at    timestamptz not null default now(),
+  unique (insurer_id, batch_number)
+);
+
+create table public.tiss_guides (
+  id                    uuid primary key default gen_random_uuid(),
+  account_id            uuid not null references public.accounts(id) on delete cascade,
+  workspace_id          uuid not null references public.workspaces(id) on delete cascade,
+  appointment_id        uuid not null unique references public.appointments(id) on delete restrict,
+  insurer_id            uuid not null references public.health_insurers(id) on delete restrict,
+  batch_id              uuid references public.tiss_batches(id) on delete set null,
+  guide_type            text not null check (guide_type in ('consulta','sp_sadt')),
+  provider_guide_number text not null,
+  status                public.tiss_guide_status not null default 'draft',
+  payload               jsonb not null,   -- snapshot tipado (lib/billing/types.ts#GuidePayload)
+  missing_fields        text[] not null default '{}',
+  total_cents           int not null default 0,
+  service_date          date not null,    -- data do atendimento no fuso de SP
+  created_at            timestamptz not null default now(),
+  updated_at            timestamptz not null default now(),
+  unique (insurer_id, provider_guide_number)
+);
 
 -- Transcrição de consultas — áudio gravado, transcrito pelo Whisper, e
 -- prontuário SOAP gerado pelo Claude (ver lib/transcriptions/*). Módulo
@@ -941,6 +1060,11 @@ create index idx_patients_account            on public.patients(account_id, phon
 create index idx_appointments_workspace      on public.appointments(workspace_id, scheduled_at);
 create index idx_appointments_doctor         on public.appointments(doctor_id, scheduled_at);
 create index idx_appointments_health_plan    on public.appointments(workspace_id, health_plan) where health_plan is not null;
+create index idx_appointments_billing        on public.appointments(account_id, status, scheduled_at) where billing_type = 'convenio';
+create index idx_patient_insurances_patient  on public.patient_insurances(patient_id);
+create index idx_tiss_guides_status          on public.tiss_guides(account_id, status);
+create index idx_tiss_guides_insurer         on public.tiss_guides(insurer_id, status);
+create index idx_tiss_batches_insurer        on public.tiss_batches(insurer_id, created_at desc);
 create index idx_conversations_workspace     on public.conversations(workspace_id, status);
 create index idx_conversations_archived_at   on public.conversations(archived_at);
 create index idx_messages_conversation       on public.messages(conversation_id, sent_at);
@@ -1054,6 +1178,18 @@ create trigger trg_profiles_updated_at
 
 create trigger trg_appointments_updated_at
   before update on public.appointments
+  for each row execute procedure public.handle_updated_at();
+
+create trigger trg_health_insurers_updated_at
+  before update on public.health_insurers
+  for each row execute procedure public.handle_updated_at();
+
+create trigger trg_patient_insurances_updated_at
+  before update on public.patient_insurances
+  for each row execute procedure public.handle_updated_at();
+
+create trigger trg_tiss_guides_updated_at
+  before update on public.tiss_guides
   for each row execute procedure public.handle_updated_at();
 
 create trigger trg_procedure_catalog_updated_at
@@ -1294,6 +1430,121 @@ create trigger trg_enforce_finance_projection_category
 create trigger trg_enforce_finance_dismissal_category
   before insert or update on public.finance_suggestion_dismissals
   for each row execute procedure public.enforce_finance_category_ref();
+
+-- ============================================================
+-- 10.4 FATURAMENTO TISS — integridade de account, numeração atômica e
+--      fechamento/envio de lote (ver supabase/billing.sql)
+-- ============================================================
+-- account_id de insurer_procedures é sempre o da operadora, e o de
+-- patient_insurances precisa bater com o do paciente e o da operadora — sem
+-- isto um INSERT com account_id forjado passaria pela RLS apontando para a
+-- operadora/paciente de outra account.
+create or replace function public.enforce_billing_account()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_table_name = 'insurer_procedures' then
+    select account_id into new.account_id from public.health_insurers where id = new.insurer_id;
+  elsif tg_table_name = 'patient_insurances' then
+    if not exists (select 1 from public.health_insurers where id = new.insurer_id and account_id = new.account_id)
+       or not exists (select 1 from public.patients where id = new.patient_id and account_id = new.account_id) then
+      raise exception 'patient_insurances: paciente e operadora precisam ser da mesma account';
+    end if;
+  end if;
+  return new;
+end; $$;
+
+create trigger trg_insurer_procedures_account
+  before insert or update on public.insurer_procedures
+  for each row execute procedure public.enforce_billing_account();
+
+create trigger trg_patient_insurances_account
+  before insert or update on public.patient_insurances
+  for each row execute procedure public.enforce_billing_account();
+
+-- Numeração sequencial por operadora (guia e lote). UPDATE ... RETURNING
+-- trava a linha: duas guias simultâneas nunca recebem o mesmo número.
+create or replace function public.next_tiss_number(p_insurer_id uuid, p_kind text)
+returns bigint language plpgsql security definer set search_path = public as $$
+declare n bigint;
+begin
+  if p_kind = 'guide' then
+    update public.health_insurers set next_guide_number = next_guide_number + 1
+      where id = p_insurer_id returning next_guide_number - 1 into n;
+  elsif p_kind = 'batch' then
+    update public.health_insurers set next_batch_number = next_batch_number + 1
+      where id = p_insurer_id returning next_batch_number - 1 into n;
+  else
+    raise exception 'invalid kind %', p_kind;
+  end if;
+  if n is null then raise exception 'insurer not found'; end if;
+  return n;
+end; $$;
+
+-- Fechamento do lote numa única transação: trava as guias, confere que todas
+-- continuam 'ready' e sem lote, grava o lote e marca as guias como 'batched'.
+-- Se outra execução (cron duplicado, "Gerar lote agora" simultâneo) pegou
+-- alguma guia antes, levanta exceção e nada muda — o chamador apaga o XML
+-- que já subiu para o storage.
+create or replace function public.finalize_tiss_batch(
+  p_account_id   uuid,
+  p_insurer_id   uuid,
+  p_batch_number bigint,
+  p_tiss_version text,
+  p_guide_type   text,
+  p_xml_path     text,
+  p_hash_md5     text,
+  p_total_cents  bigint,
+  p_created_by   uuid,
+  p_guide_ids    uuid[]
+)
+returns uuid language plpgsql security definer set search_path = public as $$
+declare
+  v_batch_id uuid;
+  v_locked   int;
+begin
+  select count(*) into v_locked from (
+    select id from public.tiss_guides
+    where id = any(p_guide_ids)
+      and insurer_id = p_insurer_id
+      and account_id = p_account_id
+      and status = 'ready'
+      and batch_id is null
+    for update
+  ) g;
+
+  if v_locked <> coalesce(array_length(p_guide_ids, 1), 0) then
+    raise exception 'tiss_guides_changed';
+  end if;
+
+  insert into public.tiss_batches (
+    account_id, insurer_id, batch_number, tiss_version, guide_type, status,
+    xml_path, hash_md5, guide_count, total_cents, created_by
+  ) values (
+    p_account_id, p_insurer_id, p_batch_number, p_tiss_version, p_guide_type, 'generated',
+    p_xml_path, p_hash_md5, v_locked, p_total_cents, p_created_by
+  ) returning id into v_batch_id;
+
+  update public.tiss_guides
+    set status = 'batched', batch_id = v_batch_id
+    where id = any(p_guide_ids);
+
+  return v_batch_id;
+end; $$;
+
+-- "Marcar como enviado": lote e guias na mesma transação. SECURITY INVOKER —
+-- roda com o client do usuário (createClient), então a RLS de admin vale.
+create or replace function public.mark_tiss_batch_sent(p_batch_id uuid)
+returns boolean language plpgsql security invoker set search_path = public as $$
+begin
+  update public.tiss_batches
+    set status = 'sent', sent_at = now(), sent_by = auth.uid()
+    where id = p_batch_id and status = 'generated';
+  if not found then return false; end if;
+
+  update public.tiss_guides set status = 'sent'
+    where batch_id = p_batch_id and status = 'batched';
+  return true;
+end; $$;
 
 -- ============================================================
 -- 11. TRIGGER: criar profile automaticamente ao cadastrar usuário
@@ -1564,6 +1815,11 @@ alter table public.push_subscriptions     enable row level security;
 alter table public.transcriptions         enable row level security;
 alter table public.account_notes          enable row level security;
 alter table public.account_tasks          enable row level security;
+alter table public.health_insurers        enable row level security;
+alter table public.insurer_procedures     enable row level security;
+alter table public.patient_insurances     enable row level security;
+alter table public.tiss_batches           enable row level security;
+alter table public.tiss_guides            enable row level security;
 alter table public.finance_entries        enable row level security;
 alter table public.finance_sessions       enable row level security;
 alter table public.finance_categories     enable row level security;
@@ -1791,6 +2047,29 @@ create policy "rate_limit_log: service role only" on public.rate_limit_log
 -- publicação replicada explicitamente).
 alter publication supabase_realtime add table public.transcriptions;
 
+-- Faturamento TISS: guias e lotes só owner/admin; operadoras e procedimentos
+-- qualquer membro lê (seletor da agenda), só owner/admin escreve; convênio do
+-- paciente, qualquer membro.
+create policy "health_insurers: members read" on public.health_insurers
+  for select using (account_id = any(public.my_account_ids()));
+create policy "health_insurers: admin write" on public.health_insurers
+  for all using (public.is_account_admin(account_id)) with check (public.is_account_admin(account_id));
+
+create policy "insurer_procedures: members read" on public.insurer_procedures
+  for select using (account_id = any(public.my_account_ids()));
+create policy "insurer_procedures: admin write" on public.insurer_procedures
+  for all using (public.is_account_admin(account_id)) with check (public.is_account_admin(account_id));
+
+create policy "patient_insurances: account members" on public.patient_insurances
+  for all using (account_id = any(public.my_account_ids()))
+  with check (account_id = any(public.my_account_ids()));
+
+create policy "tiss_guides: admin only" on public.tiss_guides
+  for all using (public.is_account_admin(account_id)) with check (public.is_account_admin(account_id));
+
+create policy "tiss_batches: admin only" on public.tiss_batches
+  for all using (public.is_account_admin(account_id)) with check (public.is_account_admin(account_id));
+
 -- ============================================================
 -- 14. PERMISSÕES (GRANTS) — necessárias ALÉM das policies de RLS
 -- ============================================================
@@ -1823,5 +2102,25 @@ grant execute on function public.trigger_transcription_process(uuid, text) to se
 revoke execute on function public.trigger_transcription_generate(uuid, text) from public, anon, authenticated;
 grant execute on function public.trigger_transcription_generate(uuid, text) to service_role;
 
+revoke execute on function public.next_tiss_number(uuid, text) from public, anon, authenticated;
+grant execute on function public.next_tiss_number(uuid, text) to service_role;
+revoke execute on function public.finalize_tiss_batch(uuid, uuid, bigint, text, text, text, text, bigint, uuid, uuid[])
+  from public, anon, authenticated;
+grant execute on function public.finalize_tiss_batch(uuid, uuid, bigint, text, text, text, text, bigint, uuid, uuid[])
+  to service_role;
+revoke execute on function public.mark_tiss_batch_sent(uuid) from public, anon;
+grant execute on function public.mark_tiss_batch_sent(uuid) to authenticated, service_role;
+
 -- 'anon' propositalmente não recebe grants — nenhuma tabela deste app deve
 -- ser lida por usuários não autenticados.
+
+-- ============================================================
+-- 15. STORAGE — bucket privado dos XMLs de lote (faturamento TISS)
+-- Sem policy para usuários de propósito: upload e download passam só pelo
+-- service_role, e o usuário recebe uma signed URL de 5 minutos gerada em
+-- /api/billing/batches/[id]/download depois da checagem de papel.
+-- Caminho: {account_id}/{insurer_id}/{batch_number}.xml
+-- ============================================================
+insert into storage.buckets (id, name, public)
+values ('tiss-batches', 'tiss-batches', false)
+on conflict (id) do nothing;

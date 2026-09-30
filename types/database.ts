@@ -56,6 +56,10 @@ export type TranscriptionStatus =
   | 'signed'
   | 'error'
 export type TranscriptionSource = 'system' | 'whatsapp'
+export type BillingType = 'particular' | 'convenio'
+export type TissGuideType = 'consulta' | 'sp_sadt'
+export type TissGuideStatus = 'draft' | 'ready' | 'batched' | 'sent' | 'cancelled'
+export type TissBatchStatus = 'generated' | 'sent' | 'error'
 export type AccountNoteType = 'note' | 'call' | 'email' | 'meeting'
 export type AccountTaskStatus = 'pending' | 'done'
 export type FeedbackStatus = 'new' | 'reviewed'
@@ -76,6 +80,7 @@ export type ModuleSlug =
   | 'transcriptions'
   | 'finance'
   | 'revenue_cycle'
+  | 'billing'
 
 export interface Database {
   public: {
@@ -120,6 +125,9 @@ export interface Database {
           // Calendário Google desta unidade dentro da conexão única da account
           // (google_tokens é por account). null = calendário "primary".
           gcal_calendar_id: string | null
+          cnes: string | null
+          cnpj: string | null
+          legal_name: string | null
           is_active: boolean
           is_default: boolean
           display_order: number
@@ -308,6 +316,8 @@ export interface Database {
           avatar_url: string | null
           phone: string | null
           crm: string | null
+          crm_uf: string | null
+          cbo_code: string | null
           specialty: string | null
           last_workspace_id: string | null
           feedback_prompt_dismissed_at: string | null
@@ -353,6 +363,184 @@ export interface Database {
           },
         ]
       }
+      health_insurers: {
+        Row: {
+          id: string
+          account_id: string
+          name: string
+          ans_registry: string
+          provider_code: string
+          tiss_version: string
+          default_consult_guide: TissGuideType
+          batch_weekdays: number[]
+          batch_hour: number
+          max_guides_per_batch: number
+          next_guide_number: number
+          next_batch_number: number
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['health_insurers']['Row']> & {
+          account_id: string
+          name: string
+          ans_registry: string
+          provider_code: string
+        }
+        Update: Partial<Database['public']['Tables']['health_insurers']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'health_insurers_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      insurer_procedures: {
+        Row: {
+          id: string
+          insurer_id: string
+          account_id: string
+          tuss_code: string
+          description: string
+          price_cents: number
+          guide_type: TissGuideType
+          is_active: boolean
+        }
+        Insert: Partial<Database['public']['Tables']['insurer_procedures']['Row']> & {
+          insurer_id: string
+          account_id: string
+          tuss_code: string
+          description: string
+          price_cents: number
+          guide_type: TissGuideType
+        }
+        Update: Partial<Database['public']['Tables']['insurer_procedures']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'insurer_procedures_insurer_id_fkey'
+            columns: ['insurer_id']
+            referencedRelation: 'health_insurers'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      patient_insurances: {
+        Row: {
+          id: string
+          account_id: string
+          patient_id: string
+          insurer_id: string
+          card_number: string
+          plan_name: string | null
+          valid_until: string | null
+          is_primary: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['patient_insurances']['Row']> & {
+          account_id: string
+          patient_id: string
+          insurer_id: string
+          card_number: string
+        }
+        Update: Partial<Database['public']['Tables']['patient_insurances']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'patient_insurances_insurer_id_fkey'
+            columns: ['insurer_id']
+            referencedRelation: 'health_insurers'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'patient_insurances_patient_id_fkey'
+            columns: ['patient_id']
+            referencedRelation: 'patients'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      tiss_batches: {
+        Row: {
+          id: string
+          account_id: string
+          insurer_id: string
+          batch_number: number
+          tiss_version: string
+          guide_type: TissGuideType
+          status: TissBatchStatus
+          xml_path: string | null
+          hash_md5: string | null
+          guide_count: number
+          total_cents: number
+          error_message: string | null
+          created_by: string | null
+          sent_at: string | null
+          sent_by: string | null
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['tiss_batches']['Row']> & {
+          account_id: string
+          insurer_id: string
+          batch_number: number
+          tiss_version: string
+          guide_type: TissGuideType
+        }
+        Update: Partial<Database['public']['Tables']['tiss_batches']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'tiss_batches_insurer_id_fkey'
+            columns: ['insurer_id']
+            referencedRelation: 'health_insurers'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      tiss_guides: {
+        Row: {
+          id: string
+          account_id: string
+          workspace_id: string
+          appointment_id: string
+          insurer_id: string
+          batch_id: string | null
+          guide_type: TissGuideType
+          provider_guide_number: string
+          status: TissGuideStatus
+          payload: unknown
+          missing_fields: string[]
+          total_cents: number
+          service_date: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['tiss_guides']['Row']> & {
+          account_id: string
+          workspace_id: string
+          appointment_id: string
+          insurer_id: string
+          guide_type: TissGuideType
+          provider_guide_number: string
+          payload: unknown
+          service_date: string
+        }
+        Update: Partial<Database['public']['Tables']['tiss_guides']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'tiss_guides_insurer_id_fkey'
+            columns: ['insurer_id']
+            referencedRelation: 'health_insurers'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'tiss_guides_appointment_id_fkey'
+            columns: ['appointment_id']
+            referencedRelation: 'appointments'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       appointments: {
         Row: {
           id: string
@@ -372,6 +560,12 @@ export interface Database {
           procedure_name: string | null
           price: number | null
           health_plan: string | null
+          billing_type: BillingType
+          insurer_id: string | null
+          patient_insurance_id: string | null
+          insurer_procedure_id: string | null
+          authorization_number: string | null
+          authorization_date: string | null
           gcal_event_id: string | null
           reminder_sent: boolean
           created_at: string
@@ -1376,6 +1570,26 @@ export interface Database {
         Args: { p_account_id: string }
         Returns: undefined
       }
+      next_tiss_number: {
+        Args: { p_insurer_id: string; p_kind: 'guide' | 'batch' }
+        Returns: number
+      }
+      finalize_tiss_batch: {
+        Args: {
+          p_account_id: string
+          p_insurer_id: string
+          p_batch_number: number
+          p_tiss_version: string
+          p_guide_type: TissGuideType
+          p_xml_path: string
+          p_hash_md5: string
+          p_total_cents: number
+          p_created_by: string | null
+          p_guide_ids: string[]
+        }
+        Returns: string
+      }
+      mark_tiss_batch_sent: { Args: { p_batch_id: string }; Returns: boolean }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
 import { syncRevenueEntryToAppointmentStatus } from '@/lib/revenue/cycle'
+import { ensureGuideSafely } from '@/lib/billing/guides'
 import type { SOAPRecord } from '@/lib/transcriptions/types'
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -50,6 +51,10 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     // ser outro papel. A transcrição já foi validada contra o workspace da
     // sessão acima, então o appointment_id é confiável.
     await syncRevenueEntryToAppointmentStatus(createAdminClient(), transcription.appointment_id, 'realizado')
+    // Faturamento TISS: consulta de convênio ganha a guia com o CID do
+    // prontuário recém-assinado. No-op para particular; falha nunca desfaz a
+    // assinatura (ensureGuideSafely só reporta ao Sentry, com IDs).
+    await ensureGuideSafely(transcription.appointment_id)
   }
 
   return NextResponse.json({ ok: true })

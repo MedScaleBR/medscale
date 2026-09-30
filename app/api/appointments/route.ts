@@ -5,6 +5,8 @@ import { isGoogleConnected } from '@/lib/google/auth'
 import { reconcileAccountCalendars } from '@/lib/google/reconcile'
 import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
 import { applyAppointmentRevenue } from '@/lib/revenue/cycle'
+import { resolveAppointmentBilling } from '@/lib/billing/appointments'
+import { ensureGuideSafely } from '@/lib/billing/guides'
 
 export async function GET(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
@@ -57,8 +59,19 @@ export async function POST(req: NextRequest) {
 
   // Convênio da consulta (bot_config.insurance_plans). Consulta por convênio
   // fica fora do ciclo de receita: sem preço, sem procedimento, sem entrada.
-  const healthPlan: string | null =
-    typeof body.health_plan === 'string' && body.health_plan.trim() ? body.health_plan.trim() : null
+  // Com o módulo "billing", o convênio vem das operadoras cadastradas
+  // (health_insurers) e o health_plan passa a ser o nome da operadora.
+  const billing = await resolveAppointmentBilling(supabase, {
+    accountId: session.accountId,
+    patientId: body.patient_id ?? null,
+    body,
+  })
+  if (!billing.ok) return NextResponse.json({ error: billing.error }, { status: 400 })
+  const healthPlan: string | null = billing.fields
+    ? billing.fields.health_plan
+    : typeof body.health_plan === 'string' && body.health_plan.trim()
+      ? body.health_plan.trim()
+      : null
 
   // Ciclo de receita: se veio um procedimento do catálogo, tira o snapshot de
   // nome e preço agora (imutável). Um body.price explícito tem prioridade.
@@ -129,6 +142,7 @@ export async function POST(req: NextRequest) {
       procedure_name: procedureName,
       price: snapshotPrice,
       health_plan: healthPlan,
+      ...(billing.fields ?? {}),
       gcal_event_id: gcalEventId,
     })
     .select()
@@ -170,6 +184,10 @@ export async function POST(req: NextRequest) {
       nextStatus: data.status,
       healthPlan,
     })
+
+    // Faturamento TISS: consulta de convênio que já nasce realizada ganha a
+    // guia. Nunca derruba a criação da consulta.
+    if (data.billing_type === 'convenio' && data.status === 'realizado') await ensureGuideSafely(data.id)
   }
 
   return NextResponse.json(data, { status: 201 })

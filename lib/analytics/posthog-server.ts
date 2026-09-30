@@ -171,3 +171,29 @@ export function trackFinanceEntryCreatedViaWhatsApp(
     properties: props,
   })
 }
+
+// --- Faturamento TISS -----------------------------------------------
+// Só metadados: nunca carteirinha, nome de paciente, CID, payload ou XML.
+
+export function trackBillingGuideCreated(
+  accountId: string,
+  props: { guide_type: 'consulta' | 'sp_sadt'; has_missing_fields: boolean }
+) {
+  return captureServer({
+    distinctId: accountId,
+    event: 'billing_guide_created',
+    properties: { ...props, account_id: accountId, ...NO_PERSON },
+  })
+}
+
+export function trackBillingBatchGenerated(distinctId: string, props: { account_id: string; guide_count: number }) {
+  return captureServer({ distinctId, event: 'billing_batch_generated', properties: props })
+}
+
+export function trackBillingBatchDownloaded(distinctId: string, props: { account_id: string }) {
+  return captureServer({ distinctId, event: 'billing_batch_downloaded', properties: props })
+}
+
+export function trackBillingBatchMarkedSent(distinctId: string, props: { account_id: string }) {
+  return captureServer({ distinctId, event: 'billing_batch_marked_sent', properties: props })
+}

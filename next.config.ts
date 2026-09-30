@@ -9,7 +9,15 @@ const nextConfig: NextConfig = {
   // Vercel não inclui a pasta na função serverless e dá ENOENT em produção.
   outputFileTracingIncludes: {
     '/': ['./medscale-site/**/*'],
+    // Geração de lote TISS valida o XML contra os XSDs oficiais da ANS, lidos
+    // do disco em runtime (lib/tiss/validate.ts) — mesmo caso do medscale-site.
+    '/api/billing/batches': ['./lib/tiss/schemas/**/*'],
+    '/api/cron/tiss-batches': ['./lib/tiss/schemas/**/*'],
   },
+  // xmllint-wasm sobe um worker_thread com o libxml2 em WebAssembly a partir
+  // de arquivos do próprio pacote (xmllint-node.js + xmllint.wasm) — precisa
+  // ficar fora do bundle para esses caminhos continuarem válidos.
+  serverExternalPackages: ['xmllint-wasm'],
 }
 
 export default process.env.SENTRY_DSN

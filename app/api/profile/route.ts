@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { parseProfessionalFields } from '@/lib/billing/validation'
 import type { Database } from '@/types/database'
 
 type ProfileUpdate = Database['public']['Tables']['profiles']['Update']
@@ -52,6 +53,11 @@ export async function PATCH(req: NextRequest) {
   for (const field of editableFields) {
     if (field in body) (update as Record<string, string | null>)[field] = clean(body[field], MAX_LEN[field])
   }
+
+  // Faturamento TISS: UF do conselho e CBO-S do profissional.
+  const professional = parseProfessionalFields(body)
+  if (!professional.ok) return NextResponse.json({ error: professional.error }, { status: 400 })
+  Object.assign(update, professional.value)
 
   const { data, error } = await supabase.from('profiles').update(update).eq('id', user.id).select().single()
 

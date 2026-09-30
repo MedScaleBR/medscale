@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { AppointmentModal, type AppointmentFormValues, type CatalogProcedureOption } from './AppointmentModal'
+import type { InsurerOption } from '@/components/billing/PatientInsurances'
 import type { WorkspaceOption } from './AgendaClient'
 import type { Database } from '@/types/database'
 import type { BusyBlock } from '@/lib/google/reconcile'
@@ -87,6 +88,7 @@ interface CalendarViewProps {
   showTranscriptions?: boolean
   proceduresByWorkspace?: Record<string, CatalogProcedureOption[]>
   healthPlans?: string[]
+  billingInsurers?: InsurerOption[]
 }
 
 export function CalendarView({
@@ -100,6 +102,7 @@ export function CalendarView({
   showTranscriptions,
   proceduresByWorkspace,
   healthPlans,
+  billingInsurers,
 }: CalendarViewProps) {
   const [view, setView] = useState<View>('week')
   const [date, setDate] = useState(new Date())
@@ -191,6 +194,17 @@ export function CalendarView({
       price: a.price != null ? String(a.price) : '',
       procedure_id: a.procedure_id ?? null,
       health_plan: a.health_plan ?? null,
+      billing_type: null,
+      billing:
+        a.billing_type === 'convenio' && a.insurer_id
+          ? {
+              insurer_id: a.insurer_id,
+              patient_insurance_id: a.patient_insurance_id,
+              insurer_procedure_id: a.insurer_procedure_id,
+              authorization_number: a.authorization_number ?? '',
+              authorization_date: a.authorization_date ?? '',
+            }
+          : null,
     })
     setModalOpen(true)
   }, [])
@@ -309,6 +323,7 @@ export function CalendarView({
         showTranscriptions={showTranscriptions}
         procedures={modalProcedures}
         healthPlans={healthPlans}
+        billingInsurers={billingInsurers}
       />
     </div>
   )

@@ -10,7 +10,7 @@ import type { ModuleSlug } from '@/lib/session/context'
 const ALL: ModuleSlug[] = [
   'dashboard', 'agenda', 'conversations', 'locations', 'schedule',
   'waitlist', 'campaigns', 'patients', 'settings', 'transcriptions',
-  'finance', 'revenue_cycle',
+  'finance', 'revenue_cycle', 'billing',
 ]
 
 describe('isModuleVisible', () => {
@@ -26,6 +26,11 @@ describe('isModuleVisible', () => {
     expect(isModuleVisible('revenue_cycle', ['revenue_cycle'], 'member')).toBe(false)
     expect(isModuleVisible('revenue_cycle', ['revenue_cycle'], 'admin')).toBe(true)
     expect(isModuleVisible('revenue_cycle', ['revenue_cycle'], 'owner')).toBe(true)
+  })
+  it('billing nega member, libera admin/owner', () => {
+    expect(isModuleVisible('billing', ['billing'], 'member')).toBe(false)
+    expect(isModuleVisible('billing', ['billing'], 'admin')).toBe(true)
+    expect(isModuleVisible('billing', ['billing'], 'owner')).toBe(true)
   })
 })
 

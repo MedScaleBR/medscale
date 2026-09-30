@@ -91,6 +91,8 @@ export default async function ConfiguracoesPage({
           specialty: profile?.specialty ?? null,
           crm: profile?.crm ?? null,
           phone: profile?.phone ?? null,
+          crm_uf: profile?.crm_uf ?? null,
+          cbo_code: profile?.cbo_code ?? null,
         }}
         workspace={{
           whatsappNumber: botConfig?.whatsapp_number ?? null,
@@ -123,6 +125,7 @@ export default async function ConfiguracoesPage({
         isOwner={session.role === 'owner'}
         canManageIntegrations={session.role === 'owner' || session.role === 'admin'}
         showRevenueCycle={session.userModules.includes('revenue_cycle')}
+        showBilling={session.accountModules.includes('billing')}
       />
     </div>
   )
