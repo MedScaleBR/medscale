@@ -7,6 +7,11 @@ const g = vi.hoisted(() => ({
   session: { userId: 'u1', accountId: 'acc1', workspaceId: 'w1', role: 'owner', modules: [] },
   steps: [] as string[],
   failOn: null as string | null,
+  templatesResult: { created: [], existing: [], failed: [] } as {
+    created: string[]
+    existing: string[]
+    failed: { name: string; error: string }[]
+  },
 }))
 
 vi.mock('@/lib/supabase/server', () => ({
@@ -36,7 +41,15 @@ vi.mock('@/lib/meta/embedded-signup', () => ({
   fetchPhoneNumberInfo: () => step('info', { displayPhoneNumber: '+55 11 98888-0000', verifiedName: 'Clínica X' }),
   generatePin: () => '123456',
 }))
+vi.mock('@/lib/meta/whatsapp-templates', () => ({
+  ensureWhatsAppTemplates: async () => {
+    g.steps.push('templates')
+    return g.templatesResult
+  },
+}))
+vi.mock('@sentry/nextjs', () => ({ captureException: vi.fn(), captureMessage: vi.fn() }))
 
+import * as Sentry from '@sentry/nextjs'
 import { POST } from '@/app/api/whatsapp/embedded-signup/route'
 
 const req = (body: Record<string, unknown> = { code: 'c1', waba_id: 'waba-1', phone_number_id: 'pn-1' }) =>
@@ -49,6 +62,7 @@ const req = (body: Record<string, unknown> = { code: 'c1', waba_id: 'waba-1', ph
 beforeEach(() => {
   g.steps = []
   g.failOn = null
+  g.templatesResult = { created: [], existing: [], failed: [] }
   g.session = { userId: 'u1', accountId: 'acc1', workspaceId: 'w1', role: 'owner', modules: [] }
   g.supabase = createSupabaseMock({
     bot_config: { upsert: { data: { id: 'bc1' }, error: null } },
@@ -60,7 +74,7 @@ describe('POST /api/whatsapp/embedded-signup', () => {
     const res = await POST(req())
 
     expect(res.status).toBe(200)
-    expect(g.steps).toEqual(['exchange', 'subscribe', 'register', 'info'])
+    expect(g.steps).toEqual(['exchange', 'subscribe', 'register', 'info', 'templates'])
 
     const upsert = g.supabase.callsTo('bot_config', 'upsert')[0]
     expect(upsert.payload).toMatchObject({
@@ -110,7 +124,7 @@ describe('POST /api/whatsapp/embedded-signup', () => {
     const res = await POST(req({ code: 'c1', waba_id: 'waba-1', coexistence: true }))
 
     expect(res.status).toBe(200)
-    expect(g.steps).toEqual(['exchange', 'subscribe', 'lookup', 'info'])
+    expect(g.steps).toEqual(['exchange', 'subscribe', 'lookup', 'info', 'templates'])
     expect(g.supabase.callsTo('bot_config', 'upsert')[0].payload).toMatchObject({
       waba_id: 'waba-1',
       phone_number_id: 'pn-waba',
@@ -124,5 +138,15 @@ describe('POST /api/whatsapp/embedded-signup', () => {
 
     expect(res.status).toBe(400)
     expect(g.steps).toEqual([])
+  })
+
+  it('falha nos templates não derruba a conexão, mas vai para o Sentry', async () => {
+    g.templatesResult = { created: [], existing: [], failed: [{ name: 'appointment_reminder_2', error: 'x' }] }
+
+    const res = await POST(req())
+
+    expect(res.status).toBe(200)
+    expect(g.supabase.callsTo('bot_config', 'upsert')).toHaveLength(1)
+    expect(Sentry.captureMessage).toHaveBeenCalled()
   })
 })
