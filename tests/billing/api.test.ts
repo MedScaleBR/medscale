@@ -155,7 +155,7 @@ describe('lotes', () => {
     const res = await generateBatch(req('/api/billing/batches', json({ insurer_id: 'ins1' })))
 
     expect(res.status).toBe(200)
-    expect(g.createBatches).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'ins1' }), { createdBy: 'u1' })
+    expect(g.createBatches).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'ins1' }), expect.objectContaining({ createdBy: 'u1' }))
     const [call] = g.supabase.callsTo('health_insurers', 'select')
     expect(call.filters).toContainEqual(['eq', 'account_id', 'acc1'])
   })

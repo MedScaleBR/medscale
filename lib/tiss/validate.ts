@@ -44,13 +44,16 @@ function loadSchemas(set: SchemaSet) {
 // ..."), e o valor pode ser uma carteirinha. Mantém só o nome do elemento e o
 // tipo de erro — é o que vai para tiss_batches.error_message.
 export function sanitizeValidatorMessage(message: string): string {
-  return message
-    .replace(/'\{[^}]*\}([\w.-]+)'/g, '$1') // '{namespace}elemento' → elemento (sem aspas)
-    .replace(/\[facet '(\w+)'\]/g, '[facet $1]')
-    .replace(/'[^']*'/g, "'…'") // qualquer outro valor entre aspas pode ser dado do paciente
-    .replace(/\{[^}]*\}/g, '{…}')
-    .replace(/\s+/g, ' ')
-    .trim()
+  // Extrai apenas identificadores do diagnóstico. Tentar remover valores
+  // entre aspas deixa escapar parte de uma carteirinha com apóstrofo.
+  const element = /\bElement '(?:\{[^}]*\})?([\w.-]+)'/.exec(message)?.[1]
+  const facet = /\[facet '(maxLength|minLength|length|pattern|enumeration|maxInclusive|minInclusive|maxExclusive|minExclusive|totalDigits|fractionDigits|whiteSpace)'\]/.exec(message)?.[1]
+  const reason = message.includes('Missing child element')
+    ? 'campo obrigatório ausente'
+    : message.includes('not expected')
+      ? 'elemento fora da sequência'
+      : 'conteúdo inválido'
+  return `${element ? `Element ${element}: ` : 'XML: '}${reason}${facet ? ` [facet ${facet}]` : ''}.`
 }
 
 export async function validateAgainstSchemas(set: SchemaSet, xml: Uint8Array): Promise<ValidationResult> {

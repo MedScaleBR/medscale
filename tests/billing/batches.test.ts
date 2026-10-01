@@ -22,7 +22,7 @@ const INSURER = {
 }
 
 function guideRows(count: number, type: 'consulta' | 'sp_sadt' = 'consulta') {
-  return fakeGuides(count, type).map((g) => ({ ...g, total_cents: 15050 }))
+  return fakeGuides(count, type).map((g) => ({ ...g, total_cents: 15050, updated_at: '2026-09-29T21:00:00.000Z' }))
 }
 
 // Numeração do lote: 1, 2, 3… como next_tiss_number faria.
@@ -37,6 +37,24 @@ function mockRpc(supabase: SupabaseMock, finalize: (args: Record<string, unknown
 
 describe('createBatchesForInsurer', () => {
   let supabase: SupabaseMock
+
+  it('envia as versões das guias para impedir lote com snapshot editado durante a geração', async () => {
+    await createBatchesForInsurer(supabase.client as never, INSURER, { createdBy: 'u1', now: FIXED_NOW })
+    const finalize = supabase.rpc.mock.calls.find((c) => c[0] === 'finalize_tiss_batch')![1]
+    expect(finalize.p_expected_updated_at).toEqual({
+      g1: '2026-09-29T21:00:00.000Z', g2: '2026-09-29T21:00:00.000Z', g3: '2026-09-29T21:00:00.000Z',
+    })
+  })
+
+  it('usa a credencial separada somente para Storage ao gerar o lote', async () => {
+    const serviceStorage = createSupabaseMock().storage
+    await createBatchesForInsurer(supabase.client as never, INSURER, {
+      createdBy: 'u1', now: FIXED_NOW, storage: serviceStorage as never,
+    })
+    expect(serviceStorage.upload).toHaveBeenCalledTimes(1)
+    expect(supabase.storage.upload).not.toHaveBeenCalled()
+    expect(supabase.rpc).toHaveBeenCalledWith('finalize_tiss_batch', expect.any(Object))
+  })
 
   beforeEach(() => {
     supabase = createSupabaseMock({ tiss_guides: { select: { data: guideRows(3) } } })

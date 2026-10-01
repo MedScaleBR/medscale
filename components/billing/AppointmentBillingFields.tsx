@@ -85,7 +85,7 @@ export function AppointmentBillingFields({
   ])
 
   return (
-    <div className="space-y-3 rounded-lg border border-[var(--navy-06)] p-3">
+    <div className="ph-no-capture ph-mask space-y-3 rounded-lg border border-[var(--navy-06)] p-3">
       <div>
         <div className="flex items-center justify-between">
           <Label>Carteirinha</Label>
@@ -109,7 +109,7 @@ export function AppointmentBillingFields({
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent className="ph-no-capture ph-mask">
               <SelectItem value={NONE}>Sem carteirinha</SelectItem>
               {insurerCards.map((c) => (
                 <SelectItem key={c.id} value={c.id}>

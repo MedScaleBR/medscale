@@ -4,11 +4,12 @@ import { v4_03_00, MAX_GUIDES_PER_BATCH } from '@/lib/tiss/v4_03_00/batch'
 import { trackBillingBatchGenerated } from '@/lib/analytics/posthog-server'
 import type { BatchGuide, GuidePayload, GuideType, TissVersionModule } from './types'
 import type { Database } from '@/types/database'
+import { TISS_BUCKET, type TissStorage } from './storage'
 
-type SupabaseAdmin = SupabaseClient<Database>
+type BillingClient = SupabaseClient<Database>
 type InsurerRow = Database['public']['Tables']['health_insurers']['Row']
 
-export const TISS_BUCKET = 'tiss-batches'
+export { TISS_BUCKET } from './storage'
 
 // Um diretório por versão em lib/tiss/; a próxima versão entra aqui.
 export const TISS_VERSIONS: Record<string, TissVersionModule> = {
@@ -38,6 +39,7 @@ function errorMessage(errors: string[]): string {
 
 interface CreateOptions {
   createdBy: string | null // null = cron
+  storage?: Pick<TissStorage, 'upload' | 'remove'>
   now?: Date
   versions?: Record<string, TissVersionModule>
 }
@@ -46,9 +48,10 @@ interface CreateOptions {
 // separados por tipo de guia (um lote TISS só leva um tipo). Cada lote é
 // tudo-ou-nada: XML inválido grava o lote como 'error' e nenhuma guia muda;
 // XML válido sobe para o storage e finalize_tiss_batch marca as guias numa
-// transação só. Client admin: o bucket não tem policy de usuário.
+// transação só. Nas rotas de usuário, a credencial de Storage é separada
+// do client autenticado que lê e altera o banco.
 export async function createBatchesForInsurer(
-  supabase: SupabaseAdmin,
+  supabase: BillingClient,
   insurer: Pick<InsurerRow, 'id' | 'account_id' | 'ans_registry' | 'provider_code' | 'tiss_version' | 'max_guides_per_batch'>,
   options: CreateOptions,
 ): Promise<BatchResult[]> {
@@ -58,7 +61,7 @@ export async function createBatchesForInsurer(
 
   const { data: rows, error } = await supabase
     .from('tiss_guides')
-    .select('id, provider_guide_number, guide_type, payload, total_cents')
+    .select('id, provider_guide_number, guide_type, payload, total_cents, updated_at')
     .eq('insurer_id', insurer.id)
     .eq('account_id', insurer.account_id)
     .eq('status', 'ready')
@@ -73,6 +76,7 @@ export async function createBatchesForInsurer(
     guide_type: r.guide_type,
     payload: r.payload as GuidePayload,
     total_cents: r.total_cents,
+    updated_at: r.updated_at,
   }))
 
   const results: BatchResult[] = []
@@ -83,10 +87,10 @@ export async function createBatchesForInsurer(
 }
 
 async function createOneBatch(
-  supabase: SupabaseAdmin,
+  supabase: BillingClient,
   insurer: Pick<InsurerRow, 'id' | 'account_id' | 'ans_registry' | 'provider_code'>,
   tiss: TissVersionModule,
-  guides: Array<BatchGuide & { total_cents: number }>,
+  guides: Array<BatchGuide & { total_cents: number; updated_at: string }>,
   options: CreateOptions,
 ): Promise<BatchResult> {
   const guideType = guides[0].guide_type
@@ -128,8 +132,8 @@ async function createOneBatch(
   }
 
   const xmlPath = `${insurer.account_id}/${insurer.id}/${batchNumber}.xml`
-  const { error: uploadError } = await supabase.storage
-    .from(TISS_BUCKET)
+  const storage = options.storage ?? supabase.storage.from(TISS_BUCKET)
+  const { error: uploadError } = await storage
     .upload(xmlPath, xml, { contentType: 'application/xml; charset=ISO-8859-1', upsert: false })
   if (uploadError) throw new Error(`upload do lote: ${uploadError.message}`)
 
@@ -144,10 +148,11 @@ async function createOneBatch(
     p_total_cents: totalCents,
     p_created_by: options.createdBy,
     p_guide_ids: guides.map((g) => g.id),
+    p_expected_updated_at: Object.fromEntries(guides.map((g) => [g.id, g.updated_at])),
   })
 
   if (finalizeError || !batchId) {
-    await supabase.storage.from(TISS_BUCKET).remove([xmlPath])
+    await storage.remove([xmlPath])
     if (finalizeError?.message.includes('tiss_guides_changed')) {
       return { status: 'conflict', guideCount: guides.length }
     }

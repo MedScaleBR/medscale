@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
+import { createBillingStorage } from '@/lib/billing/storage'
 import { requireBilling } from '@/lib/billing/access'
-import { TISS_BUCKET } from '@/lib/billing/batches'
 import { trackBillingBatchDownloaded } from '@/lib/analytics/posthog-server'
 
 const SIGNED_URL_TTL_SECONDS = 5 * 60
@@ -26,8 +26,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
   if (!batch) return NextResponse.json({ error: 'Lote não encontrado' }, { status: 404 })
   if (!batch.xml_path) return NextResponse.json({ error: 'Lote com erro não tem XML' }, { status: 409 })
 
-  const { data, error } = await createAdminClient()
-    .storage.from(TISS_BUCKET)
+  const { data, error } = await createBillingStorage()
     .createSignedUrl(batch.xml_path, SIGNED_URL_TTL_SECONDS, { download: `lote-tiss-${batch.batch_number}.xml` })
   if (error || !data) return NextResponse.json({ error: 'Não foi possível gerar o link' }, { status: 500 })
 

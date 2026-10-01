@@ -1570,6 +1570,14 @@ export interface Database {
         Args: { p_account_id: string }
         Returns: undefined
       }
+      ensure_tiss_guide_for_appointment: {
+        Args: { p_appointment_id: string }
+        Returns: Record<string, unknown>
+      }
+      tiss_professional_for_appointment: {
+        Args: { p_appointment_id: string }
+        Returns: Record<string, unknown> | null
+      }
       next_tiss_number: {
         Args: { p_insurer_id: string; p_kind: 'guide' | 'batch' }
         Returns: number
@@ -1586,6 +1594,7 @@ export interface Database {
           p_total_cents: number
           p_created_by: string | null
           p_guide_ids: string[]
+          p_expected_updated_at: Record<string, string>
         }
         Returns: string
       }

@@ -10,7 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "tiss:validate": "npx tsx scripts/tiss-validate.ts",
+    "tiss:validate": "tsx scripts/tiss-validate.ts",
     "whatsapp:templates": "npx tsx --env-file=.env.local scripts/whatsapp-templates.ts"
   },
   "dependencies": {
@@ -46,6 +46,7 @@
     "xmllint-wasm": "^5.3.0"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
     "@types/nodemailer": "^8.0.1",
@@ -57,6 +58,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.3.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^4.1.11"
   }

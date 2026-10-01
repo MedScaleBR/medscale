@@ -56,7 +56,7 @@ export function GuidesTable({ insurers }: { insurers: InsurerOption[] }) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="ph-no-capture ph-mask space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <div>
           <Label className="text-xs">Status</Label>
