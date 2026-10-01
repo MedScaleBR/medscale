@@ -49,7 +49,7 @@ export function PatientInsuranceDialog({
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="ph-no-capture ph-mask sm:max-w-md">
         {open && (
           <InsuranceForm
             patientId={patientId}
@@ -214,7 +214,7 @@ export function PatientInsurances({
   }
 
   return (
-    <div className="rounded-xl border border-[var(--navy-06)] bg-white p-5 shadow-[var(--shadow-sm)]">
+    <div className="ph-no-capture ph-mask rounded-xl border border-[var(--navy-06)] bg-white p-5 shadow-[var(--shadow-sm)]">
       <div className="mb-3 flex items-center justify-between">
         <h2 className="text-sm font-medium text-gray-900">Convênios</h2>
         {insurers.length > 0 && (

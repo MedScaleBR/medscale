@@ -178,7 +178,7 @@ describe('ensureGuideForAppointment', () => {
 
   it('não deve gerar guia para consulta particular', async () => {
     setup({}, { billing_type: 'particular' })
-    const result = await ensureGuideForAppointment('ap1')
+    const result = await ensureGuideForAppointment('ap1', g.supabase.client as never)
 
     expect(result).toEqual({ status: 'skipped', reason: 'not_convenio' })
     expect(g.supabase.callsTo('tiss_guides', 'insert')).toHaveLength(0)
@@ -187,16 +187,16 @@ describe('ensureGuideForAppointment', () => {
 
   it('não deve gerar guia antes da consulta ser realizada', async () => {
     setup({}, { status: 'confirmado' })
-    expect(await ensureGuideForAppointment('ap1')).toEqual({ status: 'skipped', reason: 'not_realizado' })
+    expect(await ensureGuideForAppointment('ap1', g.supabase.client as never)).toEqual({ status: 'skipped', reason: 'not_realizado' })
   })
 
   it('não deve gerar guia com o módulo billing desligado', async () => {
     setup({ accounts: { select: { data: { modules: ['agenda'] } } } })
-    expect(await ensureGuideForAppointment('ap1')).toEqual({ status: 'skipped', reason: 'module_off' })
+    expect(await ensureGuideForAppointment('ap1', g.supabase.client as never)).toEqual({ status: 'skipped', reason: 'module_off' })
   })
 
   it('deve criar guia rascunho com a carteirinha em missing_fields quando falta o convênio do paciente', async () => {
-    const result = await ensureGuideForAppointment('ap1')
+    const result = await ensureGuideForAppointment('ap1', g.supabase.client as never)
 
     expect(result).toEqual({ status: 'created', guideId: 'guide1', guideStatus: 'draft' })
     const [insert] = g.supabase.callsTo('tiss_guides', 'insert')
@@ -222,7 +222,7 @@ describe('ensureGuideForAppointment', () => {
       },
       { patient_insurance_id: 'pi1' },
     )
-    const result = await ensureGuideForAppointment('ap1')
+    const result = await ensureGuideForAppointment('ap1', g.supabase.client as never)
 
     expect(result).toMatchObject({ status: 'created', guideStatus: 'ready' })
     const [insert] = g.supabase.callsTo('tiss_guides', 'insert')
@@ -237,14 +237,14 @@ describe('ensureGuideForAppointment', () => {
       { patient_insurances: { select: { data: { insurer_id: 'OUTRA', card_number: '999', valid_until: null } } } },
       { patient_insurance_id: 'pi1' },
     )
-    await ensureGuideForAppointment('ap1')
+    await ensureGuideForAppointment('ap1', g.supabase.client as never)
     const [insert] = g.supabase.callsTo('tiss_guides', 'insert')
     expect((insert.payload as { missing_fields: string[] }).missing_fields).toContain('beneficiary.card_number')
   })
 
   it('deve ser idempotente quando a guia já existe', async () => {
     setup({ tiss_guides: { select: { data: { id: 'existing' } } } })
-    expect(await ensureGuideForAppointment('ap1')).toEqual({ status: 'exists', guideId: 'existing' })
+    expect(await ensureGuideForAppointment('ap1', g.supabase.client as never)).toEqual({ status: 'exists', guideId: 'existing' })
     expect(g.supabase.rpc).not.toHaveBeenCalled()
   })
 
@@ -255,12 +255,12 @@ describe('ensureGuideForAppointment', () => {
         insert: { data: null, error: { code: '23505', message: 'duplicate' } },
       },
     })
-    expect(await ensureGuideForAppointment('ap1')).toEqual({ status: 'exists', guideId: 'raced' })
+    expect(await ensureGuideForAppointment('ap1', g.supabase.client as never)).toEqual({ status: 'exists', guideId: 'raced' })
   })
 
   it('duas guias devem receber os números que a função SQL atômica devolver', async () => {
     g.supabase.rpc.mockResolvedValueOnce({ data: 7, error: null }).mockResolvedValueOnce({ data: 8, error: null })
-    await Promise.all([ensureGuideForAppointment('ap1'), ensureGuideForAppointment('ap1')])
+    await Promise.all([ensureGuideForAppointment('ap1', g.supabase.client as never), ensureGuideForAppointment('ap1', g.supabase.client as never)])
 
     const numbers = g.supabase.callsTo('tiss_guides', 'insert').map((c) => (c.payload as { provider_guide_number: string }).provider_guide_number)
     expect(numbers.sort()).toEqual(['7', '8'])
@@ -280,7 +280,7 @@ describe('ensureGuideSafely', () => {
     })
     g.supabase.rpc.mockResolvedValue({ data: null, error: { message: 'boom' } })
 
-    await expect(ensureGuideSafely('ap1')).resolves.toBeUndefined()
+    await expect(ensureGuideSafely('ap1', g.supabase.client as never)).resolves.toBeUndefined()
 
     expect(g.sentry).toHaveBeenCalledTimes(1)
     const reported = JSON.stringify(g.sentry.mock.calls[0])

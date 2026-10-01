@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
+import { createBillingStorage } from '@/lib/billing/storage'
 import { requireBilling } from '@/lib/billing/access'
 import { BATCH_COLUMNS } from '@/lib/billing/constants'
 import { createBatchesForInsurer, reportBatchFailure } from '@/lib/billing/batches'
@@ -39,9 +40,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'insurer_id é obrigatório' }, { status: 400 })
   }
 
-  // A operadora é conferida com o client do usuário (RLS da account); a
-  // geração usa o client admin porque o bucket tiss-batches não tem policy de
-  // usuário e a numeração/fechamento são funções restritas ao service_role.
+  // A operadora, numeração e fechamento usam o client autenticado e RLS.
+  // Só o upload utiliza a credencial de serviço do bucket privado.
   const supabase = await createClient()
   const { data: insurer } = await supabase
     .from('health_insurers')
@@ -52,7 +52,10 @@ export async function POST(req: NextRequest) {
   if (!insurer) return NextResponse.json({ error: 'Operadora não encontrada' }, { status: 404 })
 
   try {
-    const batches = await createBatchesForInsurer(createAdminClient(), insurer, { createdBy: session.userId })
+    const batches = await createBatchesForInsurer(supabase, insurer, {
+      createdBy: session.userId,
+      storage: createBillingStorage(),
+    })
     return NextResponse.json({ batches })
   } catch (err) {
     reportBatchFailure(err, { accountId: session.accountId, insurerId: insurer.id })

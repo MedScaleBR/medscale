@@ -62,7 +62,7 @@ export function GuideEditSheet({
 }) {
   return (
     <Sheet open={guide !== null} onOpenChange={onOpenChange}>
-      <SheetContent side="right" className="w-full overflow-y-auto sm:max-w-md">
+      <SheetContent side="right" className="ph-no-capture ph-mask w-full overflow-y-auto sm:max-w-md">
         {guide && <GuideEditor key={guide.id} guide={guide} onSaved={onSaved} onClose={() => onOpenChange(false)} />}
       </SheetContent>
     </Sheet>

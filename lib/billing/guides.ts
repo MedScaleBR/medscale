@@ -2,13 +2,13 @@ import * as Sentry from '@sentry/nextjs'
 import { TZDate } from '@date-fns/tz'
 import { format } from 'date-fns'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { createAdminClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { trackBillingGuideCreated } from '@/lib/analytics/posthog-server'
 import { BILLING_TZ, BRAZIL_UFS } from './constants'
 import type { GuidePayload, GuideStatus, GuideType, MissingField } from './types'
 import type { Database } from '@/types/database'
 
-type SupabaseAdmin = SupabaseClient<Database>
+type BillingClient = SupabaseClient<Database>
 type AppointmentRow = Database['public']['Tables']['appointments']['Row']
 type InsurerRow = Database['public']['Tables']['health_insurers']['Row']
 type ProcedureRow = Database['public']['Tables']['insurer_procedures']['Row']
@@ -150,7 +150,7 @@ export function mergeRefreshedPayload(current: GuidePayload, fresh: GuidePayload
   }
 }
 
-export async function isBillingEnabled(supabase: SupabaseAdmin, accountId: string): Promise<boolean> {
+export async function isBillingEnabled(supabase: BillingClient, accountId: string): Promise<boolean> {
   const { data } = await supabase.from('accounts').select('modules').eq('id', accountId).maybeSingle()
   return Boolean(data?.modules?.includes('billing'))
 }
@@ -174,12 +174,13 @@ type LoadedAppointment = Pick<
   | 'authorization_date'
 >
 
-// Carrega tudo que a guia precisa. Client admin: o CRM/CBO vem do profile do
-// médico, e a RLS de profiles só libera a própria linha. Toda leitura fica
-// presa ao account_id da consulta.
+// Carrega os dados do snapshot para o cron ou para atualização manual.
+// O cron usa seu client de serviço; na atualização autenticada, CRM/CBO
+// de outro médico vêm do RPC autorizado. Leituras presas à account.
 export async function loadGuideSources(
-  supabase: SupabaseAdmin,
+  supabase: BillingClient,
   appointment: LoadedAppointment,
+  options: { authenticated?: boolean } = {},
 ): Promise<{ sources: GuideSources; insurerId: string } | null> {
   const accountId = appointment.account_id
 
@@ -219,8 +220,14 @@ export async function loadGuideSources(
         .eq('id', appointment.workspace_id)
         .eq('account_id', accountId)
         .maybeSingle(),
-      appointment.doctor_id
-        ? supabase.from('profiles').select('full_name, crm, crm_uf, cbo_code').eq('id', appointment.doctor_id).maybeSingle()
+    appointment.doctor_id
+      ? options.authenticated
+        ? supabase.rpc('tiss_professional_for_appointment', { p_appointment_id: appointment.id })
+          .then(({ data, error }) => {
+            if (error) throw new Error('billing: não foi possível carregar o profissional')
+            return { data: data as GuideSources['professional'] }
+          })
+        : supabase.from('profiles').select('full_name, crm, crm_uf, cbo_code').eq('id', appointment.doctor_id).maybeSingle()
         : Promise.resolve({ data: null }),
       appointment.patient_id
         ? supabase
@@ -270,7 +277,7 @@ const APPOINTMENT_COLUMNS =
   'id, account_id, workspace_id, doctor_id, patient_id, patient_name, scheduled_at, status, type, billing_type, ' +
   'insurer_id, patient_insurance_id, insurer_procedure_id, authorization_number, authorization_date'
 
-export async function loadAppointmentForGuide(supabase: SupabaseAdmin, appointmentId: string) {
+export async function loadAppointmentForGuide(supabase: BillingClient, appointmentId: string) {
   const { data } = await supabase.from('appointments').select(APPOINTMENT_COLUMNS).eq('id', appointmentId).maybeSingle()
   return (data as unknown as LoadedAppointment | null) ?? null
 }
@@ -286,8 +293,32 @@ export type EnsureGuideResult =
 // segura a corrida entre dois chamadores simultâneos.
 export async function ensureGuideForAppointment(
   appointmentId: string,
-  supabase: SupabaseAdmin = createAdminClient(),
+  supabase?: BillingClient,
 ): Promise<EnsureGuideResult> {
+  if (!supabase) {
+    // A recepção pode concluir consultas sem ler guias ou prontuários.
+    // O RPC verifica o workspace e cria o snapshot dentro do banco; retorna
+    // somente IDs, status e os metadados permitidos para analytics.
+    const client = await createClient()
+    const { data, error } = await client.rpc('ensure_tiss_guide_for_appointment', {
+      p_appointment_id: appointmentId,
+    })
+    if (error || !data) throw new Error('billing: não foi possível gerar a guia')
+    const result = data as unknown as EnsureGuideResult & {
+      accountId?: string; guideType?: GuideType; hasMissingFields?: boolean
+    }
+    if (result.status === 'created') {
+      if (result.accountId && result.guideType) {
+        await trackBillingGuideCreated(result.accountId, {
+          guide_type: result.guideType,
+          has_missing_fields: result.hasMissingFields === true,
+        })
+      }
+      return { status: 'created', guideId: result.guideId, guideStatus: result.guideStatus }
+    }
+    if (result.status === 'exists') return { status: 'exists', guideId: result.guideId }
+    return { status: 'skipped', reason: result.reason }
+  }
   const appointment = await loadAppointmentForGuide(supabase, appointmentId)
   if (!appointment) return { status: 'skipped', reason: 'not_found' }
   if (appointment.billing_type !== 'convenio') return { status: 'skipped', reason: 'not_convenio' }
@@ -353,7 +384,7 @@ export async function ensureGuideForAppointment(
 
 // Para as rotas da agenda/transcrição: falhar em gerar a guia nunca desfaz a
 // assinatura nem a mudança de status. Sentry só com IDs — nada de payload.
-export async function ensureGuideSafely(appointmentId: string, supabase?: SupabaseAdmin): Promise<void> {
+export async function ensureGuideSafely(appointmentId: string, supabase?: BillingClient): Promise<void> {
   try {
     await ensureGuideForAppointment(appointmentId, supabase)
   } catch (err) {

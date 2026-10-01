@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient, createAdminClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { requireBilling } from '@/lib/billing/access'
 import { isDate } from '@/lib/billing/validation'
 import {
@@ -47,14 +47,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     let payload = guide.payload as GuidePayload
 
     if (body.action === 'refresh') {
-      // Client admin só para montar o snapshot (o CRM/CBO do médico vem de
-      // profiles, cuja RLS só libera a própria linha). A guia já foi
-      // validada acima pela RLS de admin, e o carregamento fica preso à
-      // account da consulta.
-      const admin = createAdminClient()
-      const appointment = await loadAppointmentForGuide(admin, guide.appointment_id)
+      // Leituras com RLS. CRM/CBO de outro médico vêm de um RPC restrito
+      // ao admin da account e ao workspace do agendamento.
+      const appointment = await loadAppointmentForGuide(supabase, guide.appointment_id)
       const loaded = appointment && appointment.account_id === session.accountId
-        ? await loadGuideSources(admin, { ...appointment, insurer_id: guide.insurer_id })
+        ? await loadGuideSources(supabase, { ...appointment, insurer_id: guide.insurer_id }, { authenticated: true })
         : null
       if (!loaded) return NextResponse.json({ error: 'Consulta da guia não encontrada' }, { status: 404 })
       payload = mergeRefreshedPayload(payload, buildGuidePayload(loaded.sources))

@@ -6,6 +6,17 @@ import { el, toLatin1Text, centsToDecimal } from '@/lib/tiss/xml'
 import { sanitizeValidatorMessage } from '@/lib/tiss/validate'
 import { fakeGuides, fakePayload, FAKE_INSURER, FIXED_NOW } from './fixtures'
 
+describe('privacidade das mensagens do validador', () => {
+  it('não preserva parte de um valor com apóstrofo, aspas ou quebra de linha', () => {
+    for (const card of ["O'CONNOR-CARD-SECRETO", '"CARD-SECRETO"', 'CARD\nSECRETO']) {
+      const raw = `Schemas validity error : Element '{http://www.ans.gov.br/padroes/tiss/schemas}numeroCarteira': '${card}' is not a valid value.`
+      const clean = sanitizeValidatorMessage(raw)
+      expect(clean).toContain('numeroCarteira')
+      expect(clean).not.toMatch(/CONNOR|CARD|SECRETO/)
+    }
+  })
+})
+
 function batch(count: number, guideType: 'consulta' | 'sp_sadt' = 'consulta') {
   return buildBatch({
     batchNumber: 7,
