@@ -205,6 +205,27 @@ select cron.schedule(
   $$
 );
 
+-- TISS-BATCHES: faturamento de convênios — gera os lotes XML das operadoras
+-- cujo horário programado (health_insurers.batch_weekdays/batch_hour, fuso de
+-- São Paulo) é a hora atual, e cria as guias que faltarem para consultas de
+-- convênio 'realizado' dos últimos 60 dias. Idempotente: rodar duas vezes na
+-- mesma hora não duplica lote nem guia. Só afeta accounts com o módulo
+-- "billing" ativo — ver app/api/cron/tiss-batches.
+select cron.schedule(
+  'tiss-batches',
+  '10 * * * *',
+  $$
+    select net.http_post(
+      url     := 'https://medscalebr.com/api/cron/tiss-batches',
+      headers := jsonb_build_object(
+        'Content-Type',  'application/json',
+        'Authorization', 'Bearer ' || public.cron_secret()
+      ),
+      body    := '{}'::jsonb
+    );
+  $$
+);
+
 -- ============================================================
 -- 3. VERIFICAÇÃO
 -- ============================================================

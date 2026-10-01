@@ -14,6 +14,7 @@ import {
   generatePin,
   isEmbeddedSignupConfigured,
 } from '@/lib/meta/embedded-signup'
+import { ensureWhatsAppTemplates } from '@/lib/meta/whatsapp-templates'
 
 // Única porta de entrada para conectar o WhatsApp da Clara. Nada é gravado
 // antes dos quatro passos da Meta darem certo: uma conexão pela metade é pior
@@ -75,6 +76,17 @@ export async function POST(req: NextRequest) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   invalidateBotConfigCache(session.accountId)
+
+  // Templates do lembrete e da lista de espera. Não bloqueia a conexão: o bot
+  // responde sem eles, e dá para recriar com scripts/whatsapp-templates.ts.
+  const templates = await ensureWhatsAppTemplates(waba_id, businessToken)
+  if (templates.failed.length > 0) {
+    Sentry.captureMessage('Falha ao criar templates do WhatsApp', {
+      level: 'warning',
+      tags: { area: 'meta', flow: 'embedded_signup' },
+      extra: { account_id: session.accountId, waba_id, failed: templates.failed },
+    })
+  }
   await trackBotWizardCompleted(session.userId, {
     workspace_id: session.workspaceId,
     account_id: session.accountId,

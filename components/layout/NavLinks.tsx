@@ -19,6 +19,7 @@ import {
   Settings,
   FileAudio,
   Receipt,
+  FileSpreadsheet,
 } from 'lucide-react'
 
 interface NavItem {
@@ -42,6 +43,7 @@ const MODULE_ICONS: Record<ModuleSlug, typeof LayoutDashboard> = {
   transcriptions: FileAudio,
   finance: Wallet,
   revenue_cycle: Receipt,
+  billing: FileSpreadsheet,
 }
 
 export const MODULE_NAV: Record<ModuleSlug, NavItem> = Object.fromEntries(
@@ -64,7 +66,7 @@ export const NAV_GROUPS: NavGroup[] = [
   { label: 'Atendimento', modules: ['agenda', 'conversations', 'waitlist'] },
   { label: 'Pacientes', modules: ['patients', 'transcriptions'] },
   { label: 'Operação', modules: ['locations', 'schedule'] },
-  { label: 'Financeiro', modules: ['finance', 'revenue_cycle'] },
+  { label: 'Financeiro', modules: ['finance', 'revenue_cycle', 'billing'] },
   { label: 'Crescimento', modules: ['campaigns'] },
   { label: 'Sistema', modules: ['settings'] },
 ]

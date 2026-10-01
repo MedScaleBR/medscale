@@ -5,6 +5,7 @@ import { CalendarView } from './CalendarView'
 import { useAnalyticsBase } from '@/lib/session/session-context'
 import { trackAppointmentCreatedManual, trackAppointmentStatusChanged } from '@/lib/analytics/posthog'
 import type { AppointmentFormValues, CatalogProcedureOption } from './AppointmentModal'
+import type { InsurerOption } from '@/components/billing/PatientInsurances'
 import type { Database } from '@/types/database'
 import type { BusyBlock } from '@/lib/google/reconcile'
 
@@ -19,6 +20,22 @@ function toIso(datetimeLocal: string) {
   return new Date(datetimeLocal).toISOString()
 }
 
+// Campos de faturamento TISS — só vão no corpo quando o usuário escolheu o
+// atendimento no modo faturamento (billing_type != null). Sem isso a rota
+// segue o caminho antigo do health_plan em texto livre.
+function billingBody(values: AppointmentFormValues) {
+  if (!values.billing_type) return {}
+  if (values.billing_type === 'particular' || !values.billing) return { billing_type: 'particular' }
+  return {
+    billing_type: 'convenio',
+    insurer_id: values.billing.insurer_id,
+    patient_insurance_id: values.billing.patient_insurance_id,
+    insurer_procedure_id: values.billing.insurer_procedure_id,
+    authorization_number: values.billing.authorization_number || null,
+    authorization_date: values.billing.authorization_date || null,
+  }
+}
+
 export function AgendaClient({
   initialAppointments,
   initialBusyBlocks,
@@ -27,6 +44,7 @@ export function AgendaClient({
   showTranscriptions,
   proceduresByWorkspace,
   healthPlans,
+  billingInsurers,
 }: {
   initialAppointments: Appointment[]
   initialBusyBlocks: BusyBlock[]
@@ -35,6 +53,7 @@ export function AgendaClient({
   showTranscriptions?: boolean
   proceduresByWorkspace?: Record<string, CatalogProcedureOption[]>
   healthPlans?: string[]
+  billingInsurers?: InsurerOption[]
 }) {
   const [appointments, setAppointments] = useState(initialAppointments)
   const [busyBlocks] = useState(initialBusyBlocks)
@@ -58,6 +77,7 @@ export function AgendaClient({
         price: values.price ? Number(values.price) : null,
         procedure_id: values.procedure_id || null,
         health_plan: values.health_plan || null,
+        ...billingBody(values),
       }),
     })
     const json = await res.json()
@@ -86,6 +106,7 @@ export function AgendaClient({
         price: values.price ? Number(values.price) : null,
         procedure_id: values.procedure_id || null,
         health_plan: values.health_plan || null,
+        ...billingBody(values),
       }),
     })
     const json = await res.json()
@@ -128,6 +149,7 @@ export function AgendaClient({
         showTranscriptions={showTranscriptions}
         proceduresByWorkspace={proceduresByWorkspace}
         healthPlans={healthPlans}
+        billingInsurers={billingInsurers}
       />
     </>
   )

@@ -20,7 +20,9 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { AppointmentRecordingEntry } from '@/components/transcriptions/AppointmentRecordingEntry'
-import type { AppointmentType, AppointmentStatus } from '@/types/database'
+import { AppointmentBillingFields, type AppointmentBillingValues } from '@/components/billing/AppointmentBillingFields'
+import type { InsurerOption } from '@/components/billing/PatientInsurances'
+import type { AppointmentType, AppointmentStatus, BillingType } from '@/types/database'
 
 export interface CatalogProcedureOption {
   id: string
@@ -44,6 +46,13 @@ export interface AppointmentFormValues {
   procedure_id: string | null
   /** Convênio atendido, ou null = particular. */
   health_plan: string | null
+  /**
+   * Faturamento TISS (módulo "billing"): null = o usuário não mexeu no
+   * atendimento (consulta antiga com health_plan em texto livre continua
+   * intacta); 'convenio' vem com `billing` preenchido.
+   */
+  billing_type?: BillingType | null
+  billing?: AppointmentBillingValues | null
 }
 
 export interface ModalWorkspaceOption {
@@ -61,6 +70,8 @@ interface AppointmentModalProps {
   showTranscriptions?: boolean
   procedures?: CatalogProcedureOption[]
   healthPlans?: string[]
+  /** Operadoras ativas (módulo "billing"). Com pelo menos uma, substituem healthPlans. */
+  billingInsurers?: InsurerOption[]
 }
 
 const EMPTY: AppointmentFormValues = {
@@ -78,6 +89,7 @@ const EMPTY: AppointmentFormValues = {
 
 const NO_PROCEDURE = '__none__'
 const PARTICULAR = '__particular__'
+const LEGACY_PLAN = '__legacy_plan__'
 
 export function AppointmentModal({
   open,
@@ -89,6 +101,7 @@ export function AppointmentModal({
   showTranscriptions,
   procedures,
   healthPlans,
+  billingInsurers,
 }: AppointmentModalProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -103,6 +116,7 @@ export function AppointmentModal({
             showTranscriptions={showTranscriptions}
             procedures={procedures ?? []}
             healthPlans={healthPlans ?? []}
+            billingInsurers={billingInsurers ?? []}
           />
         )}
       </DialogContent>
@@ -119,13 +133,46 @@ interface AppointmentFormProps {
   showTranscriptions?: boolean
   procedures: CatalogProcedureOption[]
   healthPlans: string[]
+  billingInsurers: InsurerOption[]
 }
 
-function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenChange, showTranscriptions, procedures, healthPlans }: AppointmentFormProps) {
+function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenChange, showTranscriptions, procedures, healthPlans, billingInsurers }: AppointmentFormProps) {
   const [values, setValues] = useState<AppointmentFormValues>({ ...EMPTY, ...initialValues })
   const [saving, setSaving] = useState(false)
   const isConvenio = values.health_plan != null
   const showUnitPicker = workspaces.length > 1
+  const billingMode = billingInsurers.length > 0
+
+  // Modo faturamento: o "Atendimento" lista as operadoras cadastradas.
+  const billingChoice = values.billing?.insurer_id ?? (values.health_plan ? LEGACY_PLAN : PARTICULAR)
+  const billingLabels: Record<string, string> = {
+    [PARTICULAR]: 'Particular',
+    ...(values.health_plan && !values.billing ? { [LEGACY_PLAN]: values.health_plan } : {}),
+    ...Object.fromEntries(billingInsurers.map((i) => [i.id, i.name])),
+  }
+  const onBillingChoice = (choice: string | null) => {
+    if (!choice || choice === LEGACY_PLAN) return
+    if (choice === PARTICULAR) {
+      setValues((v) => ({ ...v, billing_type: 'particular', billing: null, health_plan: null }))
+      return
+    }
+    const insurer = billingInsurers.find((i) => i.id === choice)
+    setValues((v) => ({
+      ...v,
+      billing_type: 'convenio',
+      billing: {
+        insurer_id: choice,
+        patient_insurance_id: null,
+        insurer_procedure_id: null,
+        authorization_number: v.billing?.authorization_number ?? '',
+        authorization_date: v.billing?.authorization_date ?? '',
+      },
+      // Convênio fica fora do ciclo de receita, como o health_plan de sempre.
+      health_plan: insurer?.name ?? null,
+      price: '',
+      procedure_id: null,
+    }))
+  }
 
   const onHealthPlanChange = (choice: string | null) => {
     if (!choice || choice === PARTICULAR) {
@@ -264,7 +311,44 @@ function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenCh
               </Select>
             </div>
           </div>
-          {healthPlans.length > 0 && (
+          {billingMode && (
+            <div className="space-y-2">
+              <div>
+                <Label>Atendimento</Label>
+                <Select items={billingLabels} value={billingChoice} onValueChange={onBillingChoice}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={PARTICULAR}>Particular</SelectItem>
+                    {billingChoice === LEGACY_PLAN && (
+                      <SelectItem value={LEGACY_PLAN}>{values.health_plan}</SelectItem>
+                    )}
+                    {billingInsurers.map((i) => (
+                      <SelectItem key={i.id} value={i.id}>
+                        {i.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {isConvenio && (
+                  <p className="mt-1 text-xs text-gray-400">
+                    Consulta por convênio — não entra no ciclo de receita. Ao ser realizada, gera a guia TISS.
+                  </p>
+                )}
+              </div>
+              {values.billing && (
+                <AppointmentBillingFields
+                  patientId={values.patient_id ?? null}
+                  insurers={billingInsurers}
+                  value={values.billing}
+                  // Mexer em carteirinha/TUSS/autorização também precisa ir no PATCH.
+                  onChange={(billing) => setValues((v) => ({ ...v, billing, billing_type: 'convenio' }))}
+                />
+              )}
+            </div>
+          )}
+          {!billingMode && healthPlans.length > 0 && (
             <div>
               <Label>Atendimento</Label>
               <Select value={values.health_plan ?? PARTICULAR} onValueChange={onHealthPlanChange}>

@@ -7,6 +7,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { BRAZIL_UFS } from '@/lib/billing/constants'
 import { GoogleConnectButton } from './GoogleConnectButton'
 import { MetaIntegrationsCard } from './MetaIntegrationsCard'
 import { WorkspaceCalendarMap, type WorkspaceCalendarRow } from './WorkspaceCalendarMap'
@@ -17,6 +19,8 @@ interface SettingsClientProps {
     full_name: string
     specialty: string | null
     crm: string | null
+    crm_uf: string | null
+    cbo_code: string | null
     phone: string | null
   }
   workspace: {
@@ -41,6 +45,8 @@ interface SettingsClientProps {
   /** owner ou admin — pode configurar a Clara e a conexão do Google Calendar. */
   canManageIntegrations: boolean
   showRevenueCycle: boolean
+  /** Módulo "billing" ativo — mostra UF/CBO no perfil e o atalho de Convênios. */
+  showBilling: boolean
 }
 
 export function SettingsClient({
@@ -57,26 +63,33 @@ export function SettingsClient({
   isOwner,
   canManageIntegrations,
   showRevenueCycle,
+  showBilling,
 }: SettingsClientProps) {
   const [form, setForm] = useState({
     full_name: initialProfile.full_name ?? '',
     specialty: initialProfile.specialty ?? '',
     crm: initialProfile.crm ?? '',
     phone: initialProfile.phone ?? '',
+    crm_uf: initialProfile.crm_uf ?? '',
+    cbo_code: initialProfile.cbo_code ?? '',
   })
+  const [error, setError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
   const save = async () => {
     setSaving(true)
     setSaved(false)
+    setError(null)
     try {
+      const { crm_uf, cbo_code, ...base } = form
       const res = await fetch('/api/profile', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form),
+        body: JSON.stringify(showBilling ? { ...base, crm_uf, cbo_code } : base),
       })
       if (res.ok) setSaved(true)
+      else setError((await res.json()).error ?? 'Erro ao salvar.')
     } finally {
       setSaving(false)
     }
@@ -113,6 +126,36 @@ export function SettingsClient({
             <Label htmlFor="phone">Telefone de contato</Label>
             <Input id="phone" value={form.phone} onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))} />
           </div>
+          {showBilling && (
+            <>
+              <div>
+                <Label htmlFor="crm_uf">UF do CRM</Label>
+                <Select value={form.crm_uf} onValueChange={(v) => setForm((f) => ({ ...f, crm_uf: v ?? '' }))}>
+                  <SelectTrigger id="crm_uf">
+                    <SelectValue placeholder="Selecione" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {BRAZIL_UFS.map((uf) => (
+                      <SelectItem key={uf} value={uf}>
+                        {uf}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="cbo_code">CBO (faturamento TISS)</Label>
+                <Input
+                  id="cbo_code"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="Ex.: 225125 — clínico geral"
+                  value={form.cbo_code}
+                  onChange={(e) => setForm((f) => ({ ...f, cbo_code: e.target.value.replace(/\D/g, '') }))}
+                />
+              </div>
+            </>
+          )}
         </div>
         <div className="mt-4 flex items-center gap-3">
           <Button
@@ -123,6 +166,7 @@ export function SettingsClient({
             {saving ? 'Salvando...' : 'Salvar perfil'}
           </Button>
           {saved && <span className="text-xs text-green-600">Salvo com sucesso.</span>}
+          {error && <span className="text-xs text-red-600">{error}</span>}
         </div>
       </div>
 
@@ -195,6 +239,21 @@ export function SettingsClient({
             <h2 className="text-sm font-medium text-gray-900">Receita</h2>
             <p className="mt-0.5 text-xs text-gray-400">
               Catálogo de procedimentos com preço e preferências do fechamento diário.
+            </p>
+          </div>
+          <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
+        </Link>
+      )}
+
+      {canManageIntegrations && showBilling && (
+        <Link
+          href="/configuracoes/convenios"
+          className="flex items-center justify-between rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)] transition-colors hover:border-[var(--cyan)]"
+        >
+          <div>
+            <h2 className="text-sm font-medium text-gray-900">Convênios</h2>
+            <p className="mt-0.5 text-xs text-gray-400">
+              Operadoras, tabela TUSS, horário dos lotes e dados do prestador para o faturamento TISS.
             </p>
           </div>
           <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />

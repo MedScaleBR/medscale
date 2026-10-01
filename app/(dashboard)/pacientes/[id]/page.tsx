@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { Badge } from '@/components/ui/badge'
 import { RecordingButton } from '@/components/transcriptions/RecordingButton'
+import { PatientInsurances, type PatientInsuranceRow } from '@/components/billing/PatientInsurances'
 
 const STATUS_LABEL: Record<string, string> = {
   agendado: 'Agendado',
@@ -35,6 +36,26 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
     .eq('account_id', session.accountId)
     .order('scheduled_at', { ascending: false })
 
+  // Convênios do paciente (módulo "billing") — qualquer membro vê e edita.
+  const showBilling = session.accountModules.includes('billing')
+  const [{ data: insurers }, { data: insurances }] = showBilling
+    ? await Promise.all([
+        supabase
+          .from('health_insurers')
+          .select('id, name')
+          .eq('account_id', session.accountId)
+          .eq('is_active', true)
+          .order('name'),
+        supabase
+          .from('patient_insurances')
+          .select('id, patient_id, insurer_id, card_number, plan_name, valid_until, is_primary, health_insurers(name)')
+          .eq('patient_id', id)
+          .eq('account_id', session.accountId)
+          .order('is_primary', { ascending: false })
+          .order('created_at'),
+      ])
+    : [{ data: null }, { data: null }]
+
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
@@ -60,6 +81,14 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
           <h2 className="mb-2 text-sm font-medium text-gray-900">Observações</h2>
           <p className="text-sm text-gray-600">{patient.notes}</p>
         </div>
+      )}
+
+      {showBilling && (
+        <PatientInsurances
+          patientId={patient.id}
+          insurers={insurers ?? []}
+          initialInsurances={(insurances ?? []) as unknown as PatientInsuranceRow[]}
+        />
       )}
 
       <div className="rounded-xl border border-[var(--navy-06)] bg-white p-5 shadow-[var(--shadow-sm)]">

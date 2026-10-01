@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
+import { parseProviderFields } from '@/lib/billing/validation'
 import type { Database } from '@/types/database'
 
 type WorkspaceUpdate = Database['public']['Tables']['workspaces']['Update']
@@ -46,6 +47,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   ] as const) {
     if (field in body) update[field] = body[field]
   }
+
+  // Faturamento TISS: identificação do prestador (CNES, CNPJ, razão social).
+  const provider = parseProviderFields(body)
+  if (!provider.ok) return NextResponse.json({ error: provider.error }, { status: 400 })
+  Object.assign(update, provider.value)
 
   const { data, error } = await supabase
     .from('workspaces')

@@ -53,6 +53,17 @@ export default async function AgendaPage() {
     .maybeSingle()
   const healthPlans = botConfig?.insurance_plans ?? []
 
+  // Faturamento TISS: com o módulo ativo, o seletor lista as operadoras
+  // cadastradas (qualquer membro que agenda pode escolher o convênio).
+  const { data: billingInsurers } = session.accountModules.includes('billing')
+    ? await supabase
+        .from('health_insurers')
+        .select('id, name')
+        .eq('account_id', session.accountId)
+        .eq('is_active', true)
+        .order('name')
+    : { data: null }
+
   return (
     <div className="space-y-6">
       <div>
@@ -67,6 +78,7 @@ export default async function AgendaPage() {
         showTranscriptions={session.userModules.includes('transcriptions')}
         proceduresByWorkspace={proceduresByWorkspace}
         healthPlans={healthPlans}
+        billingInsurers={billingInsurers ?? []}
       />
     </div>
   )

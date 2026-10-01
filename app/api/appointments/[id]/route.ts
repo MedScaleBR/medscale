@@ -3,6 +3,8 @@ import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { cancelEvent, updateEvent } from '@/lib/google/calendar'
 import { requireWorkspaceSession } from '@/lib/session/api'
 import { syncRevenueEntryToAppointmentStatus, applyAppointmentRevenue } from '@/lib/revenue/cycle'
+import { resolveAppointmentBilling } from '@/lib/billing/appointments'
+import { ensureGuideSafely } from '@/lib/billing/guides'
 import type { Database } from '@/types/database'
 
 type AppointmentUpdate = Database['public']['Tables']['appointments']['Update']
@@ -54,13 +56,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // Convênio da consulta (bot_config.insurance_plans). Consulta por convênio
   // fica fora do ciclo de receita: limpa preço/procedimento na mesma gravação
   // e não cria entrada. body.health_plan ausente = não mexeu; '' = particular.
-  const healthPlan: string | null =
-    body.health_plan === undefined
+  // Com o módulo "billing" e body.billing_type presente, o convênio vem das
+  // operadoras cadastradas e health_plan vira o nome da operadora.
+  const billing = await resolveAppointmentBilling(supabase, {
+    accountId: session.accountId,
+    patientId: body.patient_id ?? current.patient_id ?? null,
+    body,
+  })
+  if (!billing.ok) return NextResponse.json({ error: billing.error }, { status: 400 })
+  if (billing.fields) Object.assign(update, billing.fields)
+
+  const healthPlan: string | null = billing.fields
+    ? billing.fields.health_plan
+    : body.health_plan === undefined
       ? (current.health_plan ?? null)
       : typeof body.health_plan === 'string' && body.health_plan.trim()
         ? body.health_plan.trim()
         : null
-  if (body.health_plan !== undefined) update.health_plan = healthPlan
+  if (body.health_plan !== undefined && !billing.fields) update.health_plan = healthPlan
   if (healthPlan) {
     update.price = null
     update.procedure_id = null
@@ -147,6 +160,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       nextStatus: data.status,
       healthPlan: data.health_plan ?? null,
     })
+
+    // Faturamento TISS: consulta de convênio marcada como realizada ganha a
+    // guia (idempotente — no-op se já existir). Nunca desfaz a mudança de
+    // status: ensureGuideSafely engole e reporta qualquer falha.
+    if (data.billing_type === 'convenio' && data.status === 'realizado') await ensureGuideSafely(data.id)
   }
 
   return NextResponse.json(data)
