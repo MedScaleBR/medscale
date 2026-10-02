@@ -12,6 +12,7 @@ import {
   type CostSummary,
   type ProviderGroup,
 } from '@/lib/costs/aggregate'
+import { fetchAllPages } from '@/lib/supabase/paginate'
 
 // Visão de custos do /admin: a consulta a cost_events que antes vivia na
 // página de custos, mais o que o dashboard e a fila precisam (grupos de
@@ -21,8 +22,9 @@ import {
 export const COST_PERIODS = [7, 30, 90] as const
 export const DEFAULT_COST_DAYS = 30
 
-// Teto de segurança: o painel agrega em memória. Se algum dia bater neste
-// número, a agregação precisa virar SQL — não aumentar o limite.
+// Teto de segurança: o painel agrega em memória (lendo em blocos de 1000, ver
+// fetchAllPages). Se algum dia bater neste número, a agregação precisa virar
+// SQL — não aumentar o limite.
 export const MAX_EVENTS = 50_000
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -153,47 +155,64 @@ export async function getCostOverview(
 
   // Tudo sai de cost_events: os dois sinais de bot mal configurado são
   // deriváveis do próprio custo, sem ler conversa nem telefone de paciente.
-  const [currentRes, previousRes] = await Promise.all([
-    supabase
-      .from('cost_events')
-      .select('provider, cost_brl, account_id, workspace_id, related_id, accounts(name), workspaces(name)')
-      .gte('created_at', since)
-      .limit(MAX_EVENTS),
-    supabase
-      .from('cost_events')
-      .select('provider, cost_brl')
-      .gte('created_at', previousSince)
-      .lt('created_at', since)
-      .limit(MAX_EVENTS),
+  // Paginado (o PostgREST corta em 1000 linhas) com ordem estável.
+  const [current, previous] = await Promise.all([
+    fetchAllPages(
+      (from, to) =>
+        supabase
+          .from('cost_events')
+          .select('provider, cost_brl, account_id, workspace_id, related_id, accounts(name), workspaces(name)')
+          .gte('created_at', since)
+          .order('created_at')
+          .order('id')
+          .range(from, to),
+      { max: MAX_EVENTS },
+    ),
+    fetchAllPages<CostTotalRow>(
+      (from, to) =>
+        supabase
+          .from('cost_events')
+          .select('provider, cost_brl')
+          .gte('created_at', previousSince)
+          .lt('created_at', since)
+          .order('created_at')
+          .order('id')
+          .range(from, to),
+      { max: MAX_EVENTS },
+    ),
   ])
 
-  const events = (currentRes.data ?? []) as unknown as CostEventRow[]
-  const previousRows = (previousRes.data ?? []) as CostTotalRow[]
   // Período anterior truncado ou com erro daria uma variação falsa — melhor
   // não mostrar nenhuma.
-  const previousOk = !previousRes.error && previousRows.length < MAX_EVENTS
+  const previousOk = !previous.error && !previous.truncated
 
   return buildCostOverview({
-    events,
-    previousEvents: previousOk ? previousRows : null,
+    events: current.rows as unknown as CostEventRow[],
+    previousEvents: previousOk ? previous.rows : null,
     days,
     now,
-    truncated: events.length >= MAX_EVENTS,
-    error: currentRes.error?.message ?? null,
+    truncated: current.truncated,
+    error: current.error,
   })
 }
 
-/** Só os totais (dashboard): não traz account/unidade nem roda os alertas. */
+/** Só os totais (dashboard sem a visão completa): não traz account/unidade nem roda os alertas. */
 export async function getCostTotals(
   supabase: SupabaseClient<Database>,
   days: number = DEFAULT_COST_DAYS,
   now: Date = new Date(),
 ): Promise<CostPeriodTotals> {
   const since = new Date(now.getTime() - days * DAY_MS).toISOString()
-  const { data } = await supabase
-    .from('cost_events')
-    .select('provider, cost_brl')
-    .gte('created_at', since)
-    .limit(MAX_EVENTS)
-  return sumCostTotals((data ?? []) as CostTotalRow[])
+  const { rows } = await fetchAllPages<CostTotalRow>(
+    (from, to) =>
+      supabase
+        .from('cost_events')
+        .select('provider, cost_brl')
+        .gte('created_at', since)
+        .order('created_at')
+        .order('id')
+        .range(from, to),
+    { max: MAX_EVENTS },
+  )
+  return sumCostTotals(rows)
 }

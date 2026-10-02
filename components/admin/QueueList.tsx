@@ -45,7 +45,7 @@ function KindBadge({ item }: { item: QueueItem }) {
   )
 }
 
-export function QueueList({ items: initialItems }: { items: QueueItem[] }) {
+export function QueueList({ items: initialItems, error: loadError = null }: { items: QueueItem[]; error?: string | null }) {
   const router = useRouter()
   // Concluídas some na hora; o resto continua vindo do servidor, então o
   // router.refresh() traz itens novos sem perder o que foi escondido.
@@ -91,15 +91,14 @@ export function QueueList({ items: initialItems }: { items: QueueItem[] }) {
 
   return (
     <div className="overflow-hidden rounded-xl border border-[var(--navy-06)] bg-white shadow-[var(--shadow-sm)]">
-      <div role="tablist" aria-label="Filtrar fila" className="flex gap-1 overflow-x-auto border-b border-[var(--navy-06)] px-4 py-3">
+      <div role="group" aria-label="Filtrar fila" className="flex gap-1 overflow-x-auto border-b border-[var(--navy-06)] px-4 py-3">
         {TABS.map((t) => {
           const active = tab === t.key
           return (
             <button
               key={t.key}
               type="button"
-              role="tab"
-              aria-selected={active}
+              aria-pressed={active}
               onClick={() => setTab(t.key)}
               className={cn(
                 'h-8 rounded-[10px] px-3 text-sm whitespace-nowrap outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--cyan)]',
@@ -114,8 +113,14 @@ export function QueueList({ items: initialItems }: { items: QueueItem[] }) {
         })}
       </div>
 
+      {/* Erro em alguma consulta: a fila pode estar incompleta, nunca "vazia". */}
+      {loadError && (
+        <p role="alert" className={cn('px-5 text-xs text-red-500', visible.length === 0 ? 'py-10 text-center' : 'pt-3')}>
+          Não foi possível carregar a fila.
+        </p>
+      )}
       {visible.length === 0 ? (
-        <p className="px-5 py-10 text-center text-sm text-gray-400">Nada pendente por aqui.</p>
+        !loadError && <p className="px-5 py-10 text-center text-sm text-gray-400">Nada pendente por aqui.</p>
       ) : (
         <ul className="divide-y divide-[var(--navy-06)]">
           {visible.map((item) => (

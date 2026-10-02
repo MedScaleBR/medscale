@@ -22,7 +22,7 @@ export function CostAlertList({ alerts, taskedRefs }: { alerts: CostAlertWithRef
             <p className="min-w-0 text-sm text-amber-900">
               <Link
                 href={`/admin/accounts/${alert.accountId}`}
-                className="underline underline-offset-2 hover:text-amber-900/80"
+                className="rounded underline underline-offset-2 outline-none hover:text-amber-900/80 focus-visible:ring-2 focus-visible:ring-[var(--cyan)]"
               >
                 {alert.accountName}
               </Link>

@@ -32,10 +32,10 @@ import {
   buildColumns,
   canDropInto,
   countOverdue,
-  dropPosition,
   findColumn,
   isColumnId,
   listTasks,
+  planDrop,
   relocate,
   reorderWithin,
   type BoardColumns,
@@ -78,6 +78,7 @@ export function TaskBoard({
   accounts,
   currentUserId,
   today,
+  loadError = null,
 }: {
   initialTasks: BoardTask[]
   initialInbox: InboxCard[]
@@ -86,6 +87,8 @@ export function TaskBoard({
   currentUserId: string | null
   /** YYYY-MM-DD em São Paulo, calculado no servidor (evita divergência na hidratação). */
   today: string
+  /** Falha ao carregar tarefas/fila no servidor (mensagem pt-BR). */
+  loadError?: string | null
 }) {
   const board = useTaskBoard({ initialTasks, initialInbox, admins, accounts })
   const { tasks, inbox, error, moveTask, convertInbox } = board
@@ -207,15 +210,17 @@ export function TaskBoard({
       list = reorderWithin(list, activeId, overId)
     }
 
+    // Vizinhos sem espaço entre si (ex.: todos com position 0) renumeram a coluna.
+    const plan = planDrop(list, activeId)
     if (item.type === 'inbox') {
-      void convertInbox(item.card, to, dropPosition(list, activeId))
+      void convertInbox(item.card, to, plan.position, plan.others)
       return
     }
 
     // Mesma coluna e mesma posição: nada a salvar.
     const originalIndex = baseColumns[item.column].findIndex((i) => i.id === activeId)
     if (to === item.column && list.findIndex((i) => i.id === activeId) === originalIndex) return
-    void moveTask(item.task.id, to, dropPosition(list, activeId))
+    void moveTask(item.task.id, to, plan.position, plan.others)
   }
 
   const describePosition = (id: UniqueIdentifier) => {
@@ -378,6 +383,12 @@ export function TaskBoard({
           </SelectContent>
         </Select>
       </div>
+
+      {loadError && (
+        <p role="alert" className="text-xs text-red-500">
+          {loadError}
+        </p>
+      )}
 
       {error && (
         <p role="alert" className="text-xs text-red-500">

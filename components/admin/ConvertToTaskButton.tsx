@@ -12,6 +12,8 @@ interface ConvertToTaskButtonProps {
   sourceType: AccountTaskSourceType
   sourceRef: string
   title: string
+  /** Texto completo da origem (ex.: a mensagem do feedback), salvo na descrição da tarefa. */
+  description?: string
   accountId: string | null
   /** Já existe tarefa com este source_ref (vem de getTaskedRefs no servidor). */
   initialTasked: boolean
@@ -19,7 +21,14 @@ interface ConvertToTaskButtonProps {
 
 // Cria a tarefa vinculada à origem (alerta de custo ou feedback). O POST é
 // idempotente: 201 cria, 200 devolve a que já existia — os dois são sucesso.
-export function ConvertToTaskButton({ sourceType, sourceRef, title, accountId, initialTasked }: ConvertToTaskButtonProps) {
+export function ConvertToTaskButton({
+  sourceType,
+  sourceRef,
+  title,
+  description,
+  accountId,
+  initialTasked,
+}: ConvertToTaskButtonProps) {
   const router = useRouter()
   const [tasked, setTasked] = useState(initialTasked)
   const [loading, setLoading] = useState(false)
@@ -43,7 +52,13 @@ export function ConvertToTaskButton({ sourceType, sourceRef, title, accountId, i
       const res = await fetch('/api/admin/tasks', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title, account_id: accountId, source_type: sourceType, source_ref: sourceRef }),
+        body: JSON.stringify({
+          title,
+          description: description ?? null,
+          account_id: accountId,
+          source_type: sourceType,
+          source_ref: sourceRef,
+        }),
       })
       if (!res.ok) {
         const body = await res.json().catch(() => null)

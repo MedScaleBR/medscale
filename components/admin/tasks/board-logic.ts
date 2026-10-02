@@ -138,6 +138,51 @@ export function dropPosition(items: BoardItem[], activeId: string): number {
   return positionBetween(neighbor(index - 1), neighbor(index + 1))
 }
 
+/** Menor folga entre vizinhos para a média ainda ficar estritamente entre eles. */
+export const MIN_POSITION_GAP = 1e-6
+
+export interface PositionUpdate {
+  id: string
+  position: number
+}
+
+export interface DropPlan {
+  /** Posição do cartão solto. */
+  position: number
+  /** Outras tarefas da coluna que precisam de PATCH (só quando renumera). */
+  others: PositionUpdate[]
+}
+
+/**
+ * Como `dropPosition`, mas quando os vizinhos não deixam espaço (mesma
+ * position, ou diferença < MIN_POSITION_GAP) renumera a coluna inteira na
+ * ordem exibida, de POSITION_STEP em POSITION_STEP, e devolve os PATCHes das
+ * outras tarefas cuja posição mudou.
+ */
+export function planDrop(items: BoardItem[], activeId: string): DropPlan {
+  const index = items.findIndex((i) => i.id === activeId)
+  const neighbor = (i: number) => {
+    const item = items[i]
+    return item && item.type === 'task' ? item.task.position : null
+  }
+  if (index !== -1) {
+    const before = neighbor(index - 1)
+    const after = neighbor(index + 1)
+    const cramped = before !== null && after !== null && !(after - before >= MIN_POSITION_GAP)
+    if (cramped) {
+      let position = 0
+      const others: PositionUpdate[] = []
+      items.forEach((item, i) => {
+        const next = i * POSITION_STEP
+        if (item.id === activeId) position = next
+        else if (item.type === 'task' && item.task.position !== next) others.push({ id: item.id, position: next })
+      })
+      return { position, others }
+    }
+  }
+  return { position: dropPosition(items, activeId), others: [] }
+}
+
 // ============================================================
 // Datas e filtros
 // ============================================================
@@ -273,6 +318,18 @@ export function applyMove(
     const completedAt = status === 'done' ? (t.status === 'done' ? t.completedAt : nowIso) : null
     return { ...t, status, position, completedAt }
   })
+}
+
+/** Aplica só novas posições (renumeração da coluna). */
+export function applyPositions(tasks: BoardTask[], updates: PositionUpdate[]): BoardTask[] {
+  if (updates.length === 0) return tasks
+  const byId = new Map(updates.map((u) => [u.id, u.position]))
+  return tasks.map((t) => (byId.has(t.id) ? { ...t, position: byId.get(t.id)! } : t))
+}
+
+/** Corpo do PATCH de movimento: `status` só quando muda de fato. */
+export function movePatchBody(previousStatus: AccountTaskStatus, status: AccountTaskStatus, position: number) {
+  return previousStatus === status ? { position } : { status, position }
 }
 
 export function truncateTitle(text: string, max = MAX_TASK_TITLE): string {

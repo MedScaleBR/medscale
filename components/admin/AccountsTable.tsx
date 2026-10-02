@@ -27,6 +27,8 @@ const PLAN_FILTER_ITEMS = {
   premium: 'Premium',
 }
 
+const PLAN_RANK: Record<AccountPlan, number> = { essencial: 0, avancado: 1, premium: 2 }
+
 type StatusChip = 'all' | 'active' | 'inactive' | 'overdue'
 
 type SortField = 'name' | 'plan' | 'is_active' | 'modules' | 'members' | 'cost' | 'tasks' | 'created_at'
@@ -36,7 +38,7 @@ function compareRows(a: AccountListRow, b: AccountListRow, field: SortField): nu
     case 'name':
       return a.name.localeCompare(b.name, 'pt-BR')
     case 'plan':
-      return a.plan.localeCompare(b.plan)
+      return (PLAN_RANK[a.plan] ?? 0) - (PLAN_RANK[b.plan] ?? 0)
     case 'is_active':
       return Number(a.is_active) - Number(b.is_active)
     case 'modules':

@@ -1,7 +1,10 @@
 import { describe, it, expect } from 'vitest'
+import { createSupabaseMock, type RecordedCall } from '../helpers/supabase-mock'
 import {
   buildCostOverview,
   costAlertRef,
+  getCostOverview,
+  MAX_EVENTS,
   normalizeCostDays,
   percentChange,
   saoPauloMonth,
@@ -125,5 +128,52 @@ describe('normalizeCostDays', () => {
     expect(normalizeCostDays(90)).toBe(90)
     expect(normalizeCostDays('15')).toBe(30)
     expect(normalizeCostDays(undefined)).toBe(30)
+  })
+})
+
+// Resposta paginada como a do PostgREST: devolve o intervalo pedido por .range().
+function paged<T>(rows: T[]) {
+  return (call: RecordedCall) => {
+    const range = call.filters.find((f) => f[0] === 'range') as [string, number, number] | undefined
+    const [from, to] = range ? [range[1], range[2]] : [0, rows.length - 1]
+    return { data: rows.slice(from, to + 1), error: null }
+  }
+}
+
+describe('getCostOverview — paginação', () => {
+  it('soma todos os eventos além de 1000 linhas, sem truncar', async () => {
+    const events = Array.from({ length: 2500 }, (_, i) => event({ related_id: `conv${i}` }))
+    const s = createSupabaseMock({
+      cost_events: { select: (call) => (call.filters.some((f) => f[0] === 'lt') ? { data: [] } : paged(events)(call)) },
+    })
+    const overview = await getCostOverview(s.client as never, 30, NOW)
+    expect(overview.summary.total).toBe(2500)
+    expect(overview.truncated).toBe(false)
+    expect(overview.error).toBeNull()
+    const current = s.callsTo('cost_events', 'select').filter((c) => !c.filters.some((f) => f[0] === 'lt'))
+    expect(current.map((c) => c.filters.find((f) => f[0] === 'range'))).toEqual([
+      ['range', 0, 999],
+      ['range', 1000, 1999],
+      ['range', 2000, 2999],
+    ])
+    // Ordem estável entre blocos.
+    expect(current[0].filters).toContainEqual(['order', 'created_at'])
+    expect(current[0].filters).toContainEqual(['order', 'id'])
+  })
+
+  it('bater em MAX_EVENTS marca truncated e esconde a variação', async () => {
+    const events = Array.from({ length: MAX_EVENTS + 10 }, () => event())
+    const s = createSupabaseMock({ cost_events: { select: paged(events) } })
+    const overview = await getCostOverview(s.client as never, 30, NOW)
+    expect(overview.summary.total).toBe(MAX_EVENTS)
+    expect(overview.truncated).toBe(true)
+    expect(overview.previous).toBeNull()
+  })
+
+  it('erro na consulta vira error', async () => {
+    const s = createSupabaseMock({ cost_events: { select: { data: null, error: { message: 'boom' } } } })
+    const overview = await getCostOverview(s.client as never, 30, NOW)
+    expect(overview.error).toBe('boom')
+    expect(overview.previous).toBeNull()
   })
 })

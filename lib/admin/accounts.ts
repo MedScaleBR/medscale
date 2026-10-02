@@ -2,11 +2,12 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AccountPlan, AccountTaskStatus, Database, ModuleSlug } from '@/types/database'
 import { MAX_EVENTS } from '@/lib/admin/cost-alerts'
 import { OPEN_TASK_STATUSES, isOverdue, saoPauloDate } from '@/lib/admin/queue'
+import { fetchAllPages } from '@/lib/supabase/paginate'
 
 // Lista de accounts do /admin: accounts + memberships ativas + custo dos
-// últimos 30 dias + tarefas abertas, em 4 consultas paralelas (sem N+1). A
-// agregação por account_id é pura em buildAccountRows, para ser testada sem
-// Supabase.
+// últimos 30 dias + tarefas abertas, em 4 consultas paralelas (sem N+1, cada
+// uma paginada). A agregação por account_id é pura em buildAccountRows, para
+// ser testada sem Supabase.
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -123,35 +124,51 @@ export async function getAccountsOverview(
 ): Promise<AccountsOverview> {
   const since = new Date(now.getTime() - 30 * DAY_MS).toISOString()
 
+  // Tudo paginado em blocos de 1000 (teto do PostgREST), com ordem estável:
+  // uma lista ou soma cortada em 1000 linhas sairia errada sem aviso.
   const [accountsRes, membershipsRes, costsRes, tasksRes] = await Promise.all([
-    supabase
-      .from('accounts')
-      .select('id, name, slug, plan, is_active, modules, created_at')
-      .order('created_at', { ascending: false }),
-    supabase.from('memberships').select('account_id').eq('status', 'active'),
-    supabase.from('cost_events').select('account_id, cost_brl').gte('created_at', since).limit(MAX_EVENTS),
-    supabase
-      .from('account_tasks')
-      .select('account_id, due_date, status')
-      .in('status', OPEN_TASK_STATUSES)
-      .not('account_id', 'is', null),
+    fetchAllPages((from, to) =>
+      supabase
+        .from('accounts')
+        .select('id, name, slug, plan, is_active, modules, created_at')
+        .order('created_at', { ascending: false })
+        .order('id')
+        .range(from, to),
+    ),
+    fetchAllPages((from, to) =>
+      supabase.from('memberships').select('account_id').eq('status', 'active').order('id').range(from, to),
+    ),
+    fetchAllPages(
+      (from, to) =>
+        supabase
+          .from('cost_events')
+          .select('account_id, cost_brl')
+          .gte('created_at', since)
+          .order('created_at')
+          .order('id')
+          .range(from, to),
+      { max: MAX_EVENTS },
+    ),
+    fetchAllPages((from, to) =>
+      supabase
+        .from('account_tasks')
+        .select('account_id, due_date, status')
+        .in('status', OPEN_TASK_STATUSES)
+        .not('account_id', 'is', null)
+        .order('id')
+        .range(from, to),
+    ),
   ])
 
-  const costs = costsRes.data ?? []
   const rows = buildAccountRows({
-    accounts: (accountsRes.data ?? []) as AccountBaseRow[],
-    memberships: membershipsRes.data ?? [],
-    costs,
-    tasks: tasksRes.data ?? [],
+    accounts: accountsRes.rows as AccountBaseRow[],
+    memberships: membershipsRes.rows,
+    costs: costsRes.rows,
+    tasks: tasksRes.rows,
     today: saoPauloDate(now),
   })
 
-  const error =
-    accountsRes.error?.message ??
-    membershipsRes.error?.message ??
-    costsRes.error?.message ??
-    tasksRes.error?.message ??
-    null
+  const error = accountsRes.error ?? membershipsRes.error ?? costsRes.error ?? tasksRes.error ?? null
 
-  return { rows, costTruncated: costs.length >= MAX_EVENTS, error }
+  return { rows, costTruncated: costsRes.truncated, error }
 }

@@ -23,7 +23,7 @@ export default async function AdminAccountsPage() {
           href="/admin/accounts/new"
           className={cn(
             buttonVariants({ size: 'lg' }),
-            'gap-2 rounded-[10px] bg-[var(--cyan)] px-3.5 text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]'
+            'gap-2 rounded-[10px] bg-[var(--cyan)] px-3.5 text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)] focus-visible:ring-2 focus-visible:ring-[var(--cyan)]'
           )}
         >
           <Plus className="h-4 w-4" />

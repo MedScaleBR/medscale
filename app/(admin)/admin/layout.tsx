@@ -26,20 +26,23 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   return (
     <div className="min-h-screen bg-[var(--navy-06)]">
-      <header className="flex h-16 items-center justify-between gap-6 bg-[var(--navy-dark)] px-6">
-        <div className="flex min-w-0 items-center gap-6">
+      {/* Em 1024px (lg, rótulos da nav visíveis) o nome "MedScale Admin" sai e os
+          espaços apertam para caber com os dois contadores; ele volta em xl. */}
+      <header className="flex h-16 items-center justify-between gap-4 bg-[var(--navy-dark)] px-6 xl:gap-6">
+        <div className="flex min-w-0 items-center gap-4 xl:gap-6">
           <Link
             href="/admin"
+            aria-label="MedScale Admin"
             className="flex shrink-0 items-center gap-2.5 rounded-[10px] whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-[var(--cyan)]"
           >
             <div className="flex h-8 items-center justify-center rounded-lg bg-white px-3">
               <Image src="/logo-icon.png" alt="MedScale" width={138} height={96} className="h-[22px] w-auto" priority />
             </div>
-            <span className="text-sm font-medium text-white">MedScale Admin</span>
+            <span className="hidden text-sm font-medium text-white xl:inline">MedScale Admin</span>
           </Link>
           <AdminNav counts={counts} />
         </div>
-        <div className="flex shrink-0 items-center gap-4 whitespace-nowrap">
+        <div className="flex shrink-0 items-center gap-3 whitespace-nowrap xl:gap-4">
           <Link
             href="/dashboard"
             className="rounded-[10px] text-xs text-[var(--w70)] outline-none hover:text-white focus-visible:ring-2 focus-visible:ring-[var(--cyan)]"
@@ -49,8 +52,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           <span aria-hidden="true" className="h-6 w-px bg-[var(--w15)]" />
           <div className="flex items-center gap-1">
             <span
+              role="img"
               title={displayName}
-              aria-label={displayName ? `Conectado como ${displayName}` : undefined}
+              aria-label={displayName ? `Conectado como ${displayName}` : 'Conectado'}
               className="flex h-7 w-7 items-center justify-center rounded-full bg-[var(--w15)] text-[11px] font-medium text-white"
             >
               {initials}

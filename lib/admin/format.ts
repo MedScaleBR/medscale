@@ -19,3 +19,25 @@ export function formatDateBR(value: string | Date | null | undefined): string {
   }
   return new Date(value).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
 }
+
+// dd/MM/yyyy HH:mm no fuso de São Paulo — determinístico entre servidor e
+// navegador (evita mismatch de hidratação).
+export function formatDateTimeBR(value: string | Date | null | undefined): string {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('pt-BR', {
+      timeZone: 'America/Sao_Paulo',
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    })
+      .formatToParts(d)
+      .map((p) => [p.type, p.value])
+  )
+  return `${parts.day}/${parts.month}/${parts.year} ${parts.hour}:${parts.minute}`
+}

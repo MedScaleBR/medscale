@@ -1,6 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AccountTaskSourceType, AccountTaskStatus, Database } from '@/types/database'
 import { getCostOverview, type CostAlertWithRef } from '@/lib/admin/cost-alerts'
+import { fetchAllPages } from '@/lib/supabase/paginate'
 
 // Fila de trabalho do /admin: uma lista única com o que pede ação — tarefa
 // vencida, alerta de custo e feedback não lido que ainda não viraram tarefa,
@@ -91,7 +92,11 @@ export interface AdminQueue {
   counts: { all: number; task: number; alert: number; feedback: number; overdue: number }
   /** source_ref que já têm tarefa (qualquer status) — estado inicial do "Virar tarefa". */
   taskedRefs: string[]
+  /** Alguma consulta falhou: a fila pode estar incompleta. Mensagem pronta para exibir. */
+  error: string | null
 }
+
+export const QUEUE_ERROR = 'Não foi possível carregar a fila.'
 
 // ============================================================
 // Datas no fuso de São Paulo
@@ -233,6 +238,7 @@ export function buildAdminQueue(input: {
       overdue: overdueTasks.length,
     },
     taskedRefs: [...tasked],
+    error: null,
   }
 }
 
@@ -240,36 +246,54 @@ export function buildAdminQueue(input: {
 // Consultas
 // ============================================================
 
-/** source_ref de toda tarefa vinculada a alerta/feedback, em qualquer status. */
+/**
+ * source_ref de toda tarefa vinculada a alerta/feedback, em qualquer status.
+ * Paginado: inclui concluídas, então cresce sem limite.
+ */
+async function fetchTaskedRefs(supabase: SupabaseClient<Database>): Promise<{ refs: Set<string>; error: string | null }> {
+  const { rows, error } = await fetchAllPages((from, to) =>
+    supabase
+      .from('account_tasks')
+      .select('source_ref')
+      .not('source_type', 'is', null)
+      .not('source_ref', 'is', null)
+      .order('id')
+      .range(from, to),
+  )
+  return { refs: new Set(rows.map((r) => r.source_ref).filter((r): r is string => !!r)), error }
+}
+
 export async function getTaskedRefs(supabase: SupabaseClient<Database>): Promise<Set<string>> {
-  const { data } = await supabase
-    .from('account_tasks')
-    .select('source_ref')
-    .not('source_type', 'is', null)
-    .not('source_ref', 'is', null)
-  return new Set((data ?? []).map((r) => r.source_ref).filter((r): r is string => !!r))
+  return (await fetchTaskedRefs(supabase)).refs
 }
 
 export async function getAdminQueue(
   supabase: SupabaseClient<Database>,
-  options: { now?: Date; alertDays?: number; costAlerts?: CostAlertWithRef[] } = {},
+  options: {
+    now?: Date
+    alertDays?: number
+    /** Alertas já calculados por quem tem a visão de custos (evita reler cost_events). */
+    costAlerts?: CostAlertWithRef[]
+    /** Erro da visão de custos que gerou costAlerts, para a fila avisar. */
+    costError?: string | null
+  } = {},
 ): Promise<AdminQueue> {
   const now = options.now ?? new Date()
   const alertDays = options.alertDays ?? 30
 
-  const [tasksRes, taskedRefs, feedbackRes, alerts] = await Promise.all([
+  const [tasksRes, tasked, feedbackRes, costs] = await Promise.all([
     supabase
       .from('account_tasks')
       .select('id, title, status, due_date, position, account_id, assigned_to, source_type, source_ref, created_at, accounts(name)')
       .in('status', OPEN_TASK_STATUSES),
-    getTaskedRefs(supabase),
+    fetchTaskedRefs(supabase),
     supabase
       .from('feedback')
       .select('id, message, created_at, account_id, user_id, accounts(name)')
       .eq('status', 'new'),
-    // Quem já tem a visão de custos (página de custos) passa os alertas e
-    // evita uma segunda varredura de cost_events.
-    options.costAlerts ?? getCostOverview(supabase, alertDays, now).then((o) => o.alerts),
+    options.costAlerts
+      ? { alerts: options.costAlerts, error: options.costError ?? null }
+      : getCostOverview(supabase, alertDays, now),
   ])
 
   const tasks = (tasksRes.data ?? []) as unknown as QueueTaskRow[]
@@ -282,17 +306,22 @@ export async function getAdminQueue(
       [...tasks.map((t) => t.assigned_to), ...feedback.map((f) => f.user_id)].filter((id): id is string => !!id),
     ),
   ]
-  const { data: profiles } = profileIds.length
+  const profilesRes = profileIds.length
     ? await supabase.from('profiles').select('id, full_name, email').in('id', profileIds)
-    : { data: [] }
+    : { data: [], error: null }
 
-  return buildAdminQueue({
-    tasks,
-    taskedRefs,
-    alerts,
-    alertDays,
-    feedback,
-    profiles: (profiles ?? []) as QueueProfile[],
-    now,
-  })
+  const failed = !!(tasksRes.error || tasked.error || feedbackRes.error || costs.error || profilesRes.error)
+
+  return {
+    ...buildAdminQueue({
+      tasks,
+      taskedRefs: tasked.refs,
+      alerts: costs.alerts,
+      alertDays,
+      feedback,
+      profiles: (profilesRes.data ?? []) as QueueProfile[],
+      now,
+    }),
+    error: failed ? QUEUE_ERROR : null,
+  }
 }

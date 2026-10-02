@@ -97,7 +97,10 @@ export function TaskListView({
                       )}
                       <p className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-400">
                         {task.accountId ? (
-                          <Link href={`/admin/accounts/${task.accountId}`} className="hover:text-[var(--cyan-dark)]">
+                          <Link
+                            href={`/admin/accounts/${task.accountId}`}
+                            className="rounded outline-none hover:text-[var(--cyan-dark)] focus-visible:ring-2 focus-visible:ring-[var(--cyan)]"
+                          >
                             {task.accountName ?? 'Cliente'}
                           </Link>
                         ) : (

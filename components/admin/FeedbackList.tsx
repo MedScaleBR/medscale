@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { ConvertToTaskButton } from '@/components/admin/ConvertToTaskButton'
+import { truncateTitle } from '@/components/admin/tasks/board-logic'
 import { formatDateBR, initialsFrom } from '@/lib/admin/format'
 import { friendlyErrorMessage } from '@/lib/friendly-errors'
 import type { FeedbackStatus } from '@/types/database'
@@ -29,14 +30,6 @@ const FILTERS: { value: Filter; label: string }[] = [
   { value: 'reviewed', label: 'Lidos' },
   { value: 'all', label: 'Todos' },
 ]
-
-const TASK_TITLE_MAX = 80
-
-// Título da tarefa: a mensagem numa linha só, cortada no limite.
-function taskTitleFrom(message: string): string {
-  const oneLine = message.replace(/\s+/g, ' ').trim()
-  return oneLine.length > TASK_TITLE_MAX ? `${oneLine.slice(0, TASK_TITLE_MAX - 1).trimEnd()}…` : oneLine
-}
 
 export function FeedbackList({
   feedback: initialFeedback,
@@ -153,7 +146,7 @@ export function FeedbackList({
                       {item.accountId ? (
                         <Link
                           href={`/admin/accounts/${item.accountId}`}
-                          className="text-[var(--cyan-dark)] hover:underline"
+                          className="rounded text-[var(--cyan-dark)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--cyan)]"
                         >
                           {item.accountName ?? 'Cliente'}
                         </Link>
@@ -171,7 +164,9 @@ export function FeedbackList({
                       <ConvertToTaskButton
                         sourceType="feedback"
                         sourceRef={item.id}
-                        title={taskTitleFrom(item.message)}
+                        // Mesmo corte do Kanban (140, com "…"); a mensagem inteira vai na descrição.
+                        title={truncateTitle(item.message)}
+                        description={item.message}
                         accountId={item.accountId}
                         initialTasked={item.tasked}
                       />

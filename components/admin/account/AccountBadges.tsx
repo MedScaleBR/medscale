@@ -9,7 +9,7 @@ export const PLAN_LABEL: Record<AccountPlan, string> = {
 
 // Essencial neutro, Avançado cyan, Premium navy.
 const PLAN_STYLE: Record<AccountPlan, string> = {
-  essencial: 'bg-gray-100 text-gray-600',
+  essencial: 'bg-[var(--navy-06)] text-gray-600',
   avancado: 'bg-[var(--cyan-10)] text-[var(--cyan-dark)]',
   premium: 'bg-[var(--navy-10)] text-[var(--navy)]',
 }

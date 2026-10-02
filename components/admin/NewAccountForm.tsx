@@ -199,7 +199,7 @@ export function NewAccountForm() {
               className="mt-1.5 h-9"
             />
           </div>
-          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_180px]">
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_120px]">
             {mode !== 'none' && (
               <div>
                 <Label htmlFor="owner_email">
@@ -215,7 +215,7 @@ export function NewAccountForm() {
                 />
               </div>
             )}
-            <div className={mode === 'none' ? 'sm:col-span-2 sm:max-w-[180px]' : undefined}>
+            <div className={mode === 'none' ? 'sm:col-span-2 sm:max-w-[120px]' : undefined}>
               <Label>Plano</Label>
               <Select value={form.plan} onValueChange={(v) => v && setForm((f) => ({ ...f, plan: v as AccountPlan }))}>
                 <SelectTrigger className="mt-1.5 h-9 w-full" aria-label="Plano">
@@ -261,7 +261,7 @@ export function NewAccountForm() {
           </Button>
           <Link
             href="/admin/accounts"
-            className={cn(buttonVariants({ variant: 'ghost' }), 'h-9 rounded-[10px] px-3.5 font-normal text-gray-700')}
+            className={cn(buttonVariants({ variant: 'ghost' }), 'h-9 rounded-[10px] px-3.5 font-normal text-gray-700 focus-visible:ring-2 focus-visible:ring-[var(--cyan)]')}
           >
             Cancelar
           </Link>

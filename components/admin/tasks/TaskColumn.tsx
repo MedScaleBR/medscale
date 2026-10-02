@@ -8,10 +8,11 @@ import { COLUMN_LABELS, type BoardItem, type ColumnId } from './board-logic'
 import { SortableTaskCard } from './TaskCard'
 
 const DOT_CLASS: Record<ColumnId, string> = {
+  // Exceção registrada: âmbar forte no ponto da Entrada (triagem).
   inbox: 'bg-amber-500',
   todo: 'bg-gray-400',
   doing: 'bg-[var(--cyan)]',
-  done: 'bg-green-600',
+  done: 'bg-green-700',
 }
 
 const NOTE: Partial<Record<ColumnId, string>> = {

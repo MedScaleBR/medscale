@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select'
 import type { AccountNoteType } from '@/types/database'
 import { friendlyErrorMessage } from '@/lib/friendly-errors'
+import { formatDateTimeBR } from '@/lib/admin/format'
 
 export interface NoteRow {
   id: string
@@ -138,7 +139,7 @@ export function AccountActivityTab({
                       {TYPE_LABEL[n.type]} · {n.authorName}
                     </p>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs text-gray-400">{new Date(n.createdAt).toLocaleString('pt-BR')}</span>
+                      <span className="text-xs text-gray-400">{formatDateTimeBR(n.createdAt)}</span>
                       <button
                         type="button"
                         onClick={() => removeNote(n.id)}

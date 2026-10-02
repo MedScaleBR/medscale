@@ -1,7 +1,8 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ArrowLeft, MapPin } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
+import { fetchAllPages } from '@/lib/supabase/paginate'
 import { getMedscaleAdmins } from '@/lib/admin/admins'
 import { MAX_EVENTS } from '@/lib/admin/cost-alerts'
 import { sumCost } from '@/lib/admin/accounts'
@@ -44,7 +45,7 @@ export default async function AdminAccountDetailPage({ params }: { params: Promi
     { data: tasksRaw, error: tasksError },
     admins,
     { count: workspacesCount, error: workspacesError },
-    { data: costRows, error: costError },
+    { rows: costList, truncated: costTruncated, error: costError },
   ] = await Promise.all([
     supabase.auth.getUser(),
     supabase.from('accounts').select('*').eq('id', id).single(),
@@ -71,12 +72,18 @@ export default async function AdminAccountDetailPage({ params }: { params: Promi
       .order('created_at', { ascending: false }),
     getMedscaleAdmins(),
     supabase.from('workspaces').select('id', { count: 'exact', head: true }).eq('account_id', id),
-    supabase
-      .from('cost_events')
-      .select('cost_brl')
-      .eq('account_id', id)
-      .gte('created_at', since30d)
-      .limit(MAX_EVENTS),
+    fetchAllPages(
+      (from, to) =>
+        supabase
+          .from('cost_events')
+          .select('cost_brl')
+          .eq('account_id', id)
+          .gte('created_at', since30d)
+          .order('created_at')
+          .order('id')
+          .range(from, to),
+      { max: MAX_EVENTS },
+    ),
   ])
 
   if (membershipsError) console.error('Erro ao buscar memberships:', membershipsError.message)
@@ -169,7 +176,6 @@ export default async function AdminAccountDetailPage({ params }: { params: Promi
     : ownerInvite
       ? `${ownerInvite.email} (convite pendente)`
       : null
-  const costList = costRows ?? []
   const lastNote = notes[0]
 
   return (
@@ -203,9 +209,8 @@ export default async function AdminAccountDetailPage({ params }: { params: Promi
           </div>
           <Link
             href={`/admin/accounts/${id}/workspaces`}
-            className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'gap-1.5 rounded-[10px] bg-white px-3.5')}
+            className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'rounded-[10px] bg-white px-3.5 focus-visible:ring-2 focus-visible:ring-[var(--cyan)]')}
           >
-            <MapPin className="h-4 w-4" />
             Gerenciar unidades
           </Link>
         </div>
@@ -227,14 +232,14 @@ export default async function AdminAccountDetailPage({ params }: { params: Promi
             </>
           }
           activity={<AccountActivityTab accountId={id} initialNotes={notes} currentAdminName={currentAdminName} />}
-          tasks={<AccountTasksTab accountId={id} initialTasks={tasks} admins={adminOptions} />}
+          tasks={<AccountTasksTab accountId={id} initialTasks={tasks} admins={adminOptions} today={today} />}
         />
 
         <AccountSidebar
           ownerName={ownerName}
           workspacesCount={workspacesError ? null : (workspacesCount ?? 0)}
           cost30d={costError ? null : sumCost(costList)}
-          costTruncated={costList.length >= MAX_EVENTS}
+          costTruncated={costTruncated}
           openTasks={sidebarTasks}
           lastActivity={
             lastNote

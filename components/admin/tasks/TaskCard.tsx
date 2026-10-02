@@ -80,6 +80,12 @@ export function TaskCardBody({ item, today }: { item: BoardItem; today: string }
   const done = item.type === 'task' && item.task.status === 'done'
   const kind = item.type === 'task' ? (item.task.sourceType ?? 'task') : item.card.sourceType
   const source = item.type === 'task' ? item.task.sourceType : item.card.sourceType
+  // Alerta de custo na Entrada: o canto mostra o valor, então a idade vai no rodapé ("Custos · hoje").
+  const footer = !source
+    ? ''
+    : item.type === 'inbox' && source === 'cost_alert'
+      ? `${SOURCE_LABEL[source]} · ${ageLabel(item.card.age)}`
+      : SOURCE_LABEL[source]
   const accountName = item.type === 'task' ? (item.task.accountName ?? 'Interna') : (item.card.accountName ?? 'Sem cliente')
   const assignee =
     item.type === 'task' && item.task.assignedTo
@@ -104,7 +110,7 @@ export function TaskCardBody({ item, today }: { item: BoardItem; today: string }
         <p className="mt-1 truncate text-xs text-gray-400">{accountName}</p>
       </div>
       <div className="flex min-h-6 items-center justify-between gap-2">
-        <span className="text-xs whitespace-nowrap text-gray-400">{source ? SOURCE_LABEL[source] : ''}</span>
+        <span className="text-xs whitespace-nowrap text-gray-400">{footer}</span>
         {assignee && (
           <span
             title={assignee.name ?? assignee.email ?? undefined}

@@ -1,9 +1,21 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { CostAlertList } from '@/components/admin/CostAlertList'
-import { COST_PERIODS, getCostOverview, normalizeCostDays, percentChange } from '@/lib/admin/cost-alerts'
+import {
+  COST_PERIODS,
+  getCostOverview,
+  normalizeCostDays,
+  percentChange,
+  type CostOverviewAccount,
+} from '@/lib/admin/cost-alerts'
 import { getTaskedRefs } from '@/lib/admin/queue'
-import { PROVIDER_GROUP_LABELS, PROVIDER_GROUP_ORDER, type ProviderGroup } from '@/lib/costs/aggregate'
+import {
+  PROVIDER_GROUP_LABELS,
+  PROVIDER_GROUP_ORDER,
+  PROVIDER_LABELS,
+  PROVIDER_ORDER,
+  type ProviderGroup,
+} from '@/lib/costs/aggregate'
 import { formatBRL } from '@/lib/finance/summary'
 
 // Painel interno: quanto a MedScale gasta de custo variável (Claude, Whisper e
@@ -27,6 +39,13 @@ const GROUP_CARD_LABEL: Record<ProviderGroup, string> = {
 
 function formatShare(fraction: number): string {
   return `${Math.round(fraction * 100)}%`
+}
+
+// Tooltip da barra: a quebra fina por agente/provedor que a barra de 3 grupos esconde.
+function providerBreakdown(account: CostOverviewAccount): string[] {
+  return PROVIDER_ORDER.filter((p) => account.byProvider[p] > 0).map(
+    (p) => `${PROVIDER_LABELS[p]}: ${formatBRL(account.byProvider[p])}`,
+  )
 }
 
 function formatChange(change: number): string {
@@ -120,38 +139,51 @@ export default async function AdminCostsPage({ searchParams }: { searchParams: P
           <div className="overflow-x-auto">
             <ul className="min-w-[640px] divide-y divide-[var(--navy-06)]">
               {overview.accounts.map((account) => (
-                <li key={account.accountId} className="flex items-center gap-4 px-5 py-2.5">
-                  <Link
-                    href={`/admin/accounts/${account.accountId}`}
-                    className="w-48 shrink-0 truncate text-sm text-gray-900 hover:text-[var(--cyan-dark)]"
-                    title={account.name}
-                  >
-                    {account.name}
-                  </Link>
-                  <div
-                    className="flex h-3 min-w-0 flex-1"
-                    role="img"
-                    aria-label={PROVIDER_GROUP_ORDER.map(
-                      (g) => `${PROVIDER_GROUP_LABELS[g]}: ${formatBRL(account.byGroup[g])}`,
-                    ).join(', ')}
-                  >
-                    {maxAccountTotal > 0 &&
-                      PROVIDER_GROUP_ORDER.map((group) =>
-                        account.byGroup[group] > 0 ? (
-                          <span
-                            key={group}
-                            className={`h-full first:rounded-l-sm last:rounded-r-sm ${GROUP_BAR[group]}`}
-                            style={{ width: `${(account.byGroup[group] / maxAccountTotal) * 100}%` }}
-                          />
-                        ) : null,
-                      )}
+                <li key={account.accountId} className="px-5 py-2.5">
+                  <div className="flex items-center gap-4">
+                    <Link
+                      href={`/admin/accounts/${account.accountId}`}
+                      className="w-48 shrink-0 truncate rounded text-sm text-gray-900 outline-none hover:text-[var(--cyan-dark)] focus-visible:ring-2 focus-visible:ring-[var(--cyan)]"
+                      title={account.name}
+                    >
+                      {account.name}
+                    </Link>
+                    <div
+                      className="flex h-3 min-w-0 flex-1"
+                      role="img"
+                      title={providerBreakdown(account).join('\n')}
+                      aria-label={providerBreakdown(account).join(', ')}
+                    >
+                      {maxAccountTotal > 0 &&
+                        PROVIDER_GROUP_ORDER.map((group) =>
+                          account.byGroup[group] > 0 ? (
+                            <span
+                              key={group}
+                              className={`h-full first:rounded-l-sm last:rounded-r-sm ${GROUP_BAR[group]}`}
+                              style={{ width: `${(account.byGroup[group] / maxAccountTotal) * 100}%` }}
+                            />
+                          ) : null,
+                        )}
+                    </div>
+                    <span className="w-28 shrink-0 text-right text-sm whitespace-nowrap text-gray-900">
+                      {formatBRL(account.total)}
+                    </span>
+                    <span className="w-12 shrink-0 text-right text-xs whitespace-nowrap text-gray-400">
+                      {formatShare(account.share)}
+                    </span>
                   </div>
-                  <span className="w-28 shrink-0 text-right text-sm whitespace-nowrap text-gray-900">
-                    {formatBRL(account.total)}
-                  </span>
-                  <span className="w-12 shrink-0 text-right text-xs whitespace-nowrap text-gray-400">
-                    {formatShare(account.share)}
-                  </span>
+                  {account.units.length > 1 && (
+                    <ul
+                      aria-label={`Unidades de ${account.name}`}
+                      className="mt-1 flex flex-wrap gap-x-4 pl-52 text-xs text-gray-400"
+                    >
+                      {account.units.map((unit) => (
+                        <li key={unit.workspaceId ?? 'none'} className="whitespace-nowrap">
+                          {unit.name} · {formatBRL(unit.total)}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </li>
               ))}
             </ul>

@@ -6,7 +6,9 @@ import type { AccountTaskStatus } from '@/types/database'
 import { friendlyErrorMessage } from '@/lib/friendly-errors'
 import {
   applyMove,
+  applyPositions,
   endPosition,
+  movePatchBody,
   inboxTaskPayload,
   optimisticTaskFromInbox,
   replaceTask,
@@ -14,6 +16,7 @@ import {
   type BoardTask,
   type InboxCard,
   type PersonOption,
+  type PositionUpdate,
   type TaskRowLike,
 } from './board-logic'
 
@@ -38,6 +41,9 @@ const DELETE_ERROR = 'Não foi possível excluir a tarefa. Tente novamente.'
 async function readJson(res: Response): Promise<Record<string, unknown> | null> {
   return res.json().catch(() => null)
 }
+
+/** Erro da API já traduzido (pt-BR); falha de rede cai na mensagem genérica. */
+class PatchError extends Error {}
 
 function errorFrom(data: Record<string, unknown> | null, fallback: string): string {
   return friendlyErrorMessage(typeof data?.error === 'string' ? data.error : null, fallback)
@@ -75,57 +81,91 @@ export function useTaskBoard({
     [accounts, admins],
   )
 
-  /** Move/reordena uma tarefa existente: otimista, PATCH, rollback em erro. */
-  const moveTask = useCallback(
-    async (taskId: string, status: AccountTaskStatus, position: number) => {
-      const previous = tasksRef.current.find((t) => t.id === taskId)
-      if (!previous || previous.saving) return
-      if (previous.status === status && previous.position === position) return
-      setError(null)
-      setTasks((ts) => applyMove(ts, taskId, status, position, new Date().toISOString()))
+  /** PATCH de uma tarefa; devolve a linha salva (ou null) ou lança a mensagem de erro. */
+  const patchTask = useCallback(async (taskId: string, body: Record<string, unknown>) => {
+    const res = await fetch(`/api/admin/tasks/${taskId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    const data = await readJson(res)
+    if (!res.ok) throw new PatchError(errorFrom(data, MOVE_ERROR))
+    return data as unknown as TaskRowLike | null
+  }, [])
 
-      const restore = () => setTasks((ts) => ts.map((t) => (t.id === taskId ? previous : t)))
+  /** Troca as tarefas pelas linhas devolvidas pelo servidor. */
+  const applySaved = useCallback(
+    (rows: (TaskRowLike | null)[], snapshot: BoardTask[]) => {
+      const saved = rows
+        .filter((r): r is TaskRowLike => !!r && typeof r.id === 'string')
+        .map((r) => toTask(r, snapshot.find((t) => t.id === r.id)?.accountName ?? null))
+      if (saved.length === 0) return
+      const byId = new Map(saved.map((t) => [t.id, t]))
+      setTasks((ts) => ts.map((t) => byId.get(t.id) ?? t))
+    },
+    [toTask],
+  )
+
+  /**
+   * Move/reordena uma tarefa existente: otimista, PATCH, rollback em erro.
+   * `others` = renumeração da coluna (vizinhos sem espaço): vai junto, e o
+   * conjunto inteiro volta se qualquer PATCH falhar.
+   */
+  const moveTask = useCallback(
+    async (taskId: string, status: AccountTaskStatus, position: number, others: PositionUpdate[] = []) => {
+      const snapshot = tasksRef.current
+      const previous = snapshot.find((t) => t.id === taskId)
+      if (!previous || previous.saving) return
+      if (previous.status === status && previous.position === position && others.length === 0) return
+      setError(null)
+      setTasks((ts) => applyPositions(applyMove(ts, taskId, status, position, new Date().toISOString()), others))
+
+      const touched = new Set([taskId, ...others.map((o) => o.id)])
+      const originals = new Map(snapshot.filter((t) => touched.has(t.id)).map((t) => [t.id, t]))
+      const restore = () => setTasks((ts) => ts.map((t) => originals.get(t.id) ?? t))
       try {
-        const res = await fetch(`/api/admin/tasks/${taskId}`, {
-          method: 'PATCH',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ status, position }),
-        })
-        const data = await readJson(res)
-        if (!res.ok) {
-          restore()
-          setError(errorFrom(data, MOVE_ERROR))
-          return
-        }
-        if (data) {
-          const saved = toTask(data as unknown as TaskRowLike, previous.accountName)
-          setTasks((ts) => ts.map((t) => (t.id === taskId ? saved : t)))
-        }
+        const rows = await Promise.all([
+          patchTask(taskId, movePatchBody(previous.status, status, position)),
+          ...others.map((o) => patchTask(o.id, { position: o.position })),
+        ])
+        applySaved(rows, snapshot)
         // Mudar de coluna mexe nos contadores da topbar (vencidas, feedback).
         if (previous.status !== status) router.refresh()
-      } catch {
+      } catch (e) {
         restore()
-        setError(MOVE_ERROR)
+        setError(e instanceof PatchError ? e.message : MOVE_ERROR)
       }
     },
-    [router, toTask],
+    [router, patchTask, applySaved],
   )
 
   /** Tira um cartão da Entrada: vira tarefa na coluna de destino (POST idempotente). */
   const convertInbox = useCallback(
-    async (card: InboxCard, status: AccountTaskStatus, position?: number) => {
-      const pos = position ?? endPosition(tasksRef.current, status)
+    async (card: InboxCard, status: AccountTaskStatus, position?: number, others: PositionUpdate[] = []) => {
+      const snapshot = tasksRef.current
+      const pos = position ?? endPosition(snapshot, status)
       const temp = optimisticTaskFromInbox(card, status, pos, new Date().toISOString())
       setError(null)
       setInbox((cards) => cards.filter((c) => c.id !== card.id))
-      setTasks((ts) => [...ts, temp])
+      setTasks((ts) => [...applyPositions(ts, others), temp])
 
+      const touched = new Set(others.map((o) => o.id))
+      const originals = new Map(snapshot.filter((t) => touched.has(t.id)).map((t) => [t.id, t]))
       const rollback = (message: string) => {
-        setTasks((ts) => ts.filter((t) => t.id !== temp.id))
+        setTasks((ts) => ts.filter((t) => t.id !== temp.id).map((t) => originals.get(t.id) ?? t))
         setInbox((cards) => (cards.some((c) => c.id === card.id) ? cards : [...cards, card]))
         setError(message)
       }
       try {
+        // Renumeração primeiro: se falhar, nada foi criado.
+        if (others.length > 0) {
+          try {
+            applySaved(await Promise.all(others.map((o) => patchTask(o.id, { position: o.position }))), snapshot)
+          } catch (e) {
+            rollback(e instanceof PatchError ? e.message : MOVE_ERROR)
+            return
+          }
+        }
         const res = await fetch('/api/admin/tasks', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -144,7 +184,7 @@ export function useTaskBoard({
         rollback(SAVE_ERROR)
       }
     },
-    [router, toTask],
+    [router, toTask, patchTask, applySaved],
   )
 
   /** Cria pelo diálogo. Devolve a mensagem de erro (ou null). */

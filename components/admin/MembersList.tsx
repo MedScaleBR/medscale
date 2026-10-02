@@ -30,12 +30,6 @@ export interface PendingInvite {
   expired: boolean
 }
 
-const STATUS_STYLE: Record<MembershipStatus, string> = {
-  active: 'bg-green-50 text-green-700',
-  pending: 'bg-amber-50 text-amber-700',
-  suspended: 'bg-red-50 text-red-600',
-}
-
 const STATUS_LABEL: Record<MembershipStatus, string> = { active: 'Ativo', pending: 'Pendente', suspended: 'Suspenso' }
 
 const ROLE_LABEL: Record<MembershipRole, string> = { owner: 'Owner', admin: 'Admin', member: 'Member' }
@@ -257,7 +251,7 @@ export function MembersList({
                     <SelectItem value="member">Member</SelectItem>
                   </SelectContent>
                 </Select>
-                <Badge className={`border-none ${STATUS_STYLE[m.status]}`}>{STATUS_LABEL[m.status]}</Badge>
+                <span className="text-xs text-gray-400">{STATUS_LABEL[m.status]}</span>
                 <button type="button" onClick={() => removeMember(m.id)} aria-label={`Remover ${m.userName}`} className={ICON_BUTTON}>
                   <X className="h-4 w-4" />
                 </button>
@@ -278,7 +272,7 @@ export function MembersList({
                 </div>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                <Badge className={`border-none ${i.expired ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'}`}>
+                <Badge className={`border-none ${i.expired ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-900'}`}>
                   {i.expired ? 'Expirado' : 'Pendente'}
                 </Badge>
                 <button

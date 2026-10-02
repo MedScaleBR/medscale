@@ -43,20 +43,36 @@ describe('POST /api/admin/tasks', () => {
     expect(await res.json()).toEqual({ error: 'Acesso negado' })
   })
 
-  it('cria com status todo e position 0 por padrão (201)', async () => {
-    const s = setup({ account_tasks: { insert: { data: { id: 't1' } } } })
+  it('cria com status todo no fim da coluna: maior position + 1024 (201)', async () => {
+    const s = setup({ account_tasks: { select: { data: { position: 2048 } }, insert: { data: { id: 't1' } } } })
     const res = await POST(req('POST', { title: '  Ligar  ' }))
     expect(res.status).toBe(201)
+    const [last] = s.callsTo('account_tasks', 'select')
+    expect(filterValue(last, 'eq', 'status')).toBe('todo')
+    expect(last.filters).toContainEqual(['order', 'position', { ascending: false }])
+    expect(last.filters).toContainEqual(['limit', 1])
     const [call] = s.callsTo('account_tasks', 'insert')
     expect(call.payload).toMatchObject({
       title: 'Ligar',
       status: 'todo',
-      position: 0,
+      position: 3072,
       source_type: null,
       source_ref: null,
       completed_at: null,
       created_by: 'admin1',
     })
+  })
+
+  it('coluna vazia começa em 1024; position explícita é respeitada sem consulta', async () => {
+    let s = setup({ account_tasks: { insert: { data: { id: 't1' } } } })
+    await POST(req('POST', { title: 'x', status: 'doing' }))
+    expect(filterValue(s.callsTo('account_tasks', 'select')[0], 'eq', 'status')).toBe('doing')
+    expect((s.callsTo('account_tasks', 'insert')[0].payload as { position: number }).position).toBe(1024)
+
+    s = setup({ account_tasks: { insert: { data: { id: 't1' } } } })
+    await POST(req('POST', { title: 'x', position: 1.5 }))
+    expect(s.callsTo('account_tasks', 'select')).toHaveLength(0)
+    expect((s.callsTo('account_tasks', 'insert')[0].payload as { position: number }).position).toBe(1.5)
   })
 
   it('preenche completed_at quando já nasce done', async () => {
@@ -93,15 +109,53 @@ describe('POST /api/admin/tasks', () => {
     const s = setup({
       account_tasks: {
         insert: { data: null, error: { code: '23505', message: 'duplicate key value violates unique constraint' } },
-        select: { data: existing },
+        select: [{ data: null }, { data: existing }],
       },
     })
     const res = await POST(req('POST', { title: 'x', source_type: 'feedback', source_ref: 'f1' }))
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual(existing)
-    const [lookup] = s.callsTo('account_tasks', 'select')
+    const [, lookup] = s.callsTo('account_tasks', 'select')
     expect(filterValue(lookup, 'eq', 'source_type')).toBe('feedback')
     expect(filterValue(lookup, 'eq', 'source_ref')).toBe('f1')
+    // Sem status no corpo não mexe na existente.
+    expect(s.callsTo('account_tasks', 'update')).toHaveLength(0)
+  })
+
+  it('em 23505 com outro status pedido aplica a transição e marca o feedback reviewed', async () => {
+    const existing = { id: 'old', status: 'todo', source_type: 'feedback', source_ref: 'f1' }
+    const updated = { ...existing, status: 'done' }
+    const s = setup({
+      account_tasks: {
+        insert: { data: null, error: { code: '23505', message: 'duplicate' } },
+        select: [{ data: null }, { data: existing }],
+        update: { data: updated },
+      },
+    })
+    const res = await POST(req('POST', { title: 'x', status: 'done', source_type: 'feedback', source_ref: 'f1' }))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual(updated)
+    const [upd] = s.callsTo('account_tasks', 'update')
+    expect(filterValue(upd, 'eq', 'id')).toBe('old')
+    expect(upd.payload).toEqual({ status: 'done', completed_at: expect.any(String) })
+    const [fb] = s.callsTo('feedback', 'update')
+    expect(fb.payload).toEqual({ status: 'reviewed' })
+    expect(filterValue(fb, 'eq', 'id')).toBe('f1')
+  })
+
+  it('em 23505 tirando de done limpa completed_at e não toca no feedback', async () => {
+    const existing = { id: 'old', status: 'done', source_type: 'feedback', source_ref: 'f1' }
+    const s = setup({
+      account_tasks: {
+        insert: { data: null, error: { code: '23505', message: 'duplicate' } },
+        select: [{ data: null }, { data: existing }],
+        update: { data: { ...existing, status: 'doing' } },
+      },
+    })
+    const res = await POST(req('POST', { title: 'x', status: 'doing', source_type: 'feedback', source_ref: 'f1' }))
+    expect(res.status).toBe(200)
+    expect(s.callsTo('account_tasks', 'update')[0].payload).toEqual({ status: 'doing', completed_at: null })
+    expect(s.callsTo('feedback')).toHaveLength(0)
   })
 
   it('não vaza a mensagem do Postgres em erro 500', async () => {
@@ -127,12 +181,43 @@ describe('PATCH /api/admin/tasks/[taskId]', () => {
   })
 
   it('preenche completed_at ao ir para done e limpa ao sair', async () => {
-    const s = setup({ account_tasks: { update: { data: { id: 't1', source_type: null, source_ref: null } } } })
+    const s = setup({
+      account_tasks: {
+        select: [{ data: { status: 'todo' } }, { data: { status: 'done' } }],
+        update: { data: { id: 't1', source_type: null, source_ref: null } },
+      },
+    })
     await patch({ status: 'done' })
     await patch({ status: 'doing' })
     const [toDone, toDoing] = s.callsTo('account_tasks', 'update')
     expect((toDone.payload as { completed_at: string }).completed_at).toEqual(expect.any(String))
     expect(toDoing.payload).toMatchObject({ status: 'doing', completed_at: null })
+  })
+
+  it('não reescreve completed_at nem remarca o feedback quando já era done', async () => {
+    const s = setup({
+      account_tasks: {
+        select: { data: { status: 'done' } },
+        update: { data: { id: 't1', source_type: 'feedback', source_ref: 'f1' } },
+      },
+    })
+    const res = await patch({ status: 'done', position: 2 })
+    expect(res.status).toBe(200)
+    expect(s.callsTo('account_tasks', 'update')[0].payload).toEqual({ status: 'done', position: 2 })
+    expect(s.callsTo('feedback')).toHaveLength(0)
+  })
+
+  it('mover entre todo e doing não mexe em completed_at', async () => {
+    const s = setup({ account_tasks: { select: { data: { status: 'todo' } }, update: { data: { id: 't1' } } } })
+    await patch({ status: 'doing' })
+    expect(s.callsTo('account_tasks', 'update')[0].payload).toEqual({ status: 'doing' })
+  })
+
+  it('404 quando a tarefa não existe', async () => {
+    const s = setup({ account_tasks: { select: { data: null } } })
+    const res = await patch({ status: 'done' })
+    expect(res.status).toBe(404)
+    expect(s.callsTo('account_tasks', 'update')).toHaveLength(0)
   })
 
   it('não mexe em completed_at quando só move a posição', async () => {
@@ -143,7 +228,12 @@ describe('PATCH /api/admin/tasks/[taskId]', () => {
   })
 
   it('marca o feedback de origem como reviewed ao concluir', async () => {
-    const s = setup({ account_tasks: { update: { data: { id: 't1', source_type: 'feedback', source_ref: 'f1' } } } })
+    const s = setup({
+      account_tasks: {
+        select: { data: { status: 'doing' } },
+        update: { data: { id: 't1', source_type: 'feedback', source_ref: 'f1' } },
+      },
+    })
     const res = await patch({ status: 'done' })
     expect(res.status).toBe(200)
     const [fb] = s.callsTo('feedback', 'update')
@@ -153,7 +243,10 @@ describe('PATCH /api/admin/tasks/[taskId]', () => {
 
   it('falha ao marcar o feedback não derruba a requisição', async () => {
     setup({
-      account_tasks: { update: { data: { id: 't1', source_type: 'feedback', source_ref: 'f1' } } },
+      account_tasks: {
+        select: { data: { status: 'todo' } },
+        update: { data: { id: 't1', source_type: 'feedback', source_ref: 'f1' } },
+      },
       feedback: { update: { data: null, error: { message: 'boom' } } },
     })
     const res = await patch({ status: 'done' })
@@ -161,7 +254,12 @@ describe('PATCH /api/admin/tasks/[taskId]', () => {
   })
 
   it('não toca no feedback quando a tarefa não vem de feedback', async () => {
-    const s = setup({ account_tasks: { update: { data: { id: 't1', source_type: 'cost_alert', source_ref: 'x' } } } })
+    const s = setup({
+      account_tasks: {
+        select: { data: { status: 'todo' } },
+        update: { data: { id: 't1', source_type: 'cost_alert', source_ref: 'x' } },
+      },
+    })
     await patch({ status: 'done' })
     expect(s.callsTo('feedback')).toHaveLength(0)
   })

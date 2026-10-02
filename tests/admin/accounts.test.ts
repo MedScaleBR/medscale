@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
+import { createSupabaseMock, type RecordedCall } from '../helpers/supabase-mock'
 import {
   buildAccountRows,
+  getAccountsOverview,
   countToggleableModules,
   sumCost,
   TOGGLEABLE_MODULES,
@@ -94,5 +96,37 @@ describe('buildAccountRows', () => {
     })
     expect(rows.map((r) => r.id)).toEqual(['b', 'a'])
     expect(rows[0]).toMatchObject({ members: 0, cost30d: 0, openTasks: 0, overdueTasks: 0 })
+  })
+})
+
+// Resposta paginada como a do PostgREST: devolve o intervalo pedido por .range().
+function paged<T>(rows: T[]) {
+  return (call: RecordedCall) => {
+    const range = call.filters.find((f) => f[0] === 'range') as [string, number, number] | undefined
+    const [from, to] = range ? [range[1], range[2]] : [0, rows.length - 1]
+    return { data: rows.slice(from, to + 1), error: null }
+  }
+}
+
+describe('getAccountsOverview — paginação', () => {
+  it('custo 30d soma além de 1000 eventos e não marca truncado', async () => {
+    const costs = Array.from({ length: 1500 }, () => ({ account_id: 'acc1', cost_brl: 1 }))
+    const s = createSupabaseMock({
+      accounts: { select: paged([account()]) },
+      memberships: { select: paged([{ account_id: 'acc1' }]) },
+      cost_events: { select: paged(costs) },
+      account_tasks: { select: paged([]) },
+    })
+    const res = await getAccountsOverview(s.client as never, new Date('2026-10-02T13:00:00Z'))
+    expect(res.error).toBeNull()
+    expect(res.costTruncated).toBe(false)
+    expect(res.rows[0]).toMatchObject({ id: 'acc1', members: 1, cost30d: 1500 })
+    expect(s.callsTo('cost_events', 'select')).toHaveLength(2)
+  })
+
+  it('devolve o primeiro erro', async () => {
+    const s = createSupabaseMock({ memberships: { select: { data: null, error: { message: 'falhou' } } } })
+    const res = await getAccountsOverview(s.client as never)
+    expect(res.error).toBe('falhou')
   })
 })

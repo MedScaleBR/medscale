@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireMedscaleAdmin } from '@/lib/admin/require-admin'
+import { markFeedbackReviewed, taskStatusTransition } from '@/lib/admin/task-status'
 import type { AccountTaskStatus, Database } from '@/types/database'
 
 type AccountTaskUpdate = Database['public']['Tables']['account_tasks']['Update']
@@ -23,12 +24,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ta
     if (field in body) update[field] = body[field]
   }
 
-  if ('status' in body) {
-    if (!STATUSES.includes(body.status)) {
-      return NextResponse.json({ error: 'Status inválido. Use todo, doing ou done.' }, { status: 400 })
-    }
-    update.status = body.status as AccountTaskStatus
-    update.completed_at = update.status === 'done' ? new Date().toISOString() : null
+  if ('status' in body && !STATUSES.includes(body.status)) {
+    return NextResponse.json({ error: 'Status inválido. Use todo, doing ou done.' }, { status: 400 })
   }
 
   if ('position' in body) {
@@ -38,17 +35,31 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ ta
     update.position = body.position
   }
 
+  // completed_at só muda em transição real: lê o status atual antes. Reenviar
+  // done (duplo clique, reordenar dentro de Concluídas) não reescreve a data.
+  let becameDone = false
+  if ('status' in body) {
+    const { data: current, error: currentError } = await supabase
+      .from('account_tasks')
+      .select('status')
+      .eq('id', taskId)
+      .maybeSingle()
+    if (currentError) return NextResponse.json({ error: 'Não foi possível salvar a tarefa' }, { status: 500 })
+    if (!current) return NextResponse.json({ error: 'Tarefa não encontrada' }, { status: 404 })
+
+    const transition = taskStatusTransition(current.status, body.status as AccountTaskStatus)
+    update.status = transition.status
+    if (transition.completed_at !== undefined) update.completed_at = transition.completed_at
+    becameDone = transition.becameDone
+  }
+
   const { data, error } = await supabase.from('account_tasks').update(update).eq('id', taskId).select().single()
   if (error) return NextResponse.json({ error: 'Não foi possível salvar a tarefa' }, { status: 500 })
 
-  // Concluir a tarefa de um feedback marca o feedback como lido. Best-effort:
-  // a tarefa já foi salva, então uma falha aqui não derruba a requisição.
-  if (update.status === 'done' && data?.source_type === 'feedback' && data.source_ref) {
-    try {
-      await supabase.from('feedback').update({ status: 'reviewed' }).eq('id', data.source_ref)
-    } catch {
-      // ignora
-    }
+  // Concluir a tarefa de um feedback marca o feedback como lido — só na
+  // transição para done, best-effort (ver markFeedbackReviewed).
+  if (becameDone && data?.source_type === 'feedback' && data.source_ref) {
+    await markFeedbackReviewed(supabase, data.source_ref)
   }
 
   return NextResponse.json(data)

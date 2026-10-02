@@ -1,6 +1,9 @@
 import { describe, it, expect } from 'vitest'
+import { createSupabaseMock } from '../helpers/supabase-mock'
 import {
   buildAdminQueue,
+  getAdminQueue,
+  QUEUE_ERROR,
   daysBetween,
   isOverdue,
   saoPauloDate,
@@ -197,5 +200,33 @@ describe('buildAdminQueue — campos', () => {
     expect(item.ref).toBe('f1')
     expect(item.sourceType).toBe('feedback')
     expect(item.subtitle).toBe('Clínica B · Dra. Helena')
+  })
+})
+
+describe('getAdminQueue — erro', () => {
+  it('sem falhas, error null', async () => {
+    const s = createSupabaseMock({ account_tasks: { select: { data: [task()] } } })
+    const queue = await getAdminQueue(s.client as never, { now: NOW, costAlerts: [] })
+    expect(queue.error).toBeNull()
+    expect(queue.items).toHaveLength(1)
+  })
+
+  it('qualquer consulta falhando vira mensagem genérica em pt-BR', async () => {
+    const s = createSupabaseMock({ feedback: { select: { data: null, error: { message: 'relation does not exist' } } } })
+    const queue = await getAdminQueue(s.client as never, { now: NOW, costAlerts: [] })
+    expect(queue.error).toBe(QUEUE_ERROR)
+    expect(QUEUE_ERROR).toBe('Não foi possível carregar a fila.')
+  })
+
+  it('erro da visão de custos repassado pela página também conta', async () => {
+    const s = createSupabaseMock()
+    const queue = await getAdminQueue(s.client as never, { now: NOW, costAlerts: [], costError: 'boom' })
+    expect(queue.error).toBe(QUEUE_ERROR)
+  })
+
+  it('sem costAlerts, erro em cost_events também conta', async () => {
+    const s = createSupabaseMock({ cost_events: { select: { data: null, error: { message: 'boom' } } } })
+    const queue = await getAdminQueue(s.client as never, { now: NOW })
+    expect(queue.error).toBe(QUEUE_ERROR)
   })
 })

@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import {
   DEFAULT_FILTERS,
+  MIN_POSITION_GAP,
   POSITION_STEP,
   applyMove,
+  applyPositions,
   buildColumns,
   canDropInto,
   compareTasks,
@@ -15,7 +17,9 @@ import {
   isRecentlyDone,
   isTaskOverdue,
   listTasks,
+  movePatchBody,
   optimisticTaskFromInbox,
+  planDrop,
   positionBetween,
   relocate,
   reorderWithin,
@@ -242,6 +246,77 @@ describe('arrastar', () => {
     expect(moved.inbox).toHaveLength(0)
     expect(moved.todo.map((i) => i.id)).toEqual(['a', inboxId('r1'), 'b', 'c'])
     expect(dropPosition(moved.todo, inboxId('r1'))).toBe(512)
+  })
+
+  it('mantém a média quando há espaço entre os vizinhos', () => {
+    const middle = reorderWithin(cols.todo, 'a', 'b')
+    expect(planDrop(middle, 'a')).toEqual({ position: 1536, others: [] })
+  })
+
+  it('renumera a coluna quando os vizinhos têm a mesma position', () => {
+    const flat = buildColumns(
+      [
+        task({ id: 'p', position: 0, createdAt: '2026-09-01T00:00:00Z' }),
+        task({ id: 'q', position: 0, createdAt: '2026-09-02T00:00:00Z' }),
+        task({ id: 'r', position: 0, createdAt: '2026-09-03T00:00:00Z' }),
+      ],
+      [],
+      DEFAULT_FILTERS,
+      CTX,
+    )
+    const list = reorderWithin(flat.todo, 'r', 'q')
+    expect(list.map((i) => i.id)).toEqual(['p', 'r', 'q'])
+    // Média de 0 e 0 é 0: a ordem não persistiria.
+    expect(dropPosition(list, 'r')).toBe(0)
+    const plan = planDrop(list, 'r')
+    expect(plan.position).toBe(POSITION_STEP)
+    // 'p' já está em 0: só 'q' precisa de PATCH.
+    expect(plan.others).toEqual([{ id: 'q', position: 2 * POSITION_STEP }])
+
+    const after = applyPositions(
+      applyMove(flat.todo.map((i) => (i.type === 'task' ? i.task : task())), 'r', 'todo', plan.position, TODAY),
+      plan.others,
+    )
+    const rebuilt = buildColumns(after, [], DEFAULT_FILTERS, CTX)
+    expect(rebuilt.todo.map((i) => i.id)).toEqual(['p', 'r', 'q'])
+  })
+
+  it('renumera quando a folga entre vizinhos é menor que MIN_POSITION_GAP', () => {
+    const tight = buildColumns(
+      [task({ id: 'a', position: 1 }), task({ id: 'b', position: 1 + MIN_POSITION_GAP / 2 }), task({ id: 'z', status: 'doing' })],
+      [],
+      DEFAULT_FILTERS,
+      CTX,
+    )
+    const moved = relocate(tight, 'z', 'todo', 1)
+    const plan = planDrop(moved.todo, 'z')
+    expect(plan.position).toBe(POSITION_STEP)
+    expect(plan.others).toEqual([
+      { id: 'a', position: 0 },
+      { id: 'b', position: 2 * POSITION_STEP },
+    ])
+  })
+
+  it('cartão da Entrada também renumera vizinhos empatados', () => {
+    const flat = buildColumns(
+      [task({ id: 'p', position: 5 }), task({ id: 'q', position: 5 })],
+      [card({ ref: 'r9' })],
+      DEFAULT_FILTERS,
+      CTX,
+    )
+    const moved = relocate(flat, inboxId('r9'), 'todo', 1)
+    expect(planDrop(moved.todo, inboxId('r9'))).toEqual({
+      position: POSITION_STEP,
+      others: [
+        { id: 'p', position: 0 },
+        { id: 'q', position: 2 * POSITION_STEP },
+      ],
+    })
+  })
+
+  it('PATCH de movimento só manda status quando muda de coluna', () => {
+    expect(movePatchBody('todo', 'todo', 512)).toEqual({ position: 512 })
+    expect(movePatchBody('todo', 'done', 512)).toEqual({ status: 'done', position: 512 })
   })
 
   it('aplica status, posição e completed_at', () => {

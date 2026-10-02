@@ -3,6 +3,7 @@ import { Building2, CircleCheck, TrendingUp, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getAdminDashboardStats } from '@/lib/admin/dashboard'
 import { getAdminQueue } from '@/lib/admin/queue'
+import { getCostOverview } from '@/lib/admin/cost-alerts'
 import { PROVIDER_GROUP_LABELS, PROVIDER_GROUP_ORDER } from '@/lib/costs/aggregate'
 import { formatBRL } from '@/lib/finance/summary'
 import { KpiCard } from '@/components/dashboard/KpiCard'
@@ -15,7 +16,13 @@ function share(part: number, total: number): number {
 
 export default async function AdminDashboardPage() {
   const supabase = await createClient()
-  const [stats, queue] = await Promise.all([getAdminDashboardStats(supabase), getAdminQueue(supabase)])
+  // cost_events é lido uma vez só: os alertas vão para a fila e os totais
+  // para o card de custo.
+  const costs = await getCostOverview(supabase, 30)
+  const [stats, queue] = await Promise.all([
+    getAdminDashboardStats(supabase, { costTotals: { total: costs.summary.total, byGroup: costs.byGroup } }),
+    getAdminQueue(supabase, { alertDays: 30, costAlerts: costs.alerts, costError: costs.error }),
+  ])
 
   const total = stats.totalAccounts
   const cost = stats.cost30d
@@ -31,7 +38,7 @@ export default async function AdminDashboardPage() {
       </div>
 
       <div className="grid items-start gap-4 lg:grid-cols-[2fr_1fr]">
-        <QueueList items={queue.items} />
+        <QueueList items={queue.items} error={queue.error} />
 
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">

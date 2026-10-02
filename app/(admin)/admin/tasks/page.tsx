@@ -30,7 +30,11 @@ export default async function AdminTasksPage() {
     getAdminQueue(supabase),
   ])
 
-  if (error) console.error('Erro ao buscar account_tasks:', error.message)
+  const loadError = error
+    ? 'Não foi possível carregar as tarefas. Recarregue a página para tentar de novo.'
+    : queue.error
+      ? 'Não foi possível carregar a Entrada (alertas e feedbacks). Recarregue a página para tentar de novo.'
+      : null
 
   const people: PersonOption[] = admins.map((a) => ({ id: a.id, name: a.full_name || null, email: a.email }))
 
@@ -60,6 +64,7 @@ export default async function AdminTasksPage() {
       accounts={accountsRaw ?? []}
       currentUserId={user?.id ?? null}
       today={saoPauloDate(new Date())}
+      loadError={loadError}
     />
   )
 }
