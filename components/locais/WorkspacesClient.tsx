@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -13,6 +14,7 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog'
 import { Plus, Star } from 'lucide-react'
+import { lookupCep, maskCep } from '@/lib/cep'
 import type { Database } from '@/types/database'
 
 type WorkspaceRow = Pick<
@@ -26,9 +28,11 @@ interface WorkspacesClientProps {
   initialWorkspaces: WorkspaceRow[]
   canManage: boolean
   apiBase?: string // '/api/workspaces' (padrão) ou '/api/admin/accounts/<id>/workspaces'
+  // true em /locais: o nome da unidade abre a página de detalhe; o admin não usa
+  linkToDetail?: boolean
 }
 
-export function WorkspacesClient({ initialWorkspaces, canManage, apiBase = '/api/workspaces' }: WorkspacesClientProps) {
+export function WorkspacesClient({ initialWorkspaces, canManage, apiBase = '/api/workspaces', linkToDetail = false }: WorkspacesClientProps) {
   const [workspaces, setWorkspaces] = useState(initialWorkspaces)
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
@@ -37,32 +41,19 @@ export function WorkspacesClient({ initialWorkspaces, canManage, apiBase = '/api
   const [cepError, setCepError] = useState(false)
 
   const handleCepChange = async (raw: string) => {
-    const digits = raw.replace(/\D/g, '').slice(0, 8)
-    const masked = digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits
+    const { digits, masked } = maskCep(raw)
     setForm((f) => ({ ...f, zip_code: masked }))
     setCepError(false)
-
     if (digits.length !== 8) return
 
     setCepLoading(true)
-    try {
-      const res = await fetch(`https://viacep.com.br/ws/${digits}/json/`)
-      const data = await res.json()
-      if (data.erro) {
-        setCepError(true)
-        return
-      }
-      setForm((f) => ({
-        ...f,
-        address: [data.logradouro, data.bairro].filter(Boolean).join(', '),
-        city: data.localidade || f.city,
-        state: data.uf || f.state,
-      }))
-    } catch {
+    const found = await lookupCep(digits)
+    setCepLoading(false)
+    if (!found) {
       setCepError(true)
-    } finally {
-      setCepLoading(false)
+      return
     }
+    setForm((f) => ({ ...f, address: found.address, city: found.city || f.city, state: found.state || f.state }))
   }
 
   const handleCreate = async () => {
@@ -114,7 +105,13 @@ export function WorkspacesClient({ initialWorkspaces, canManage, apiBase = '/api
         {workspaces.map((w) => (
           <div key={w.id} className="rounded-xl border border-[var(--navy-06)] bg-white p-5 shadow-[var(--shadow-sm)]">
             <div className="flex items-start justify-between gap-2">
-              <p className="font-medium text-gray-900">{w.name}</p>
+              {linkToDetail ? (
+                <Link href={`/locais/${w.id}`} className="font-medium text-gray-900 hover:text-[var(--cyan-dark)] hover:underline">
+                  {w.name}
+                </Link>
+              ) : (
+                <p className="font-medium text-gray-900">{w.name}</p>
+              )}
               {w.is_default && <Badge className="border-none bg-[var(--cyan-10)] text-[var(--cyan-dark)]">Padrão</Badge>}
             </div>
             {(w.address || w.city) && (
