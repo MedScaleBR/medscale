@@ -62,6 +62,8 @@ interface BuildPromptInput {
   // IDs reais usados para vincular o convênio escolhido ao agendamento.
   insurers?: { id: string; name: string }[]
   isFirstMessage: boolean
+  upcomingAppointmentsAvailable?: boolean
+  now?: Date
   upcomingAppointments: UpcomingAppointment[] // consultas futuras já agendadas deste paciente (todas as unidades)
   // Nome da unidade que o paciente já mencionou nesta conversa — DICA de
   // prioridade, não trava. A Clara continua vendo todas as unidades.
@@ -92,10 +94,26 @@ export function buildDynamicSystemPrompt({
   insurers = [],
   isFirstMessage,
   upcomingAppointments,
+  upcomingAppointmentsAvailable = true,
+  now = new Date(),
   currentUnitName = null,
   waitlistEnabled = false,
 }: BuildPromptInput): string {
   const multiUnit = units.length > 1
+  const localNow = new Intl.DateTimeFormat('en-CA', {
+    year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'America/Sao_Paulo',
+  }).format(now)
+  const temporalContext = `
+## Data e agenda atuais — fonte de verdade desta resposta
+Data atual: ${localNow}. Agora: ${now.toLocaleString('pt-BR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })} (America/Sao_Paulo).
+A agenda atual prevalece sobre o histórico, inclusive sobre confirmações que você mesma enviou antes. Mensagens antigas são histórico, não prova de que uma consulta continua futura.
+- "Hoje", "amanhã" e "ontem" em uma mensagem antiga se referem à data daquela mensagem, nunca à data atual. Nunca repita um "amanhã" antigo como se fosse amanhã de hoje.
+- Ao informar quando é uma consulta, use apenas a lista atual "Consulta(s) já agendada(s) deste paciente" abaixo e diga a data completa (dia, mês e ano) e o horário. Não use apenas "amanhã".
+- Se a lista atual estiver vazia, diga que não encontrou consulta futura agendada. Não afirme que uma consulta antiga foi cancelada, realizada ou remarcada, pois esta lista não informa o passado.
+- Se o histórico divergir da agenda, explique que está usando a agenda atual. Não tente resolver a divergência inventando datas nem oferecendo novo agendamento sem o paciente pedir.
+- Não confunda horários livres com consultas já agendadas, nem o status "agendada" com "confirmada".
+
+`
 
   // ── Procedimentos (nomes do catálogo das unidades, sem repetir) ─────────────
   const procedureNames = [
@@ -194,7 +212,9 @@ PROCEDIMENTO_ID: <id>
 
   // ── Consultas já agendadas deste paciente ────────────────────────────────
   const upcomingAppointmentsText =
-    upcomingAppointments.length > 0
+    !upcomingAppointmentsAvailable
+      ? 'Não foi possível consultar a agenda atual. Informe que não conseguiu verificar e ofereça ajuda da equipe; não confirme nem negue a existência de consultas com base no histórico.'
+      : upcomingAppointments.length > 0
       ? upcomingAppointments.map((a) => `• ${a.label} (id: ${a.id})`).join('\n')
       : 'Nenhuma consulta futura agendada para este paciente no momento.'
 
@@ -230,7 +250,7 @@ LISTA_ESPERA: AAAA-MM-DDTHH:mm-03:00   (se deu um horário exato)
 Inclua também a linha UNIDADE_ID da unidade escolhida. Essa linha é lida por um sistema automático, nunca deve ser mostrada ao paciente e nunca deve sair junto de AGENDAMENTO_CONFIRMADO.`
     : ` Se não estiver, sugira até 3 horários próximos — ordene pela proximidade ao horário que o paciente pediu (mesmo dia primeiro e, dentro do dia, os horários mais perto do pedido; depois os dias vizinhos) — sempre dentre os horários disponíveis daquela unidade`
 
-  return `${ANTI_INJECTION_BLOCK}Você é ${BOT_NAME}, faz parte da equipe de ${accountName}${config.specialty ? `, especialista em ${config.specialty}` : ''}, e cuida do atendimento pelo WhatsApp.
+  return `${ANTI_INJECTION_BLOCK}${temporalContext}Você é ${BOT_NAME}, faz parte da equipe de ${accountName}${config.specialty ? `, especialista em ${config.specialty}` : ''}, e cuida do atendimento pelo WhatsApp.
 Converse de forma natural e humana, como uma pessoa da equipe conversaria — nunca se descreva como "assistente virtual", "chatbot", "robô", "inteligência artificial" ou termos parecidos. Apresente-se só pelo nome.
 Você atende pelo WhatsApp 24 horas por dia, todos os dias, e seu único objetivo é ajudar pacientes a agendar, remarcar ou cancelar consultas — a qualquer hora, inclusive de madrugada ou fim de semana. Nunca diga que está fora do horário de atendimento ou que vai parar de responder; você nunca "fecha".
 ${config.toneOfVoice ? `\n## Tom de voz\n${config.toneOfVoice}\n` : ''}
@@ -316,13 +336,13 @@ Quando precisar transferir para atendimento humano, envie EXATAMENTE este texto:
 Não invente números nem informe nenhum número de contato você mesmo, nem diga se alguém está disponível agora — isso é decidido e feito automaticamente pelo sistema depois da sua mensagem.
 ${faqText ? `\n## Perguntas frequentes\nUse as respostas abaixo quando o paciente perguntar algo equivalente:\n\n${faqText}\n` : ''}
 
-Hoje é ${new Date().toLocaleDateString('pt-BR', {
+Hoje é ${now.toLocaleDateString('pt-BR', {
     weekday: 'long',
     year: 'numeric',
     month: 'long',
     day: 'numeric',
     timeZone: 'America/Sao_Paulo',
-  })}, agora são ${new Date().toLocaleTimeString('pt-BR', {
+  })}, agora são ${now.toLocaleTimeString('pt-BR', {
     hour: '2-digit',
     minute: '2-digit',
     timeZone: 'America/Sao_Paulo',

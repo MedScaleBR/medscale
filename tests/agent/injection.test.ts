@@ -72,7 +72,7 @@ describe('injection — delimitador e marcador forjado', () => {
     await processIncomingMessage(PARAMS)
 
     const call = (claudeCreate.mock.calls as unknown as Array<[{ messages: Array<{ content: string }> }]>)[0][0]
-    expect(call.messages[0].content).toBe(`<mensagem_paciente>\n${PARAMS.message}\n</mensagem_paciente>`)
+    expect(call.messages[0].content).toContain(`<mensagem_paciente>\n${PARAMS.message}\n</mensagem_paciente>`)
   })
 
   it('não cria agendamento quando o marcador vem do paciente e o bot não o ecoa', async () => {

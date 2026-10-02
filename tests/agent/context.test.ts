@@ -63,6 +63,45 @@ describe('processIncomingMessage — montagem de contexto', () => {
     resetAgentHarness()
   })
 
+  it('separa o amanhã de uma mensagem de setembro da data atual de outubro', async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date('2026-10-02T18:43:00Z'))
+    try {
+      const supabase = mergeSupabaseConfig({ messages: { select: { data: [
+        { role: 'user', content: 'minha consulta eh q dia?', sent_at: '2026-10-02T18:43:00Z' },
+        { role: 'assistant', content: 'Sua consulta é amanhã às 11:00.', sent_at: '2026-09-28T18:42:00Z' },
+        { role: 'user', content: 'Pode agendar', sent_at: '2026-09-28T18:41:00Z' },
+      ] } } })
+      state.claudeResponses = ['Não encontrei consulta futura agendada.']
+      await processIncomingMessage({ ...PARAMS, message: 'minha consulta eh q dia?' })
+      expect(claudeMessages()[1].content).toContain('28/09/2026, 15:42')
+      expect(claudeMessages()[2].content).toContain('02/10/2026, 15:43')
+      expect(systemPrompt()).toContain('Data atual: 2026-10-02')
+      expect(systemPrompt()).toContain('A agenda atual prevalece sobre o histórico')
+      expect(systemPrompt()).toContain('Nenhuma consulta futura agendada')
+      expect(supabase.callsTo('messages', 'select').some((call) => call.filters.some((filter) => filter[0] === 'select' && filter[1] === 'role, content, sent_at'))).toBe(true)
+      expect(supabase.callsTo('appointments', 'select')[0].filters).toContainEqual(['gte', 'scheduled_at', '2026-10-02T18:43:00.000Z'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('não informa agenda vazia quando a consulta ao banco falha', async () => {
+    mergeSupabaseConfig({ appointments: { select: { data: null, error: { message: 'Unavailable' } } } })
+    state.claudeResponses = ['Não consegui verificar a agenda agora.']
+    await processIncomingMessage(PARAMS)
+    expect(systemPrompt()).not.toContain('Nenhuma consulta futura agendada')
+    expect(systemPrompt()).toContain('Não foi possível consultar a agenda atual')
+  })
+
+  it('informa ano e status reais da consulta futura sem tratar agendada como confirmada', async () => {
+    mergeSupabaseConfig({ appointments: { select: { data: [
+      { id: 'a1', scheduled_at: '2099-10-03T14:00:00Z', workspace_id: UNIT_ID, status: 'agendado' },
+    ] } } })
+    await processIncomingMessage(PARAMS)
+    expect(systemPrompt()).toContain('3 de outubro de 2099 às 11:00 — status: agendada')
+  })
+
   it('deve informar à Clara os convênios ativos cadastrados em Convênios', async () => {
     const supabase = mergeSupabaseConfig({ health_insurers: { select: { data: [{ name: 'Unimed' }] } } })
 
@@ -309,7 +348,7 @@ describe('processIncomingMessage — montagem de contexto', () => {
     // conteúdo não confiável — por isso o assistant segue em igualdade estrita.
     expect(claudeMessages().map((m) => m.role)).toEqual(['user', 'assistant', 'user'])
     expect(claudeMessages()[0].content).toContain('Oi, quero marcar')
-    expect(claudeMessages()[1].content).toBe('Tenho 08:00 e 09:00')
+    expect(claudeMessages()[1].content).toContain('Tenho 08:00 e 09:00')
     expect(claudeMessages()[2].content).toContain('Quero segunda de manhã')
   })
 

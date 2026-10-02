@@ -349,7 +349,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   // 5. Histórico — as 20 mensagens mais recentes, em ordem cronológica.
   const { data: recentMessages } = await supabase
     .from('messages')
-    .select('role, content')
+    .select('role, content, sent_at')
     .eq('conversation_id', conversation.id)
     .order('sent_at', { ascending: false })
     .limit(20)
@@ -366,26 +366,27 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   })
 
   // 6.5. Consultas futuras já agendadas deste paciente — todas as unidades.
-  const { data: upcomingRows } = patient
+  const contextNow = new Date()
+  const { data: upcomingRows, error: upcomingError } = patient
     ? await supabase
         .from('appointments')
-        .select('id, scheduled_at, workspace_id')
+        .select('id, scheduled_at, workspace_id, status')
         .eq('account_id', accountId)
         .eq('patient_id', patient.id)
         .in('status', ['agendado', 'confirmado'])
-        .gte('scheduled_at', new Date().toISOString())
+        .gte('scheduled_at', contextNow.toISOString())
         .order('scheduled_at', { ascending: true })
         .limit(5)
-    : { data: null }
+    : { data: null, error: null }
 
   const upcomingAppointments = (upcomingRows ?? []).map((row) => {
     const zoned = new TZDate(new Date(row.scheduled_at), 'America/Sao_Paulo')
-    const dateLabel = zoned.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' })
+    const dateLabel = zoned.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     const timeLabel = format(zoned, 'HH:mm')
     const unitName = row.workspace_id ? allUnitById.get(row.workspace_id)?.name : null
     return {
       id: row.id,
-      label: `${dateLabel} às ${timeLabel}${multiUnit && unitName ? ` — ${unitName}` : ''}`,
+      label: `${dateLabel} às ${timeLabel}${multiUnit && unitName ? ` — ${unitName}` : ''} — status: ${row.status === 'confirmado' ? 'confirmada' : 'agendada'}`,
     }
   })
 
@@ -435,16 +436,25 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     insurers: insurerRows ?? [],
     isFirstMessage,
     upcomingAppointments,
+    upcomingAppointmentsAvailable: !upcomingError,
+    now: contextNow,
     currentUnitName: currentUnitId ? (allUnitById.get(currentUnitId)?.name ?? null) : null,
     waitlistEnabled,
   })
 
   // Só o turno do paciente vai delimitado — a fala do próprio bot não é
   // conteúdo não confiável. As linhas em `messages` no banco seguem cruas.
-  const claudeMessages = (history ?? []).map((m) => ({
-    role: m.role as 'user' | 'assistant',
-    content: m.role === 'user' ? wrapPatientMessage(m.content) : m.content,
-  }))
+  const claudeMessages = (history ?? []).map((m) => {
+    const timestamp = m.sent_at && !Number.isNaN(new Date(m.sent_at).getTime())
+      ? `[Mensagem enviada em ${new Date(m.sent_at).toLocaleString('pt-BR', {
+          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo',
+        })} (America/Sao_Paulo)]\n`
+      : '[Mensagem sem data registrada; referências como "amanhã" não determinam a data atual.]\n'
+    return {
+      role: m.role as 'user' | 'assistant',
+      content: timestamp + (m.role === 'user' ? wrapPatientMessage(m.content) : m.content),
+    }
+  })
 
   // Sinais de injection nas últimas 10 mensagens do paciente. Roda sobre o
   // histórico que já está em memória: zero query nova, zero coluna nova.
