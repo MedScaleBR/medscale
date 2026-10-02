@@ -12,10 +12,9 @@ type BotConfigUpdate = Database['public']['Tables']['bot_config']['Update']
 // unidade (endereço, horário, estacionamento, contato, preço, número de
 // handoff) ficam em workspaces e são salvos via /api/workspaces/[id].
 // bot_name NÃO está aqui de propósito: o nome é fixo ("Clara").
+// Procedimentos ficam no catálogo (procedure_catalog) e convênios em health_insurers.
 const EDITABLE_FIELDS = [
   'specialty',
-  'procedures',
-  'insurance_plans',
   'accepts_private',
   'payment_methods',
   'pricing_info',

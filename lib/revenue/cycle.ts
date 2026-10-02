@@ -234,7 +234,7 @@ interface AppointmentRevenueInput {
   /** Status da consulta depois desta gravação. */
   nextStatus: AppointmentStatus
   /**
-   * Convênio da consulta (bot_config.insurance_plans) ou null/'' = particular.
+   * Convênio da consulta (nome de um convênio de health_insurers) ou null/'' = particular.
    * Consulta por convênio não entra no ciclo de receita: nenhuma entrada é
    * criada e uma previsão pendente pré-existente (de quando era particular) é
    * cancelada.
