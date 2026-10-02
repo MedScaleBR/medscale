@@ -49,6 +49,8 @@ import { filterValue } from '../helpers/supabase-mock'
 const SLOT = '2025-09-15T10:00-03:00'
 const SLOT_ISO = '2025-09-15T13:00:00.000Z'
 const APPT = { id: 'appt-1', patient_name: 'Paciente', patient_phone: PARAMS.patientPhone, type: 'consulta' }
+const INSURER_ID = '11111111-1111-4111-8111-111111111111'
+const PROCEDURE_ID = '22222222-2222-4222-8222-222222222222'
 
 function withAppointmentInsert() {
   return mergeSupabaseConfig({
@@ -59,6 +61,105 @@ function withAppointmentInsert() {
 describe('processIncomingMessage — agendamento pelo bot', () => {
   beforeEach(() => {
     resetAgentHarness()
+  })
+
+  it.each([{ modules: [] }, { modules: ['billing'] }])('vincula o convênio ativo e não cria receita particular, módulos $modules', async ({ modules }) => {
+    const supabase = mergeSupabaseConfig({
+      accounts: { select: { data: { name: 'Clínica Teste', modules: [...modules, 'revenue_cycle'] } } },
+      health_insurers: { select: { data: [{ id: INSURER_ID, name: 'Unimed' }] } },
+      procedure_catalog: { select: { data: [{ id: PROCEDURE_ID, name: 'Consulta', default_price: 300, workspace_id: UNIT_ID }] } },
+      appointments: { select: { data: [] }, insert: { data: APPT } },
+    })
+    state.claudeResponses = [`Confirmado pela Unimed!\nAGENDAMENTO_CONFIRMADO: ${SLOT}\nCONVENIO_ID: ${INSURER_ID}\nPROCEDIMENTO_ID: ${PROCEDURE_ID}`]
+
+    await processIncomingMessage({ ...PARAMS, message: 'Quero agendar pela Unimed' })
+
+    expect(supabase.callsTo('appointments', 'insert')[0]?.payload).toMatchObject({
+      billing_type: 'convenio', insurer_id: INSURER_ID, health_plan: 'Unimed', price: null,
+    })
+    expect(supabase.callsTo('revenue_entries', 'insert')).toHaveLength(0)
+    expect(lastSentMessage()).toBe('Confirmado pela Unimed!')
+    const insurersQuery = supabase.callsTo('health_insurers', 'select')[0]
+    expect(filterValue(insurersQuery, 'eq', 'account_id')).toBe(PARAMS.accountId)
+    expect(filterValue(insurersQuery, 'eq', 'is_active')).toBe(true)
+  })
+
+  it('pede esclarecimento sem agendar como particular quando o convênio não é ativo desta conta', async () => {
+    const supabase = withAppointmentInsert()
+    state.claudeResponses = [`Confirmado!\nAGENDAMENTO_CONFIRMADO: ${SLOT}\nCONVENIO_ID: ${INSURER_ID}`]
+
+    await processIncomingMessage(PARAMS)
+
+    expect(supabase.callsTo('appointments', 'insert')).toHaveLength(0)
+    expect(lastSentMessage()).toContain('convênio')
+    expect(lastSentMessage()).not.toContain('Confirmado!')
+  })
+
+  it('não assume particular se a Clara omite a escolha numa clínica com convênios', async () => {
+    const supabase = mergeSupabaseConfig({
+      health_insurers: { select: { data: [{ id: INSURER_ID, name: 'Unimed' }] } },
+      appointments: { select: { data: [] }, insert: { data: APPT } },
+    })
+    state.claudeResponses = [`Confirmado!\nAGENDAMENTO_CONFIRMADO: ${SLOT}`]
+    await processIncomingMessage(PARAMS)
+    expect(supabase.callsTo('appointments', 'insert')).toHaveLength(0)
+    expect(lastSentMessage()).toContain('convênio')
+  })
+
+  it('não assume particular quando a consulta dos convênios falha', async () => {
+    const supabase = mergeSupabaseConfig({
+      health_insurers: { select: { data: null, error: { message: 'Indisponível' } } },
+      appointments: { select: { data: [] }, insert: { data: APPT } },
+    })
+    state.claudeResponses = [`Confirmado!\nAGENDAMENTO_CONFIRMADO: ${SLOT}`]
+    await processIncomingMessage(PARAMS)
+    expect(supabase.callsTo('appointments', 'insert')).toHaveLength(0)
+    expect(lastSentMessage()).toContain('convênio')
+  })
+
+  it('não permite particular quando a clínica atende somente convênio', async () => {
+    const supabase = withAppointmentInsert()
+    state.botConfig!.acceptsPrivate = false
+    state.claudeResponses = [`Confirmado!\nAGENDAMENTO_CONFIRMADO: ${SLOT}\nCONVENIO_ID: PARTICULAR`]
+    await processIncomingMessage(PARAMS)
+    expect(supabase.callsTo('appointments', 'insert')).toHaveLength(0)
+    expect(lastSentMessage()).not.toContain('prefere atendimento particular')
+  })
+
+  it('preserva a consulta antiga se a remarcação depende de esclarecer o convênio', async () => {
+    const supabase = mergeSupabaseConfig({
+      appointments: { select: [
+        { data: [{ id: PROCEDURE_ID, workspace_id: UNIT_ID, scheduled_at: '2025-09-20T13:00:00.000Z' }] },
+        { data: { id: PROCEDURE_ID, workspace_id: UNIT_ID } },
+      ], insert: { data: APPT } },
+    })
+    state.claudeResponses = [`Remarcado!\nAGENDAMENTO_CONFIRMADO: ${SLOT}\nCONVENIO_ID: ${INSURER_ID}\nCANCELAMENTO_CONFIRMADO: ${PROCEDURE_ID}`]
+    await processIncomingMessage(PARAMS)
+    expect(supabase.callsTo('appointments', 'insert')).toHaveLength(0)
+    expect(supabase.callsTo('appointments', 'update')).toHaveLength(0)
+  })
+
+  it('respeita a escolha explícita por particular mesmo havendo convênio no histórico', async () => {
+    const supabase = mergeSupabaseConfig({
+      accounts: { select: { data: { name: 'Clínica Teste', modules: ['revenue_cycle'] } } },
+      health_insurers: { select: { data: [{ id: INSURER_ID, name: 'Unimed' }] } },
+      procedure_catalog: { select: { data: [{ id: PROCEDURE_ID, name: 'Consulta', default_price: 300, workspace_id: UNIT_ID }] } },
+      appointments: { select: { data: [] }, insert: { data: APPT } },
+      messages: { insert: { data: null }, select: { data: [
+        { role: 'user', content: 'Prefiro particular' },
+        { role: 'assistant', content: 'Você tem algum convênio?' },
+        { role: 'user', content: 'Tenho Unimed' },
+      ] } },
+    })
+    state.claudeResponses = [`Confirmado particular!\nAGENDAMENTO_CONFIRMADO: ${SLOT}\nCONVENIO_ID: PARTICULAR\nPROCEDIMENTO_ID: ${PROCEDURE_ID}`]
+
+    await processIncomingMessage({ ...PARAMS, message: 'Prefiro particular' })
+
+    const payload = supabase.callsTo('appointments', 'insert')[0]?.payload
+    expect(payload).not.toHaveProperty('insurer_id', INSURER_ID)
+    expect(payload).toHaveProperty('price', 300)
+    expect(supabase.callsTo('revenue_entries', 'insert')).toHaveLength(1)
+    expect(lastSentMessage()).toBe('Confirmado particular!')
   })
 
   it('deve criar a consulta com source "bot" quando o slot está disponível na revalidação', async () => {

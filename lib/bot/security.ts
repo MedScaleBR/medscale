@@ -21,7 +21,7 @@ export interface InjectionSignal {
 // exigem o payload completo (uuid, data ISO); aqui basta o paciente ESCREVER
 // o nome do marcador para virar sinal.
 const CONTROL_TOKENS =
-  /(AGENDAMENTO_CONFIRMADO|CANCELAMENTO_CONFIRMADO|NOME_PACIENTE|PROCEDIMENTO_ID|UNIDADE_ID|LISTA_ESPERA)\s*:|\[HANDOFF\]|<\/?\s*(mensagem_paciente|transcricao_consulta)\s*>/i
+  /(AGENDAMENTO_CONFIRMADO|CANCELAMENTO_CONFIRMADO|NOME_PACIENTE|PROCEDIMENTO_ID|UNIDADE_ID|CONVENIO_ID|LISTA_ESPERA)\s*:|\[HANDOFF\]|<\/?\s*(mensagem_paciente|transcricao_consulta)\s*>/i
 
 // "ignore/esqueça ... as instruções/regras" — o objeto é obrigatório. É o que
 // separa "ignore as instruções anteriores" (injection) de "posso ignorar o

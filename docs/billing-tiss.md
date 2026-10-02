@@ -2,6 +2,12 @@
 
 O módulo cobre cadastro de operadoras/procedimentos e convênios de pacientes, agendamento por convênio, geração de guias e lotes XML para download. Habilite `billing` na account pelo painel admin; configure prestador, profissional e operadora nas configurações.
 
+## Agendamento pela Clara
+
+A Clara identifica o convênio informado pelo paciente entre as operadoras ativas da conta e confirma a escolha ao agendar. O atendimento salva `insurer_id`, `billing_type = convenio` e o nome em `health_plan`, mesmo sem o módulo de faturamento, e não gera previsão de receita particular. Uma pergunta sobre quais convênios são aceitos não conta como escolha; nomes ambíguos exigem esclarecimento e uma mudança para particular deve ser respeitada.
+
+O marcador interno `CONVENIO_ID` acompanha a confirmação, com o ID real da operadora ou `PARTICULAR`, e é removido da mensagem enviada ao paciente. Uma escolha inválida, ausente quando há convênios ou uma falha ao consultar operadoras impede a confirmação e pede esclarecimento; numa remarcação bloqueada, a consulta antiga é preservada. A Clara não coleta carteirinha, autorização nem procedimento TUSS: a equipe completa esses campos na agenda ou na guia. O módulo `billing` continua necessário para gerar guias e lotes.
+
 ## SQL
 
 - Instalação inicial: execute `supabase/billing.sql` no SQL Editor.

@@ -49,6 +49,23 @@ const SLOT = '2025-09-15T10:00-03:00'
 const APPT_UUID = '3f7c1a90-2b4d-4c1e-9f80-1234567890ab'
 
 describe('parseMarkers — parsing puro dos marcadores de controle', () => {
+  it.each([APPT_UUID, 'PARTICULAR'])('extrai a escolha de atendimento %s e oculta o marcador', (choice) => {
+    const parsed = parseMarkers(`Confirmado!\nCONVENIO_ID: ${choice}`)
+    expect(parsed.insuranceChoice).toBe(choice)
+    expect(parsed.messageForPatient).toBe('Confirmado!')
+  })
+
+  it('oculta um marcador de convênio inválido para que o executor possa pedir esclarecimento', () => {
+    const parsed = parseMarkers('Confirmado!\nCONVENIO_ID: inventado')
+    expect(parsed.insuranceChoice).toBe('inventado')
+    expect(parsed.messageForPatient).toBe('Confirmado!')
+  })
+
+  it('não escolhe silenciosamente entre dois marcadores de convênio conflitantes', () => {
+    const parsed = parseMarkers(`CONVENIO_ID: ${APPT_UUID}\nCONVENIO_ID: PARTICULAR`)
+    expect(parsed.insuranceChoice).toBe('')
+    expect(parsed.messageForPatient).toBe('')
+  })
   it('deve extrair o horário quando AGENDAMENTO_CONFIRMADO está no formato correto', () => {
     const parsed = parseMarkers(`Perfeito! Confirmado.\nAGENDAMENTO_CONFIRMADO: ${SLOT}`)
     expect(parsed.confirmedSlot).toBe(SLOT)

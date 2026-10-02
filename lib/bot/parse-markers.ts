@@ -25,6 +25,11 @@ export const PROCEDURE_ID_MARKER =
 export const UNIT_ID_MARKER =
   /UNIDADE_ID:\s*([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/
 
+// O executor valida o id contra as operadoras ativas da própria conta.
+// Lê também valores inválidos para não transformar um convênio em particular
+// silenciosamente, e remove todas as linhas antes de responder ao paciente.
+export const INSURANCE_CHOICE_MARKER = /^[\t ]*CONVENIO_ID:[\t ]*([^\r\n]*)\r?$/gm
+
 // Lista de espera — a Clara emite quando o paciente, sem vaga no dia que
 // queria, opta por ser avisado. Aceita data pura ou data+hora com offset de
 // São Paulo (mesmo padrão do CONFIRMATION_MARKER). Grupo 1 = AAAA-MM-DD,
@@ -45,6 +50,8 @@ export interface ParsedMarkers {
   procedureId: string | null
   /** Id da unidade escolhida pelo paciente, ou null. */
   unitId: string | null
+  /** Id da operadora ou PARTICULAR; vazio/inválido exige esclarecimento. */
+  insuranceChoice: string | null
   /** Nome completo informado pelo paciente, já com trim, ou null. */
   patientName: string | null
   /** Dia (e horário, se o paciente nomeou um) que o paciente quer esperar, ou null. */
@@ -66,6 +73,7 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
   const cancelMatch = rawMessage.match(CANCELLATION_MARKER)
   const procedureMatch = rawMessage.match(PROCEDURE_ID_MARKER)
   const unitMatch = rawMessage.match(UNIT_ID_MARKER)
+  const insuranceMatches = [...rawMessage.matchAll(INSURANCE_CHOICE_MARKER)]
   const nameMatch = rawMessage.match(PATIENT_NAME_MARKER)
   const waitlistMatch = rawMessage.match(WAITLIST_MARKER)
 
@@ -79,6 +87,7 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
     .replace(CANCELLATION_MARKER, '')
     .replace(PROCEDURE_ID_MARKER, '')
     .replace(UNIT_ID_MARKER, '')
+    .replace(INSURANCE_CHOICE_MARKER, '')
     .replace(PATIENT_NAME_MARKER, '')
     .replace(WAITLIST_MARKER, '')
     .trim()
@@ -89,6 +98,7 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
     cancelledAppointmentId: cancelMatch?.[1] ?? null,
     procedureId: procedureMatch?.[1] ?? null,
     unitId: unitMatch?.[1] ?? null,
+    insuranceChoice: insuranceMatches.length === 1 ? insuranceMatches[0][1].trim() : insuranceMatches.length > 1 ? '' : null,
     patientName,
     waitlistDesired: waitlistMatch ? { date: waitlistMatch[1], time: waitlistMatch[2] ?? null } : null,
     handoffRequested: cleanedMessage.includes(HANDOFF_MARKER),

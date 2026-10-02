@@ -409,9 +409,9 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   const flatCatalog = Object.values(procedureCatalogByUnit).flat()
 
   // 6.7. Convênios aceitos — os ativos cadastrados em Convênios.
-  const { data: insurerRows } = await supabase
+  const { data: insurerRows, error: insurersError } = await supabase
     .from('health_insurers')
-    .select('name')
+    .select('id, name')
     .eq('account_id', accountId)
     .eq('is_active', true)
     .order('name', { ascending: true })
@@ -432,6 +432,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     freeSlotsByUnit,
     procedureCatalogByUnit,
     insurancePlans,
+    insurers: insurerRows ?? [],
     isFirstMessage,
     upcomingAppointments,
     currentUnitName: currentUnitId ? (allUnitById.get(currentUnitId)?.name ?? null) : null,
@@ -547,11 +548,20 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   let bookingFailed = false
   let unitRequired = false
   let cancellationFailed = false
+  const insuranceChoice = markers.insuranceChoice
+  const selectedInsurer = insuranceChoice && insuranceChoice !== 'PARTICULAR'
+    ? (insurerRows ?? []).find((i) => i.id.toLowerCase() === insuranceChoice.toLowerCase()) ?? null
+    : null
+  const insuranceNeedsClarification = markers.confirmedDate !== null && (
+    Boolean(insurersError) || (insuranceChoice === null
+      ? (insurerRows ?? []).length > 0 || !botConfig.acceptsPrivate
+      : insuranceChoice === 'PARTICULAR' ? !botConfig.acceptsPrivate : !selectedInsurer)
+  )
   // Unidade envolvida nesta troca (agendamento, ou contexto atual da conversa) —
   // usada também pelo handoff mais abaixo.
   let resolvedUnitId: string | null = conversation.workspace_id ?? (units.length === 1 ? units[0].id : null)
 
-  if (markers.confirmedDate) {
+  if (markers.confirmedDate && !insuranceNeedsClarification) {
     const bookingUnitId =
       (markers.unitId && allUnitById.has(markers.unitId) ? markers.unitId : null) ??
       currentUnitId ??
@@ -567,7 +577,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
       const durationMin = 30
 
       const unitCatalog = procedureCatalogByUnit[bookingUnitId] ?? []
-      const resolvedProcedure = markers.procedureId
+      const resolvedProcedure = !selectedInsurer && markers.procedureId
         ? unitCatalog.find((p) => p.id === markers.procedureId) ??
           flatCatalog.find((p) => p.id === markers.procedureId) ??
           null
@@ -595,6 +605,11 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
             procedure_id: resolvedProcedure?.id ?? null,
             procedure_name: resolvedProcedure?.name ?? null,
             price: snapshotPrice,
+            ...(selectedInsurer ? {
+              billing_type: 'convenio' as const,
+              insurer_id: selectedInsurer.id,
+              health_plan: selectedInsurer.name,
+            } : {}),
           })
           .select()
           .single()
@@ -605,17 +620,19 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
             .update({ appointment_id: appt.id, workspace_id: bookingUnitId })
             .eq('id', conversation.id)
 
-          await createBookingRevenueEntry(supabase, {
-            workspaceId: bookingUnitId,
-            accountId,
-            appointmentId: appt.id,
-            patientId: patient?.id ?? null,
-            procedureId: resolvedProcedure?.id ?? null,
-            procedureName: resolvedProcedure?.name ?? null,
-            amount: snapshotPrice,
-            scheduledAt: scheduledAt.toISOString(),
-            source: 'bot',
-          })
+          if (!selectedInsurer) {
+            await createBookingRevenueEntry(supabase, {
+              workspaceId: bookingUnitId,
+              accountId,
+              appointmentId: appt.id,
+              patientId: patient?.id ?? null,
+              procedureId: resolvedProcedure?.id ?? null,
+              procedureName: resolvedProcedure?.name ?? null,
+              amount: snapshotPrice,
+              scheduledAt: scheduledAt.toISOString(),
+              source: 'bot',
+            })
+          }
 
           // Paciente que estava na lista de espera e acabou de agendar sai da lista.
           if (patient?.id) {
@@ -661,7 +678,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   }
 
   // Cancelamento confirmado — casa por id (copiado do system prompt) + paciente.
-  if (markers.cancelledAppointmentId && patient) {
+  if (markers.cancelledAppointmentId && patient && !insuranceNeedsClarification) {
     const apptId = markers.cancelledAppointmentId
     const { data: apptToCancel } = await supabase
       .from('appointments')
@@ -766,7 +783,11 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   // 10. Mensagem final para o paciente. Se o agendamento/cancelamento não bateu
   // no banco, a resposta do Claude é descartada e substituída por algo honesto.
   let finalMessage: string
-  if (unitRequired) {
+  if (insuranceNeedsClarification) {
+    finalMessage = botConfig.acceptsPrivate
+      ? 'Antes de confirmar o agendamento, pode confirmar qual é o seu convênio ou se prefere atendimento particular?'
+      : 'Antes de confirmar o agendamento, pode confirmar qual é o seu convênio? A equipe pode ajudar a verificar o atendimento.'
+  } else if (unitRequired) {
     finalMessage = UNIT_REQUIRED_MESSAGE
   } else if (bookingFailed) {
     finalMessage = BOOKING_FAILED_MESSAGE
