@@ -4,17 +4,8 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/server'
 import { LogoutButton } from '@/components/auth/LogoutButton'
 import { AdminNav } from '@/components/admin/AdminNav'
+import { initialsFrom } from '@/lib/admin/format'
 import { getNavCounts } from '@/lib/admin/nav-counts'
-
-// Iniciais do avatar: nome do perfil (primeira + última palavra); sem nome,
-// a parte local do e-mail.
-function initialsFrom(fullName: string | null | undefined, email: string | null | undefined): string {
-  const words = (fullName ?? '').trim().split(/\s+/).filter(Boolean)
-  if (words.length >= 2) return (words[0][0] + words[words.length - 1][0]).toUpperCase()
-  if (words.length === 1) return words[0].slice(0, 2).toUpperCase()
-  const local = (email ?? '').split('@')[0].replace(/[^a-zA-Z0-9]/g, '')
-  return local.slice(0, 2).toUpperCase() || '?'
-}
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
