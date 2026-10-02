@@ -20,9 +20,11 @@ function scheduleLabel(i: InsurerRow): string {
 export function InsurersSettings({
   initialInsurers,
   workspaces,
+  billingEnabled,
 }: {
   initialInsurers: InsurerRow[]
   workspaces: ProviderWorkspace[]
+  billingEnabled: boolean
 }) {
   const [insurers, setInsurers] = useState(initialInsurers)
   const [expanded, setExpanded] = useState<string | null>(initialInsurers[0]?.id ?? null)
@@ -43,9 +45,11 @@ export function InsurersSettings({
       <div className="rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
         <div className="flex items-start justify-between gap-4">
           <div>
-            <h2 className="text-sm font-medium text-gray-900">Operadoras</h2>
+            <h2 className="text-sm font-medium text-gray-900">{billingEnabled ? 'Operadoras' : 'Convênios aceitos'}</h2>
             <p className="mt-0.5 text-xs text-gray-400">
-              Registro ANS, código do prestador, tabela de procedimentos e horário do lote de cada convênio.
+              {billingEnabled
+                ? 'Registro ANS, código do prestador, tabela de procedimentos e horário do lote de cada convênio.'
+                : 'Convênios que a clínica atende — a Clara informa ao paciente.'}
             </p>
           </div>
           <Button
@@ -65,29 +69,35 @@ export function InsurersSettings({
         ) : (
           <ul className="divide-y divide-[var(--navy-06)]">
             {insurers.map((i) => {
-              const open = expanded === i.id
+              const open = billingEnabled && expanded === i.id
               return (
                 <li key={i.id} className="py-3">
                   <div className="flex items-center justify-between gap-3">
                     <button
-                      onClick={() => setExpanded(open ? null : i.id)}
+                      onClick={() => billingEnabled && setExpanded(open ? null : i.id)}
                       className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                      aria-expanded={open}
+                      aria-expanded={billingEnabled ? open : undefined}
                     >
-                      {open ? (
-                        <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
-                      ) : (
-                        <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
-                      )}
+                      {billingEnabled &&
+                        (open ? (
+                          <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 shrink-0 text-gray-400" />
+                        ))}
                       <span className="truncate text-sm font-medium text-gray-900">{i.name}</span>
                       {!i.is_active && (
                         <Badge className="border-none bg-[var(--navy-06)] text-gray-500">Inativa</Badge>
                       )}
                     </button>
-                    <span className="hidden text-xs text-gray-400 sm:inline">
-                      ANS {i.ans_registry} · TISS {i.tiss_version} · {GUIDE_TYPE_LABELS[i.default_consult_guide]} ·{' '}
-                      {scheduleLabel(i)}
-                    </span>
+                    {billingEnabled && i.ans_registry && i.provider_code && (
+                      <span className="hidden text-xs text-gray-400 sm:inline">
+                        ANS {i.ans_registry} · TISS {i.tiss_version} · {GUIDE_TYPE_LABELS[i.default_consult_guide]} ·{' '}
+                        {scheduleLabel(i)}
+                      </span>
+                    )}
+                    {billingEnabled && !(i.ans_registry && i.provider_code) && (
+                      <Badge className="border-none bg-amber-50 text-amber-700">Falta ANS/código do prestador</Badge>
+                    )}
                     <button
                       onClick={() => {
                         setEditing(i)
@@ -99,7 +109,7 @@ export function InsurersSettings({
                       <Pencil className="h-3.5 w-3.5" />
                     </button>
                   </div>
-                  {open && (
+                  {billingEnabled && open && (
                     <div className="mt-3 pl-6">
                       <ProcedureTable insurerId={i.id} />
                     </div>
@@ -111,17 +121,25 @@ export function InsurersSettings({
         )}
       </div>
 
-      <div className="rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
-        <h2 className="text-sm font-medium text-gray-900">Dados do prestador</h2>
-        <p className="mt-0.5 text-xs text-gray-400">
-          Identificação da unidade nas guias TISS. O CRM, a UF do conselho e o CBO de cada médico ficam no perfil
-          dele, em Configurações.
-        </p>
-        <Separator className="my-4" />
-        <ProviderFields workspaces={workspaces} />
-      </div>
+      {billingEnabled && (
+        <div className="rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
+          <h2 className="text-sm font-medium text-gray-900">Dados do prestador</h2>
+          <p className="mt-0.5 text-xs text-gray-400">
+            Identificação da unidade nas guias TISS. O CRM, a UF do conselho e o CBO de cada médico ficam no perfil
+            dele, em Configurações.
+          </p>
+          <Separator className="my-4" />
+          <ProviderFields workspaces={workspaces} />
+        </div>
+      )}
 
-      <InsurerForm open={formOpen} onOpenChange={setFormOpen} insurer={editing} onSaved={onSaved} />
+      <InsurerForm
+        open={formOpen}
+        onOpenChange={setFormOpen}
+        insurer={editing}
+        onSaved={onSaved}
+        billingEnabled={billingEnabled}
+      />
     </div>
   )
 }

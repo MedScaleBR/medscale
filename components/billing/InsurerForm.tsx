@@ -14,8 +14,8 @@ import { friendlyErrorMessage } from '@/lib/friendly-errors'
 export interface InsurerRow {
   id: string
   name: string
-  ans_registry: string
-  provider_code: string
+  ans_registry: string | null
+  provider_code: string | null
   tiss_version: string
   default_consult_guide: TissGuideType
   batch_weekdays: number[]
@@ -43,16 +43,23 @@ export function InsurerForm({
   onOpenChange,
   insurer,
   onSaved,
+  billingEnabled,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   insurer: InsurerRow | null
   onSaved: (insurer: InsurerRow) => void
+  billingEnabled: boolean
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
-        {open && <InsurerFormBody insurer={insurer} onSaved={onSaved} onOpenChange={onOpenChange} />}
+        {open && <InsurerFormBody
+            insurer={insurer}
+            onSaved={onSaved}
+            onOpenChange={onOpenChange}
+            billingEnabled={billingEnabled}
+          />}
       </DialogContent>
     </Dialog>
   )
@@ -62,12 +69,16 @@ function InsurerFormBody({
   insurer,
   onSaved,
   onOpenChange,
+  billingEnabled,
 }: {
   insurer: InsurerRow | null
   onSaved: (insurer: InsurerRow) => void
   onOpenChange: (open: boolean) => void
+  billingEnabled: boolean
 }) {
-  const [form, setForm] = useState(insurer ? { ...insurer } : EMPTY)
+  const [form, setForm] = useState(
+    insurer ? { ...insurer, ans_registry: insurer.ans_registry ?? '', provider_code: insurer.provider_code ?? '' } : EMPTY,
+  )
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -89,14 +100,18 @@ function InsurerFormBody({
         body: JSON.stringify({
           ...(insurer ? { id: insurer.id } : {}),
           name: form.name,
-          ans_registry: form.ans_registry,
-          provider_code: form.provider_code,
-          tiss_version: form.tiss_version,
-          default_consult_guide: form.default_consult_guide,
-          batch_weekdays: form.batch_weekdays,
-          batch_hour: form.batch_hour,
-          max_guides_per_batch: form.max_guides_per_batch,
           is_active: form.is_active,
+          ...(billingEnabled
+            ? {
+                ans_registry: form.ans_registry,
+                provider_code: form.provider_code,
+                tiss_version: form.tiss_version,
+                default_consult_guide: form.default_consult_guide,
+                batch_weekdays: form.batch_weekdays,
+                batch_hour: form.batch_hour,
+                max_guides_per_batch: form.max_guides_per_batch,
+              }
+            : {}),
         }),
       })
       const data = await res.json()
@@ -118,9 +133,11 @@ function InsurerFormBody({
       </DialogHeader>
       <div className="space-y-3">
         <div>
-          <Label htmlFor="insurer_name">Nome da operadora</Label>
+          <Label htmlFor="insurer_name">{billingEnabled ? 'Nome da operadora' : 'Nome do convênio'}</Label>
           <Input id="insurer_name" value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
         </div>
+        {billingEnabled && (
+          <>
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label htmlFor="ans_registry">Registro ANS</Label>
@@ -220,6 +237,8 @@ function InsurerFormBody({
             />
           </div>
         </div>
+          </>
+        )}
         <label className="flex items-center justify-between pt-1">
           <span className="text-sm text-gray-700">Ativa</span>
           <Switch checked={form.is_active} onCheckedChange={(v) => setForm((f) => ({ ...f, is_active: v }))} />
