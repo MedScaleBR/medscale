@@ -63,6 +63,21 @@ describe('processIncomingMessage — montagem de contexto', () => {
     resetAgentHarness()
   })
 
+  it('deve informar à Clara os convênios ativos cadastrados em Convênios', async () => {
+    const supabase = mergeSupabaseConfig({ health_insurers: { select: { data: [{ name: 'Unimed' }] } } })
+
+    await processIncomingMessage(PARAMS)
+
+    expect(systemPrompt()).toContain('Convênios aceitos: Unimed')
+    const [call] = supabase.callsTo('health_insurers', 'select')
+    expect(call.filters).toEqual(
+      expect.arrayContaining([
+        ['eq', 'account_id', PARAMS.accountId],
+        ['eq', 'is_active', true],
+      ]),
+    )
+  })
+
   it('não deve chamar o Claude quando a conversa está com bot_paused', async () => {
     const supabase = mergeSupabaseConfig({
       conversations: { select: { data: { id: 'c1', status: 'open', bot_paused: true, archived_at: null } } },

@@ -408,6 +408,15 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   }
   const flatCatalog = Object.values(procedureCatalogByUnit).flat()
 
+  // 6.7. Convênios aceitos — os ativos cadastrados em Convênios.
+  const { data: insurerRows } = await supabase
+    .from('health_insurers')
+    .select('name')
+    .eq('account_id', accountId)
+    .eq('is_active', true)
+    .order('name', { ascending: true })
+  const insurancePlans = (insurerRows ?? []).map((i) => i.name)
+
   // 7. System prompt dinâmico + Claude
   const systemPrompt = buildDynamicSystemPrompt({
     accountName,
@@ -419,10 +428,10 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
       businessHours: u.businessHours,
       directionsParking: u.directionsParking,
       contactInfo: u.contactInfo,
-      consultationPriceFrom: u.consultationPriceFrom,
     })),
     freeSlotsByUnit,
     procedureCatalogByUnit,
+    insurancePlans,
     isFirstMessage,
     upcomingAppointments,
     currentUnitName: currentUnitId ? (allUnitById.get(currentUnitId)?.name ?? null) : null,
@@ -563,8 +572,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
           flatCatalog.find((p) => p.id === markers.procedureId) ??
           null
         : null
-      const snapshotPrice =
-        resolvedProcedure?.price ?? allUnitById.get(bookingUnitId)?.consultationPriceFrom ?? null
+      const snapshotPrice = resolvedProcedure?.price ?? null
 
       const stillAvailable = await isSlotAvailable(bookingUnitId, scheduledAt, durationMin).catch(() => true)
 

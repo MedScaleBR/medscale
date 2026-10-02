@@ -3,12 +3,11 @@ import type { NumberSource } from '@/types/database'
 
 // Configuração da Clara — uma por account, vale para todas as unidades.
 // Campos que variam por unidade (endereço, horário, estacionamento, contato,
-// preço, número de handoff) NÃO estão aqui: ficam em workspaces e são
-// carregados à parte (ver getAccountUnits).
+// número de handoff) NÃO estão aqui: ficam em workspaces e são carregados à
+// parte (ver getAccountUnits). Procedimentos vêm do catálogo (procedure_catalog)
+// e convênios de health_insurers, carregados no agente.
 export interface BotConfig {
   specialty: string | null
-  procedures: string[]
-  insurancePlans: string[]
   acceptsPrivate: boolean
   paymentMethods: string[]
   pricingInfo: string | null
@@ -41,7 +40,6 @@ export interface UnitContext {
   businessHours: string | null
   directionsParking: string | null
   contactInfo: string | null
-  consultationPriceFrom: number | null
   handoffNumber: string | null
 }
 
@@ -63,8 +61,6 @@ export async function getBotConfig(accountId: string): Promise<BotConfig | null>
 
   const config: BotConfig = {
     specialty: data.specialty,
-    procedures: data.procedures ?? [],
-    insurancePlans: data.insurance_plans ?? [],
     acceptsPrivate: data.accepts_private,
     paymentMethods: data.payment_methods ?? [],
     pricingInfo: data.pricing_info,
@@ -93,7 +89,7 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
   const { data } = await supabase
     .from('workspaces')
     .select(
-      'id, name, address, business_hours, directions_parking, contact_info, consultation_price_from, handoff_number, display_order'
+      'id, name, address, business_hours, directions_parking, contact_info, handoff_number, display_order'
     )
     .eq('account_id', accountId)
     .eq('is_active', true)
@@ -106,7 +102,6 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
     businessHours: w.business_hours,
     directionsParking: w.directions_parking,
     contactInfo: w.contact_info,
-    consultationPriceFrom: w.consultation_price_from != null ? Number(w.consultation_price_from) : null,
     handoffNumber: w.handoff_number,
   }))
 }

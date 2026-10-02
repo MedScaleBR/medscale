@@ -12,8 +12,6 @@ import { getBotConfig, invalidateBotConfigCache } from '@/lib/bot/config'
 
 const ROW = {
   specialty: 'Ortopedia',
-  procedures: ['consulta', 'infiltração'],
-  insurance_plans: ['Unimed'],
   accepts_private: true,
   payment_methods: ['pix', 'cartão'],
   pricing_info: null,
@@ -57,8 +55,6 @@ describe('getBotConfig — leitura e cache da configuração do bot', () => {
 
     expect(config).toMatchObject({
       specialty: 'Ortopedia',
-      procedures: ['consulta', 'infiltração'],
-      insurancePlans: ['Unimed'],
       acceptsPrivate: true,
       welcomeMessage: 'Olá!',
       outOfHoursMessage: 'Respondemos amanhã.',
@@ -71,12 +67,12 @@ describe('getBotConfig — leitura e cache da configuração do bot', () => {
   it('deve usar arrays vazios quando as colunas de lista vêm null', async () => {
     setup({
       bot_config: {
-        select: { data: { ...ROW, procedures: null, insurance_plans: null, payment_methods: null, faq: null } },
+        select: { data: { ...ROW, payment_methods: null, faq: null } },
       },
     })
     const config = await getBotConfig(nextWorkspace())
 
-    expect(config).toMatchObject({ procedures: [], insurancePlans: [], paymentMethods: [], faq: [] })
+    expect(config).toMatchObject({ paymentMethods: [], faq: [] })
   })
 
   it('deve devolver null quando não existe configuração para a account', async () => {

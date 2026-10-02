@@ -4,8 +4,6 @@ import type { BotConfig } from '@/lib/bot/config'
 
 const BASE: BotConfig = {
   specialty: 'Ortopedia',
-  procedures: [],
-  insurancePlans: [],
   acceptsPrivate: true,
   paymentMethods: [],
   pricingInfo: null,
@@ -33,7 +31,6 @@ const UNIT: Unit = {
   businessHours: null,
   directionsParking: null,
   contactInfo: null,
-  consultationPriceFrom: null,
 }
 
 type Overrides = Partial<Parameters<typeof buildDynamicSystemPrompt>[0]>
@@ -47,6 +44,7 @@ function build(config: Partial<BotConfig> = {}, overrides: Overrides = {}) {
     procedureCatalogByUnit: {},
     isFirstMessage: false,
     upcomingAppointments: [],
+    insurancePlans: [],
     ...overrides,
   })
 }
@@ -61,31 +59,56 @@ describe('buildDynamicSystemPrompt — fluxo de agendamento', () => {
 
 describe('buildDynamicSystemPrompt — convênios e valores', () => {
   it('deve informar atendimento só particular quando não há convênios', () => {
-    expect(build({ insurancePlans: [], acceptsPrivate: true })).toContain('Atendimento apenas particular')
+    expect(build({ acceptsPrivate: true })).toContain('Atendimento apenas particular')
   })
 
   it('deve listar os convênios e mencionar particular quando aceita os dois', () => {
-    const prompt = build({ insurancePlans: ['Unimed', 'Bradesco'], acceptsPrivate: true })
+    const prompt = build({ acceptsPrivate: true }, { insurancePlans: ['Unimed', 'Bradesco'] })
     expect(prompt).toContain('Convênios aceitos: Unimed, Bradesco')
     expect(prompt).toContain('Também atende particular')
   })
 
   it('deve dizer que não atende particular quando só aceita convênio', () => {
-    expect(build({ insurancePlans: ['Unimed'], acceptsPrivate: false })).toContain('Não atende particular')
+    expect(build({ acceptsPrivate: false }, { insurancePlans: ['Unimed'] })).toContain('Não atende particular')
   })
 
   it('deve mandar consultar a equipe quando não há convênio nem particular', () => {
-    expect(build({ insurancePlans: [], acceptsPrivate: false })).toContain('Consulte a equipe')
+    expect(build({ acceptsPrivate: false })).toContain('Consulte a equipe')
   })
 
-  it('deve informar o preço da unidade sem centavos', () => {
-    expect(build({}, { units: [{ ...UNIT, consultationPriceFrom: 350 }] })).toContain('R$350')
-  })
-
-  it('não deve inventar preço quando a unidade não tem valor configurado', () => {
-    const prompt = build({}, { units: [{ ...UNIT, consultationPriceFrom: null }] })
+  it('não deve inventar preço quando não há catálogo', () => {
+    const prompt = build()
     expect(prompt).toContain('a equipe entrará em contato')
     expect(prompt).not.toContain('R$')
+  })
+
+  it('com catálogo, manda usar só os valores da tabela', () => {
+    const prompt = build({}, { procedureCatalogByUnit: { w1: [{ id: 'p1', name: 'Consulta', price: 300 }] } })
+    expect(prompt).toContain('R$300')
+    expect(prompt).toContain('Valores: informe só os da tabela')
+  })
+})
+
+describe('buildDynamicSystemPrompt — procedimentos', () => {
+  it('deve listar os procedimentos do catálogo das unidades, sem repetir', () => {
+    const prompt = build(
+      {},
+      {
+        units: [UNIT, { ...UNIT, id: 'w2', name: 'Unidade 2' }],
+        procedureCatalogByUnit: {
+          w1: [{ id: 'p1', name: 'Consulta', price: 300 }],
+          w2: [
+            { id: 'p2', name: 'Consulta', price: 350 },
+            { id: 'p3', name: 'Infiltração', price: 500 },
+          ],
+        },
+      },
+    )
+    expect(prompt).toContain('Procedimentos realizados: Consulta, Infiltração')
+  })
+
+  it('sem catálogo, fala em consultas gerais', () => {
+    expect(build()).toContain('Procedimentos realizados: consultas gerais')
   })
 })
 

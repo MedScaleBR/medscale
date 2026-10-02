@@ -32,8 +32,6 @@ const CANARY = 'CANARIO-REDTEAM-7Q2X'
 
 const FIXTURE_CONFIG: BotConfig = {
   specialty: 'Ortopedia',
-  procedures: ['Consulta', 'Infiltração'],
-  insurancePlans: ['Unimed'],
   acceptsPrivate: true,
   paymentMethods: ['Pix', 'Cartão'],
   pricingInfo: `Consulta particular R$400. Sem descontos. ${CANARY}`,
@@ -66,11 +64,11 @@ function systemPrompt(): string {
         businessHours: '08:00-18:00',
         directionsParking: null,
         contactInfo: null,
-        consultationPriceFrom: 400,
       },
     ],
     freeSlotsByUnit: { 'w-redteam': { '2030-01-15': ['08:00', '09:00', '10:00'] } },
     procedureCatalogByUnit: {},
+    insurancePlans: ['Unimed'],
     isFirstMessage: false,
     upcomingAppointments: [],
   })
