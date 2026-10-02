@@ -3,11 +3,14 @@ import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { createSupabaseMock, filterValue, type SupabaseMock } from '../helpers/supabase-mock'
 
-const g = vi.hoisted(() => ({ supabase: null as unknown as SupabaseMock }))
+const g = vi.hoisted(() => ({ supabase: null as unknown as SupabaseMock, redirect: vi.fn(), role: 'owner' }))
+vi.mock('next/navigation', () => ({ redirect: g.redirect, notFound: () => { throw new Error('Not found') } }))
 vi.mock('@/lib/supabase/server', () => ({ createClient: async () => g.supabase.client }))
 vi.mock('@/lib/session/server', () => ({
   resolveActiveSession: async () => ({
     workspaceId: 'w1',
+    accountId: 'a1',
+    role: g.role,
     allWorkspaces: [{ id: 'w1', name: 'Centro' }, { id: 'w2', name: 'Zona Sul' }],
   }),
 }))
@@ -16,6 +19,7 @@ vi.mock('@/lib/session/session-context', () => ({
 }))
 
 import ExpedientePage from '@/app/(dashboard)/expediente/page'
+import UnitPage from '@/app/(dashboard)/locais/[id]/page'
 import { AvailabilitySettings } from '@/components/configuracoes/AvailabilitySettings'
 import type { Database } from '@/types/database'
 
@@ -26,22 +30,49 @@ const rules = [
 
 describe('expediente por local', () => {
   beforeEach(() => {
-    g.supabase = createSupabaseMock(Object.fromEntries(
-      ['availability_rules', 'availability_exceptions'].map((table) => [table, {
-        select: (call: Parameters<typeof filterValue>[0]) => {
-          const ids = filterValue(call, 'in', 'workspace_id') as string[] | undefined
-          const id = filterValue(call, 'eq', 'workspace_id')
-          return { data: table === 'availability_rules' ? rules.filter((r) => ids?.includes(r.workspace_id) || r.workspace_id === id) : [] }
-        },
-      }]),
-    ))
+    g.role = 'owner'
+    g.redirect.mockClear()
+    g.supabase = createSupabaseMock({
+      workspaces: { select: { data: { id: 'w2', name: 'Zona Sul' } } },
+      availability_rules: { select: { data: [rules[1]] } },
+      availability_exceptions: { select: { data: [] } },
+    })
   })
 
-  it('carrega o expediente de todos os locais acessíveis, sem consultar locais de outras contas', async () => {
+  it('redireciona o antigo expediente para os locais', async () => {
     await ExpedientePage()
+    expect(g.redirect).toHaveBeenCalledWith('/locais')
+  })
+
+  it('carrega o expediente apenas da unidade selecionada após validar a conta', async () => {
+    const page = await UnitPage({ params: Promise.resolve({ id: 'w2' }) })
+    const html = renderToStaticMarkup(page)
+    expect(filterValue(g.supabase.callsTo('workspaces')[0], 'eq', 'account_id')).toBe('a1')
     for (const table of ['availability_rules', 'availability_exceptions']) {
-      expect(filterValue(g.supabase.callsTo(table)[0], 'in', 'workspace_id')).toEqual(['w1', 'w2'])
+      expect(filterValue(g.supabase.callsTo(table)[0], 'eq', 'workspace_id')).toBe('w2')
     }
+    expect(html).toContain('Horários de atendimento recorrentes')
+    expect(html).toContain('14:00')
+    expect(html).not.toContain('Horário de atendimento presencial (texto livre)')
+    expect(html).not.toContain('Horário de atendimento humano')
+    expect(html).not.toContain('Local de atendimento')
+  })
+
+  it('preserva a edição do expediente pelo membro', async () => {
+    g.role = 'member'
+    const page = await UnitPage({ params: Promise.resolve({ id: 'w2' }) })
+    const html = renderToStaticMarkup(page)
+    expect(html).toContain('14:00')
+    expect(html).toContain('Excluir horário')
+    expect(html).toContain('Adicionar')
+    expect(html).toContain('Bloquear dia')
+  })
+
+  it('não consulta horários quando a unidade não pertence à conta', async () => {
+    g.supabase = createSupabaseMock({ workspaces: { select: { data: null } } })
+    await expect(UnitPage({ params: Promise.resolve({ id: 'other-unit' }) })).rejects.toThrow('Not found')
+    expect(g.supabase.callsTo('availability_rules')).toHaveLength(0)
+    expect(g.supabase.callsTo('availability_exceptions')).toHaveLength(0)
   })
 
   it('permite escolher o local e mostra somente os horários do local selecionado', () => {

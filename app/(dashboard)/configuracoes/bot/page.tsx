@@ -14,7 +14,7 @@ export default async function BotConfigPage() {
   if (session.role !== 'owner' && session.role !== 'admin') redirect('/configuracoes')
 
   const supabase = await createClient()
-  const [{ data: botConfig }, { data: profile }, { data: workspaces }, { data: insurers }, { data: membership }] =
+  const [{ data: botConfig }, { data: profile }, { data: workspaces }, { data: insurers }, { data: membership }, { data: globalHours }, { data: unitHours }] =
     await Promise.all([
       supabase.from('bot_config').select('*').eq('account_id', session.accountId).maybeSingle(),
       supabase.from('profiles').select('phone').eq('id', session.userId).single(),
@@ -31,6 +31,8 @@ export default async function BotConfigPage() {
         .eq('account_id', session.accountId)
         .eq('user_id', session.userId)
         .maybeSingle(),
+      supabase.from('account_handoff_hours').select('*').eq('account_id', session.accountId).order('day_of_week').order('start_time'),
+      supabase.from('handoff_hours').select('*').in('workspace_id', session.allWorkspaces.map((unit) => unit.id)).order('day_of_week').order('start_time'),
     ])
 
   const workspaceIds = (workspaces ?? []).map((w) => w.id)
@@ -64,6 +66,11 @@ export default async function BotConfigPage() {
         }}
         doctorPhone={profile?.phone ?? ''}
         initialHandoffPushEnabled={membership?.handoff_push_enabled ?? false}
+        humanHours={{
+          workspaces: session.allWorkspaces,
+          initialGlobalHours: globalHours ?? [],
+          initialUnitHours: unitHours ?? [],
+        }}
       />
     </div>
   )

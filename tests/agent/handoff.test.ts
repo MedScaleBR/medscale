@@ -83,6 +83,35 @@ describe('isHandoffAvailableNow — janela de atendimento humano', () => {
     vi.useRealTimers()
   })
 
+  it('usa o Global quando a unidade não tem horário próprio', async () => {
+    setup({ account_handoff_hours: { select: { data: [{ start_time: '08:00', end_time: '12:00' }] } } })
+    expect(await isHandoffAvailableNow('w1', 'acc1')).toBe(false)
+  })
+
+  it('não recorre ao Global quando a unidade está fechada hoje', async () => {
+    setup({
+      handoff_hours: { select: [{ data: [] }, { data: null, count: 1 }] },
+      account_handoff_hours: { select: { data: [{ start_time: '09:00', end_time: '18:00' }] } },
+    })
+    expect(await isHandoffAvailableNow('w1', 'acc1')).toBe(false)
+  })
+
+  it('fica fechado em dias sem janela Global quando há cadastro em outros dias', async () => {
+    setup({ account_handoff_hours: { select: [{ data: [] }, { data: null, count: 1 }] } })
+    expect(await isHandoffAvailableNow('w1', 'acc1')).toBe(false)
+  })
+
+  it('mantém 24/7 quando não há horário próprio nem Global', async () => {
+    setup({ account_handoff_hours: { select: { data: [], count: 0 } } })
+    expect(await isHandoffAvailableNow('w1', 'acc1')).toBe(true)
+  })
+
+  it('consulta apenas o Global da conta da unidade', async () => {
+    const supabase = setup({ account_handoff_hours: { select: { data: [{ start_time: '09:00', end_time: '18:00' }] } } })
+    expect(await isHandoffAvailableNow('w1', 'acc1')).toBe(true)
+    expect(supabase.callsTo('account_handoff_hours')[0]?.filters).toContainEqual(['eq', 'account_id', 'acc1'])
+  })
+
   it('deve retornar true quando não há nenhuma handoff_hours cadastrada (24/7 por padrão)', async () => {
     setup({ handoff_hours: { select: [{ data: [] }, { data: null, count: 0 }] } })
     expect(await isHandoffAvailableNow('w1')).toBe(true)

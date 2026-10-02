@@ -176,29 +176,51 @@ export function detectHandoffIntent(
 
 // O bot em si conversa e agenda 24/7 — isto decide só se o handoff para um
 // humano pode acontecer de verdade agora. Sem nenhuma regra cadastrada em
-// handoff_hours, o handoff fica disponível 24/7 por padrão (mesma convenção
-// de availability_rules: recurso opt-in, não quebra quem ainda não configurou).
-export async function isHandoffAvailableNow(workspaceId: string): Promise<boolean> {
+// handoff_hours, usa o Global da conta. Sem ambos, fica disponível 24/7.
+export async function isHandoffAvailableNow(workspaceId: string, accountId?: string): Promise<boolean> {
   const supabase = createAdminClient()
   const now = new TZDate(new Date(), TZ)
   const dayOfWeek = now.getDay()
 
-  const { data: rules } = await supabase
+  const { data: localRules } = await supabase
     .from('handoff_hours')
     .select('start_time, end_time')
     .eq('workspace_id', workspaceId)
     .eq('day_of_week', dayOfWeek)
     .eq('is_active', true)
 
-  if (!rules) return true
+  if (!localRules) return true
 
+  let rules = localRules
   if (rules.length === 0) {
     const { count } = await supabase
       .from('handoff_hours')
       .select('id', { count: 'exact', head: true })
       .eq('workspace_id', workspaceId)
-    if (!count) return true // nenhuma regra cadastrada ainda — handoff sempre disponível
-    return false // há regras para outros dias, mas não para hoje
+    if (count) return false // A unidade tem cadastro próprio, mas está fechada hoje.
+
+    // Global pertence à conta e só atende unidades sem cadastro próprio.
+    let resolvedAccountId = accountId
+    if (!resolvedAccountId) {
+      const { data: workspace } = await supabase.from('workspaces').select('account_id').eq('id', workspaceId).single()
+      resolvedAccountId = workspace?.account_id
+    }
+    if (!resolvedAccountId) return true
+    const { data: globalRules } = await supabase
+      .from('account_handoff_hours')
+      .select('start_time, end_time')
+      .eq('account_id', resolvedAccountId)
+      .eq('day_of_week', dayOfWeek)
+      .eq('is_active', true)
+    if (!globalRules) return true
+    rules = globalRules
+    if (rules.length === 0) {
+      const { count: globalCount } = await supabase
+        .from('account_handoff_hours')
+        .select('id', { count: 'exact', head: true })
+        .eq('account_id', resolvedAccountId)
+      return !globalCount
+    }
   }
 
   const nowMinutes = now.getHours() * 60 + now.getMinutes()

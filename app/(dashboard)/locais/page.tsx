@@ -17,7 +17,7 @@ export default async function LocaisPage() {
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-medium text-gray-900">Meus locais</h1>
-        <p className="text-sm text-gray-400">Unidades/clínicas da sua conta MedScale. Clique numa unidade para editar endereço, contatos e atendimento humano.</p>
+        <p className="text-sm text-gray-400">Unidades/clínicas da sua conta MedScale. Clique numa unidade para editar endereço, contatos e expediente presencial.</p>
       </div>
       <WorkspacesClient
         linkToDetail

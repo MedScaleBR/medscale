@@ -35,9 +35,10 @@ interface AvailabilitySettingsProps {
   initialExceptions: AvailabilityException[]
   workspaces: Array<{ id: string; name: string }>
   initialWorkspaceId: string
+  canManage?: boolean
 }
 
-export function AvailabilitySettings({ initialRules, initialExceptions, workspaces, initialWorkspaceId }: AvailabilitySettingsProps) {
+export function AvailabilitySettings({ initialRules, initialExceptions, workspaces, initialWorkspaceId, canManage = true }: AvailabilitySettingsProps) {
   const [workspaceId, setWorkspaceId] = useState(initialWorkspaceId)
   const [rules, setRules] = useState(initialRules)
   const [exceptions, setExceptions] = useState(initialExceptions)
@@ -148,7 +149,7 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
 
   return (
     <div className="space-y-6">
-      <div>
+      {workspaces.length > 1 && <div>
         <Label htmlFor="availability-workspace">Local de atendimento</Label>
         <Select
           items={workspaceItems}
@@ -168,7 +169,7 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
         <p className="mt-2 text-xs text-gray-400">
           A Clara oferece os horários deste expediente quando o paciente escolhe este local.
         </p>
-      </div>
+      </div>}
       <div>
         <h3 className="text-sm font-medium text-gray-900">Horários de atendimento recorrentes</h3>
         <p className="mt-0.5 text-xs text-gray-400">
@@ -185,9 +186,9 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
                 {dayRules.map((r) => (
                   <Badge key={r.id} className="gap-1.5 border-none bg-[var(--navy-06)] text-[var(--navy)]">
                     {workspaceName} · {r.start_time.slice(0, 5)}–{r.end_time.slice(0, 5)} ({r.slot_duration}min)
-                    <button aria-label={`Excluir horário de ${label} em ${workspaceName}`} onClick={() => removeRule(r.id)} className="ml-0.5 hover:text-red-600">
+                    {canManage && <button aria-label={`Excluir horário de ${label} em ${workspaceName}`} onClick={() => removeRule(r.id)} className="ml-0.5 hover:text-red-600">
                       <X className="h-3 w-3" />
-                    </button>
+                    </button>}
                   </Badge>
                 ))}
               </div>
@@ -196,7 +197,7 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
           {selectedRules.length === 0 && <p className="text-sm text-gray-400">Nenhum horário configurado para este local.</p>}
         </div>
 
-        <div className="mt-4 flex flex-wrap items-end gap-2">
+        {canManage && <div className="mt-4 flex flex-wrap items-end gap-2">
           <div>
             <Label className="text-xs">Dia</Label>
             <Select
@@ -252,7 +253,7 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
             <Plus className="h-4 w-4" />
             Adicionar
           </Button>
-        </div>
+        </div>}
       </div>
 
       <div className="border-t border-[var(--navy-06)] pt-5">
@@ -268,9 +269,9 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
               <Badge key={range.ids[0]} className="gap-1.5 border-none bg-red-50 text-red-600">
                 {label}
                 {range.reason ? ` — ${range.reason}` : ''}
-                <button aria-label={`Remover bloqueio de ${label} em ${workspaceName}`} onClick={() => removeException(range.ids)} className="ml-0.5 hover:text-red-800">
+                {canManage && <button aria-label={`Remover bloqueio de ${label} em ${workspaceName}`} onClick={() => removeException(range.ids)} className="ml-0.5 hover:text-red-800">
                   <X className="h-3 w-3" />
-                </button>
+                </button>}
               </Badge>
             )
           })}
@@ -279,15 +280,15 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
               {formatDate(e.date)}
               {e.start_time && e.end_time ? ` ${e.start_time.slice(0, 5)}–${e.end_time.slice(0, 5)}` : ''}
               {e.reason ? ` — ${e.reason}` : ''}
-              <button aria-label={`Remover bloqueio de ${e.date} em ${workspaceName}`} onClick={() => removeException([e.id])} className="ml-0.5 hover:text-red-800">
+              {canManage && <button aria-label={`Remover bloqueio de ${e.date} em ${workspaceName}`} onClick={() => removeException([e.id])} className="ml-0.5 hover:text-red-800">
                 <X className="h-3 w-3" />
-              </button>
+              </button>}
             </Badge>
           ))}
           {selectedExceptions.length === 0 && <p className="text-sm text-gray-400">Nenhum dia bloqueado para este local.</p>}
         </div>
 
-        <div className="mt-4 flex flex-wrap items-end gap-2">
+        {canManage && <div className="mt-4 flex flex-wrap items-end gap-2">
           <div>
             <Label className="text-xs">De</Label>
             <Input
@@ -317,7 +318,7 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
             <Plus className="h-4 w-4" />
             {excForm.end_date && excForm.end_date !== excForm.date ? 'Bloquear período' : 'Bloquear dia'}
           </Button>
-        </div>
+        </div>}
       </div>
     </div>
   )

@@ -35,6 +35,7 @@ drop table if exists
   public.transcriptions,
   public.push_subscriptions,
   public.handoff_hours,
+  public.account_handoff_hours,
   public.handoff_logs,
   public.rate_limit_log,
   public.webhook_logs,
@@ -1043,6 +1044,19 @@ create table public.handoff_hours (
   created_at    timestamptz not null default now()
 );
 
+-- Horário humano Global: fallback das unidades sem horário próprio.
+create table public.account_handoff_hours (
+  id uuid primary key default gen_random_uuid(),
+  account_id uuid not null references public.accounts(id) on delete cascade,
+  day_of_week int not null check (day_of_week between 0 and 6),
+  start_time time not null,
+  end_time time not null,
+  is_active boolean not null default true,
+  created_at timestamptz not null default now(),
+  check (start_time < end_time)
+);
+create index idx_account_handoff_hours on public.account_handoff_hours(account_id, day_of_week);
+
 -- Web Push subscriptions (VAPID) — uma por browser/dispositivo de cada usuário,
 -- por workspace. Usadas por lib/push/send.ts para avisar a equipe quando
 -- executeHandoff() roda. Fire-and-forget: subscriptions inválidas (404/410) são
@@ -1824,6 +1838,7 @@ alter table public.webhook_logs           enable row level security;
 alter table public.rate_limit_log         enable row level security;
 alter table public.handoff_logs           enable row level security;
 alter table public.handoff_hours          enable row level security;
+alter table public.account_handoff_hours  enable row level security;
 alter table public.push_subscriptions     enable row level security;
 alter table public.transcriptions         enable row level security;
 alter table public.account_notes          enable row level security;
@@ -1971,6 +1986,18 @@ create policy "handoff_logs: workspace members" on public.handoff_logs
 
 create policy "handoff_hours: workspace members" on public.handoff_hours
   for all using (workspace_id = any(public.my_workspace_ids()));
+
+create policy "account_handoff_hours: account members read" on public.account_handoff_hours
+  for select using (account_id = any(public.my_account_ids()));
+
+create policy "account_handoff_hours: managers write" on public.account_handoff_hours
+  for all using (
+    exists (select 1 from public.memberships m where m.account_id = account_handoff_hours.account_id
+      and m.user_id = auth.uid() and m.status = 'active' and m.role in ('owner', 'admin'))
+  ) with check (
+    exists (select 1 from public.memberships m where m.account_id = account_handoff_hours.account_id
+      and m.user_id = auth.uid() and m.status = 'active' and m.role in ('owner', 'admin'))
+  );
 
 -- push_subscriptions: cada usuário só enxerga/gerencia as próprias. O envio
 -- (lib/push/send.ts) roda com service_role e ignora esta policy.

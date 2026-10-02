@@ -1198,6 +1198,30 @@ export interface Database {
           },
         ]
       }
+      account_handoff_hours: {
+        Row: {
+          id: string
+          account_id: string
+          day_of_week: number
+          start_time: string
+          end_time: string
+          is_active: boolean
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['account_handoff_hours']['Row']> & {
+          account_id: string
+          day_of_week: number
+          start_time: string
+          end_time: string
+        }
+        Update: Partial<Database['public']['Tables']['account_handoff_hours']['Row']>
+        Relationships: [{
+          foreignKeyName: 'account_handoff_hours_account_id_fkey'
+          columns: ['account_id']
+          referencedRelation: 'accounts'
+          referencedColumns: ['id']
+        }]
+      }
       handoff_hours: {
         Row: {
           id: string

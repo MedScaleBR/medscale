@@ -813,7 +813,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   let realHandoff = false
 
   if (canAttemptHandoff) {
-    const handoffAvailable = await isHandoffAvailableNow(handoffUnitId).catch(() => true)
+    const handoffAvailable = await isHandoffAvailableNow(handoffUnitId, accountId).catch(() => true)
     console.log(`[handoff] canAttempt=true handoffAvailableNow=${handoffAvailable}`)
     if (handoffAvailable) {
       realHandoff = true

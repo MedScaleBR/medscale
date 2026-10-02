@@ -65,7 +65,7 @@ export const NAV_GROUPS: NavGroup[] = [
   { label: null, modules: ['dashboard'] },
   { label: 'Atendimento', modules: ['agenda', 'conversations', 'waitlist'] },
   { label: 'Pacientes', modules: ['patients', 'transcriptions'] },
-  { label: 'Operação', modules: ['locations', 'schedule'] },
+  { label: 'Operação', modules: ['locations'] },
   { label: 'Financeiro', modules: ['finance', 'revenue_cycle', 'billing'] },
   { label: 'Crescimento', modules: ['campaigns'] },
   { label: 'Sistema', modules: ['settings'] },

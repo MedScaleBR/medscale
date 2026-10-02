@@ -5,12 +5,8 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { HandoffHoursSettings } from '@/components/configuracoes/bot/HandoffHoursSettings'
 import { lookupCep, maskCep } from '@/lib/cep'
 import { friendlyErrorMessage } from '@/lib/friendly-errors'
-import type { Database } from '@/types/database'
-
-type HandoffHour = Database['public']['Tables']['handoff_hours']['Row']
 
 export interface UnitDetail {
   id: string
@@ -19,7 +15,6 @@ export interface UnitDetail {
   city: string | null
   state: string | null
   zip_code: string | null
-  business_hours: string | null
   directions_parking: string | null
   contact_info: string | null
   handoff_number: string | null
@@ -34,7 +29,6 @@ function toForm(w: UnitDetail): UnitForm {
     city: w.city ?? '',
     state: w.state ?? '',
     zip_code: w.zip_code ?? '',
-    business_hours: w.business_hours ?? '',
     directions_parking: w.directions_parking ?? '',
     contact_info: w.contact_info ?? '',
     handoff_number: w.handoff_number ?? '',
@@ -44,11 +38,9 @@ function toForm(w: UnitDetail): UnitForm {
 // Dados da unidade que o paciente vê e que a Clara usa. Member só lê.
 export function UnitDetailForm({
   workspace,
-  handoffHours,
   canManage,
 }: {
   workspace: UnitDetail
-  handoffHours: HandoffHour[]
   canManage: boolean
 }) {
   const [form, setForm] = useState(() => toForm(workspace))
@@ -87,7 +79,6 @@ export function UnitDetailForm({
           city: form.city || null,
           state: form.state || null,
           zip_code: form.zip_code || null,
-          business_hours: form.business_hours || null,
           directions_parking: form.directions_parking || null,
           contact_info: form.contact_info || null,
           handoff_number: form.handoff_number || null,
@@ -160,24 +151,6 @@ export function UnitDetailForm({
         <h2 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Atendimento ao paciente</h2>
         <fieldset disabled={!canManage} className="space-y-4">
           <div>
-            <Label htmlFor="business_hours">Horário de atendimento presencial (texto livre)</Label>
-            <Textarea
-              id="business_hours"
-              value={form.business_hours}
-              onChange={(e) => setField('business_hours', e.target.value)}
-              rows={2}
-              className="mt-1"
-              placeholder="Ex: Segunda a sexta das 08h às 17h. Sábados das 08h às 12h."
-            />
-            <p className="mt-1.5 text-xs text-gray-400">
-              Texto exibido ao paciente — a Clara conversa e agenda 24/7. Quem controla os horários reais para agendar é o{' '}
-              <a href="/expediente" className="text-[var(--cyan-dark)] hover:underline">
-                expediente
-              </a>
-              .
-            </p>
-          </div>
-          <div>
             <Label htmlFor="contact_info">Contatos</Label>
             <Textarea
               id="contact_info"
@@ -218,16 +191,6 @@ export function UnitDetailForm({
           </div>
         )}
       </section>
-
-      {canManage && (
-        <section className={card}>
-          <h2 className="mb-1 text-xs font-medium uppercase tracking-wide text-gray-500">Horário de atendimento humano</h2>
-          <p className="mb-4 text-xs text-gray-400">
-            Fora destes horários, quando o paciente pede um humano a Clara avisa que a equipe retorna depois.
-          </p>
-          <HandoffHoursSettings initialHours={handoffHours} workspaceId={workspace.id} />
-        </section>
-      )}
     </div>
   )
 }

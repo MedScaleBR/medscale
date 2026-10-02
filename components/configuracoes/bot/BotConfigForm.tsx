@@ -13,6 +13,7 @@ import { PushToggle } from '@/components/push/PushToggle'
 import { BOT_NAME } from '@/lib/bot/constants'
 import type { Database } from '@/types/database'
 import { friendlyErrorMessage } from '@/lib/friendly-errors'
+import { HumanHoursSettings, type HumanHoursSettingsProps } from './HumanHoursSettings'
 
 type BotConfigRow = Database['public']['Tables']['bot_config']['Row']
 
@@ -33,6 +34,7 @@ interface BotConfigFormProps {
   clinicData: ClinicData
   doctorPhone: string
   initialHandoffPushEnabled: boolean
+  humanHours: HumanHoursSettingsProps
 }
 
 function toFormState(config: BotConfigRow | null): FormState {
@@ -56,6 +58,7 @@ export function BotConfigForm({
   clinicData,
   doctorPhone,
   initialHandoffPushEnabled,
+  humanHours,
 }: BotConfigFormProps) {
   const [config, setConfig] = useState(initialConfig)
   const [form, setForm] = useState<FormState>(toFormState(initialConfig))
@@ -196,13 +199,14 @@ export function BotConfigForm({
           <section className="mb-6 break-inside-avoid rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
             <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Atendimento humano (handoff)</h3>
             <p className="mb-4 text-xs text-gray-400">
-              O número de transferência e o horário de atendimento humano ficam em cada unidade, em{' '}
+              O número de transferência fica em cada unidade, em{' '}
               <Link href="/locais" className="text-[var(--cyan-dark)] hover:underline">
                 Meus locais
               </Link>
               .
             </p>
             <div className="space-y-4">
+              <HumanHoursSettings {...humanHours} />
               <div>
                 <Label htmlFor="handoff_message">Mensagem antes de transferir</Label>
                 <Textarea
