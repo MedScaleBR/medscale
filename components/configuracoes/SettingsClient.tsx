@@ -195,7 +195,20 @@ export function SettingsClient({
             <span className="text-xs font-normal text-gray-400">Personalidade e FAQ</span>
           </div>
           <p className="mt-0.5 text-xs text-gray-400">
-            Endereço, contatos, convênios, preços, políticas, tom de voz e transferência para humano.
+            Mensagens, tom de voz, políticas, FAQ e transferência para humano.
+          </p>
+        </div>
+        <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
+      </Link>
+
+      <Link
+        href="/configuracoes/servicos"
+        className="flex items-center justify-between rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)] transition-colors hover:border-[var(--cyan)]"
+      >
+        <div>
+          <h2 className="text-sm font-medium text-gray-900">Serviços</h2>
+          <p className="mt-0.5 text-xs text-gray-400">
+            Procedimentos e preços por unidade, formas de pagamento e preparo de exames.
           </p>
         </div>
         <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
@@ -239,14 +252,14 @@ export function SettingsClient({
           <div>
             <h2 className="text-sm font-medium text-gray-900">Receita</h2>
             <p className="mt-0.5 text-xs text-gray-400">
-              Catálogo de procedimentos com preço e preferências do fechamento diário.
+              Preferências do fechamento diário.
             </p>
           </div>
           <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
         </Link>
       )}
 
-      {canManageIntegrations && showBilling && (
+      {canManageIntegrations && (
         <Link
           href="/configuracoes/convenios"
           className="flex items-center justify-between rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)] transition-colors hover:border-[var(--cyan)]"
@@ -254,7 +267,9 @@ export function SettingsClient({
           <div>
             <h2 className="text-sm font-medium text-gray-900">Convênios</h2>
             <p className="mt-0.5 text-xs text-gray-400">
-              Operadoras, tabela TUSS, horário dos lotes e dados do prestador para o faturamento TISS.
+              {showBilling
+                ? 'Operadoras, tabela TUSS, horário dos lotes e dados do prestador para o faturamento TISS.'
+                : 'Convênios aceitos e atendimento particular — a Clara informa ao paciente.'}
             </p>
           </div>
           <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
