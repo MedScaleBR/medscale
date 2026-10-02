@@ -96,7 +96,7 @@ begin
 
   insert into public.workspaces
     (account_id, name, slug, address, city, state, zip_code, business_hours,
-     directions_parking, contact_info, consultation_price_from, handoff_number,
+     directions_parking, contact_info, handoff_number,
      is_active, is_default, display_order)
   values
     (v_account_id, 'Unidade Moema', 'unidade-moema',
@@ -104,19 +104,19 @@ begin
      'Seg a Sex, 8h às 19h · Sáb, 8h às 12h',
      'Estacionamento no subsolo, R$ 15 com validação na recepção.',
      'Telefone fixo (11) 5051-2020',
-     350.00, '+5511955550101', true, true, 0)
+     '+5511955550101', true, true, 0)
   returning id into v_ws_a;
 
   insert into public.workspaces
     (account_id, name, slug, address, city, state, zip_code, business_hours,
-     directions_parking, consultation_price_from, handoff_number,
+     directions_parking, handoff_number,
      is_active, is_default, display_order)
   values
     (v_account_id, 'Unidade Santana', 'unidade-santana',
      'Rua Voluntários da Pátria, 1400 — sala 62', 'São Paulo', 'SP', '02010-100',
      'Seg, Qua e Sex, 9h às 18h',
      'Sem estacionamento próprio; conveniado na esquina.',
-     290.00, '+5511955550102', true, false, 1)
+     '+5511955550102', true, false, 1)
   returning id into v_ws_b;
 
   -- O trigger on_auth_user_created já criou o profile no cadastro; aqui só
@@ -148,15 +148,13 @@ begin
 
   -- ══ 3. Clara: configuração e horário de handoff ════════════════════════
   insert into public.bot_config
-    (account_id, specialty, procedures, insurance_plans, accepts_private,
+    (account_id, specialty, accepts_private,
      payment_methods, pricing_info, exam_preparation, policies, tone_of_voice,
      handoff_instructions, forbidden_actions, faq, welcome_message,
      handoff_message, out_of_hours_message, is_active, number_source,
      onboarding_step)
   values
     (v_account_id, 'Clínica Geral e Medicina Preventiva',
-     '{Consulta,Retorno,Check-up executivo,Avaliação pré-operatória,Aplicação de vacina}',
-     '{Unimed,Bradesco Saúde,SulAmérica,Particular}',
      true,
      '{Pix,Cartão de crédito,Cartão de débito,Dinheiro}',
      'Consulta particular a partir de R$ 350 na Moema e R$ 290 na Santana. Retorno em até 30 dias é sem custo.',
@@ -174,13 +172,17 @@ begin
      'Nosso atendimento é de segunda a sexta, das 8h às 18h. Deixe sua mensagem que respondemos assim que abrirmos.',
      false, 'own', 'pending');
 
+  -- Convênios aceitos (só o nome; ANS/prestador só com o módulo billing).
+  insert into public.health_insurers (account_id, name)
+  values (v_account_id, 'Unimed'), (v_account_id, 'Bradesco Saúde'), (v_account_id, 'SulAmérica');
+
   insert into public.handoff_hours (workspace_id, day_of_week, start_time, end_time, is_active)
   select w.id, d.dow, '08:00'::time, '18:00'::time, true
   from (values (v_ws_a), (v_ws_b)) as w(id)
   cross join generate_series(1, 5) as d(dow);
 
   -- ══ 4. Catálogo de procedimentos ═══════════════════════════════════════
-  -- A Santana cobra 15% menos que a Moema (bate com consultation_price_from).
+  -- A Santana cobra 15% menos que a Moema (Consulta clínica: R$ 350 na Moema, R$ 297,50 na Santana).
   insert into public.procedure_catalog
     (workspace_id, name, code, default_price, duration_min, is_active)
   select w.id, p.nome, p.codigo,

@@ -42,15 +42,23 @@ begin
 
   insert into public.workspaces
     (account_id, name, slug, address, city, state, zip_code,
-     business_hours, consultation_price_from, is_active, is_default)
+     business_hours, is_active, is_default)
   values
     (v_account_id, 'Unidade Centro', 'unidade-centro',
      'Rua das Flores, 123', 'São Paulo', 'SP', '01310-100',
-     'Seg a Sex, 8h às 18h', 250.00, true, true)
+     'Seg a Sex, 8h às 18h', true, true)
   returning id into v_workspace_id;
 
   insert into public.memberships (account_id, user_id, role, status, accepted_at)
   values (v_account_id, v_user_id, 'owner', 'active', now());
+
+  -- Convênios aceitos (só o nome; ANS/prestador só com o módulo billing) e
+  -- catálogo de procedimentos — é de onde a Clara lê convênios e valores.
+  insert into public.health_insurers (account_id, name)
+  values (v_account_id, 'Unimed'), (v_account_id, 'Bradesco Saúde');
+
+  insert into public.procedure_catalog (workspace_id, name, default_price)
+  values (v_workspace_id, 'Consulta', 250.00);
 
   -- Bot config (uma por account) ---------------------------------------
   -- is_active fica false/pending de propósito: sem um meta_token real em
@@ -59,11 +67,10 @@ begin
   -- Configurações divergentes (uma diz "ativo", a outra "não configurado")
   -- e esconderia o wizard de conexão por trás de "bot já ativo".
   insert into public.bot_config
-    (account_id, specialty, procedures, insurance_plans,
+    (account_id, specialty,
      accepts_private, is_active, number_source, onboarding_step)
   values
     (v_account_id, 'Clínica Geral',
-     '{Consulta,Retorno,Avaliação}', '{Unimed,Bradesco Saúde,Particular}',
      true, false, 'own', 'pending');
 
   -- Pacientes --------------------------------------------------------------
