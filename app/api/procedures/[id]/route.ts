@@ -1,30 +1,27 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
+import { requireWorkspaceSession, requireRole } from '@/lib/session/api'
 import type { Database } from '@/types/database'
 
 type ProcedurePatch = Database['public']['Tables']['procedure_catalog']['Update']
 
-// Edição/remoção de procedimento do catálogo — exclusiva do owner.
+// Edição/remoção de procedimento do catálogo — owner/admin.
 // A remoção é lógica (is_active = false): appointments e revenue_entries
 // antigos referenciam o procedimento e os snapshots de nome/preço já foram
 // gravados neles, mas manter a linha preserva a integridade do histórico.
 
-function requireOwnerWithModule(req: NextRequest) {
+function requireCatalogEditor(req: NextRequest) {
   return requireWorkspaceSession(req).then((result) => {
     if ('error' in result) return { error: result.error }
-    const moduleCheck = requireModule(result.session, 'revenue_cycle')
-    if (moduleCheck) return { error: moduleCheck }
-    if (result.session.role !== 'owner') {
-      return { error: NextResponse.json({ error: 'Restrito ao owner da account' }, { status: 403 }) }
-    }
+    const roleCheck = requireRole(result.session, ['owner', 'admin'])
+    if (roleCheck) return { error: roleCheck }
     return { session: result.session }
   })
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const auth = await requireOwnerWithModule(req)
+  const auth = await requireCatalogEditor(req)
   if ('error' in auth) return auth.error
   const { session } = auth
 
@@ -62,7 +59,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const auth = await requireOwnerWithModule(req)
+  const auth = await requireCatalogEditor(req)
   if ('error' in auth) return auth.error
   const { session } = auth
 
