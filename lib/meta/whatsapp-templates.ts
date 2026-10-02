@@ -11,12 +11,14 @@ export interface WhatsAppTemplateSpec {
   category: 'UTILITY'
   body: string
   example: string[]
+  quickReply?: string
 }
 
 export const WHATSAPP_TEMPLATES: WhatsAppTemplateSpec[] = [
   {
     // {{1}} nome, {{2}} data, {{3}} horário, {{4}} endereço
     name: 'appointment_reminder_2',
+    quickReply: 'Confirmar consulta',
     language: 'pt_BR',
     category: 'UTILITY',
     body:
@@ -86,7 +88,10 @@ export async function ensureWhatsAppTemplates(wabaId: string, token: string): Pr
           name: t.name,
           language: t.language,
           category: t.category,
-          components: [{ type: 'BODY', text: t.body, example: { body_text: [t.example] } }],
+          components: [
+            { type: 'BODY', text: t.body, example: { body_text: [t.example] } },
+            ...(t.quickReply ? [{ type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: t.quickReply }] }] : []),
+          ],
         },
       })
       result.created.push(t.name)

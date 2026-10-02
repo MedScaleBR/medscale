@@ -234,12 +234,12 @@ export function SettingsClient({
       )}
 
       <Link
-        href="/expediente"
+        href="/locais"
         className="flex items-center justify-between rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)] transition-colors hover:border-[var(--cyan)]"
       >
         <div>
-          <h2 className="text-sm font-medium text-gray-900">Meu expediente</h2>
-          <p className="mt-0.5 text-xs text-gray-400">Horários de atendimento e dias bloqueados usados pelo bot.</p>
+          <h2 className="text-sm font-medium text-gray-900">Meus locais e expediente</h2>
+          <p className="mt-0.5 text-xs text-gray-400">Dados das unidades, horários de atendimento presencial e dias bloqueados.</p>
         </div>
         <ArrowRight className="h-4 w-4 shrink-0 text-gray-400" />
       </Link>

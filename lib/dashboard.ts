@@ -15,7 +15,7 @@ export async function getDashboardStats(
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59).toISOString()
   const today = now.toISOString().split('T')[0]
 
-  const [appts, revenue, noshow, todayAppts, campaigns, revenueForecast] = await Promise.all([
+  const [appts, revenue, noshow, todayAppts, campaigns, revenueForecast, pendingConfirmations] = await Promise.all([
     supabase
       .from('appointments')
       .select('id, source, workspace_id', { count: 'exact' })
@@ -54,6 +54,14 @@ export async function getDashboardStats(
       .in('workspace_id', workspaceIds)
       .gte('period_start', today.slice(0, 7) + '-01'),
     getDashboardForecast(supabase, workspaceIds, now),
+    supabase
+      .from('appointments')
+      .select('id, patient_name, scheduled_at, workspace_id')
+      .in('workspace_id', workspaceIds)
+      .eq('status', 'agendado')
+      .gte('scheduled_at', now.toISOString())
+      .lte('scheduled_at', new Date(now.getTime() + 24 * 60 * 60 * 1000).toISOString())
+      .order('scheduled_at'),
   ])
 
   const totalAppts = appts.count ?? 0
@@ -98,6 +106,7 @@ export async function getDashboardStats(
       received: revTotals.received,
     },
     noShow: { rate: noShowRate, total: noshow.count ?? 0 },
+    pendingConfirmations: pendingConfirmations.error ? null : pendingConfirmations.data ?? [],
     todayAgenda: todayAppts.data ?? [],
     traffic: trafficByChannel,
     byWorkspace,

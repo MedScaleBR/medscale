@@ -3,7 +3,7 @@ import type { NumberSource } from '@/types/database'
 
 // Configuração da Clara — uma por account, vale para todas as unidades.
 // Campos que variam por unidade (endereço, horário, estacionamento, contato,
-// número de handoff) NÃO estão aqui: ficam em workspaces e são carregados à
+// número de handoff) NÃO estão aqui: ficam em workspaces/availability_rules e são carregados à
 // parte (ver getAccountUnits). Procedimentos vêm do catálogo (procedure_catalog)
 // e convênios de health_insurers, carregados no agente.
 export interface BotConfig {
@@ -37,7 +37,7 @@ export interface UnitContext {
   id: string
   name: string
   address: string | null
-  businessHours: string | null
+  businessHours: string | null // resumo do expediente ativo em availability_rules
   directionsParking: string | null
   contactInfo: string | null
   handoffNumber: string | null
@@ -89,17 +89,42 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
   const { data } = await supabase
     .from('workspaces')
     .select(
-      'id, name, address, business_hours, directions_parking, contact_info, handoff_number, display_order'
+      'id, name, address, directions_parking, contact_info, handoff_number, display_order'
     )
     .eq('account_id', accountId)
     .eq('is_active', true)
     .order('display_order')
 
+  if (!data?.length) return []
+
+  const { data: rules } = await supabase
+    .from('availability_rules')
+    .select('workspace_id, day_of_week, start_time, end_time')
+    .in('workspace_id', data.map((w) => w.id))
+    .eq('is_active', true)
+    .order('day_of_week')
+    .order('start_time')
+
+  const days = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado']
+  const schedules = new Map<string, Map<number, Set<string>>>()
+  for (const rule of rules ?? []) {
+    const schedule = schedules.get(rule.workspace_id) ?? new Map<number, Set<string>>()
+    const intervals = schedule.get(rule.day_of_week) ?? new Set<string>()
+    intervals.add(`${rule.start_time.slice(0, 5)}–${rule.end_time.slice(0, 5)}`)
+    schedule.set(rule.day_of_week, intervals)
+    schedules.set(rule.workspace_id, schedule)
+  }
+
   return (data ?? []).map((w) => ({
     id: w.id,
     name: w.name,
     address: w.address,
-    businessHours: w.business_hours,
+    businessHours: schedules.has(w.id)
+      ? [...schedules.get(w.id)!]
+          .sort(([a], [b]) => a - b)
+          .map(([day, intervals]) => `${days[day]}: ${[...intervals].sort().join(', ')}`)
+          .join('; ') + ' (America/Sao_Paulo)'
+      : null,
     directionsParking: w.directions_parking,
     contactInfo: w.contact_info,
     handoffNumber: w.handoff_number,

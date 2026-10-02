@@ -8,7 +8,7 @@ vi.mock('@/lib/supabase/server', () => ({
   createClient: async () => g.supabase.client,
 }))
 
-import { getBotConfig, invalidateBotConfigCache } from '@/lib/bot/config'
+import { getAccountUnits, getBotConfig, invalidateBotConfigCache } from '@/lib/bot/config'
 
 const ROW = {
   specialty: 'Ortopedia',
@@ -40,6 +40,41 @@ function nextWorkspace() {
   counter += 1
   return `acc-cache-${counter}`
 }
+
+describe('getAccountUnits — expediente presencial', () => {
+  it('informa o expediente de cada unidade sem reutilizar o texto livre antigo', async () => {
+    const supabase = setup({
+      workspaces: { select: { data: [
+        { id: 'w1', name: 'Centro', business_hours: '24 horas', address: null },
+        { id: 'w2', name: 'Sul', business_hours: '24 horas', address: null },
+      ] } },
+      availability_rules: { select: { data: [
+        { workspace_id: 'w1', day_of_week: 1, start_time: '08:00:00', end_time: '12:00:00' },
+        { workspace_id: 'w1', day_of_week: 1, start_time: '08:00:00', end_time: '12:00:00' },
+        { workspace_id: 'w1', day_of_week: 1, start_time: '14:00:00', end_time: '18:00:00' },
+        { workspace_id: 'w2', day_of_week: 6, start_time: '09:00:00', end_time: '13:00:00' },
+      ] } },
+    })
+
+    const units = await getAccountUnits('account-1')
+
+    expect(units[0].businessHours).toBe('segunda-feira: 08:00–12:00, 14:00–18:00 (America/Sao_Paulo)')
+    expect(units[1].businessHours).toBe('sábado: 09:00–13:00 (America/Sao_Paulo)')
+    expect(supabase.callsTo('availability_rules', 'select')[0].filters).toContainEqual(['in', 'workspace_id', ['w1', 'w2']])
+    expect(supabase.callsTo('availability_rules', 'select')[0].filters).toContainEqual(['eq', 'is_active', true])
+  })
+
+  it('não informa texto antigo quando a unidade ainda não tem expediente', async () => {
+    setup({ workspaces: { select: { data: [{ id: 'w1', name: 'Centro', business_hours: '24 horas' }] } } })
+    expect((await getAccountUnits('account-1'))[0].businessHours).toBeNull()
+  })
+
+  it('não consulta expediente quando não há unidades ativas', async () => {
+    const supabase = setup({ workspaces: { select: { data: [] } } })
+    expect(await getAccountUnits('account-1')).toEqual([])
+    expect(supabase.callsTo('availability_rules', 'select')).toHaveLength(0)
+  })
+})
 
 describe('getBotConfig — leitura e cache da configuração do bot', () => {
   beforeEach(() => {

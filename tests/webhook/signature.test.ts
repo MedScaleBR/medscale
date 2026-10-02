@@ -10,6 +10,7 @@ const g = vi.hoisted(() => ({
   handleUnsupportedMessage: null as unknown as MockFn,
   processFinancialMessage: null as unknown as MockFn,
   sendFinanceReply: null as unknown as MockFn,
+  sendWhatsAppMessage: vi.fn(async () => undefined),
 }))
 
 // `after()` só funciona dentro de um request scope do Next — aqui ele é
@@ -32,6 +33,7 @@ vi.mock('@/lib/finance/agent', () => ({
   sendFinanceReply: (...args: unknown[]) => g.sendFinanceReply(...args),
 }))
 vi.mock('@/lib/finance/respond', () => ({ buildUnsupportedTypeMessage: () => 'Só entendo texto.' }))
+vi.mock('@/lib/whatsapp/send', () => ({ sendWhatsAppMessage: g.sendWhatsAppMessage }))
 // Token guardado criptografado no banco — o prefixo "enc:" imita isso.
 vi.mock('@/lib/crypto', () => ({
   decryptToken: (t: string) => t.replace(/^enc:/, ''),
@@ -114,6 +116,25 @@ describe('POST /api/whatsapp/webhook — validação de assinatura HMAC', () => 
 
     expect(res.status).toBe(200)
     await expect(res.json()).resolves.toEqual({ status: 'ok' })
+  })
+
+  it('confirma pelo botão assinado sem encaminhar o clique para a IA nem tratar como mensagem não suportada', async () => {
+    const id = '11111111-1111-4111-8111-111111111111'
+    const supabase = setupSupabase({ appointments: {
+      select: { data: { id, patient_phone: '+5511988887777', status: 'agendado', reminder_sent: true, scheduled_at: '2099-10-03T14:00:00Z' } },
+      update: { data: [{ id }] },
+    } })
+    const body = JSON.stringify({ entry: [{ changes: [{ value: {
+      metadata: { phone_number_id: PHONE_NUMBER_ID },
+      messages: [{ from: '5511988887777', id: 'wamid.confirmation', type: 'button', button: { text: 'Confirmar consulta', payload: `confirm_appointment:${id}` } }],
+    } }] }] })
+    const res = await POST(makeRequest(body, makeSignature(body, GLOBAL_SECRET)) as never)
+    await runAfterCallbacks()
+    expect(res.status).toBe(200)
+    expect(supabase.callsTo('appointments', 'update')[0].payload).toEqual({ status: 'confirmado' })
+    expect(g.sendWhatsAppMessage).toHaveBeenCalledWith(expect.objectContaining({ to: '5511988887777', message: expect.stringContaining('confirmada') }))
+    expect(g.processIncomingMessage).not.toHaveBeenCalled()
+    expect(g.handleUnsupportedMessage).not.toHaveBeenCalled()
   })
 
   it('rejeita assinatura de um App que não é o da MedScale', async () => {

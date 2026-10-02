@@ -4,6 +4,7 @@ import { ArrowLeft } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { UnitDetailForm } from '@/components/locais/UnitDetailForm'
+import { AvailabilitySettings } from '@/components/configuracoes/AvailabilitySettings'
 
 export default async function UnitPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -11,16 +12,18 @@ export default async function UnitPage({ params }: { params: Promise<{ id: strin
   if (!session) return null
 
   const supabase = await createClient()
-  const [{ data: workspace }, { data: handoffHours }] = await Promise.all([
-    supabase
-      .from('workspaces')
-      .select('id, name, address, city, state, zip_code, business_hours, directions_parking, contact_info, handoff_number')
-      .eq('id', id)
-      .eq('account_id', session.accountId)
-      .maybeSingle(),
-    supabase.from('handoff_hours').select('*').eq('workspace_id', id).order('day_of_week').order('start_time'),
-  ])
+  const { data: workspace } = await supabase
+    .from('workspaces')
+    .select('id, name, address, city, state, zip_code, directions_parking, contact_info, handoff_number')
+    .eq('id', id)
+    .eq('account_id', session.accountId)
+    .maybeSingle()
   if (!workspace) notFound()
+  const [{ data: rules }, { data: exceptions }] = await Promise.all([
+    supabase.from('availability_rules').select('*').eq('workspace_id', id).order('day_of_week').order('start_time'),
+    supabase.from('availability_exceptions').select('*').eq('workspace_id', id).order('date'),
+  ])
+  const canManage = session.role === 'owner' || session.role === 'admin'
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -34,9 +37,18 @@ export default async function UnitPage({ params }: { params: Promise<{ id: strin
       </div>
       <UnitDetailForm
         workspace={workspace}
-        handoffHours={handoffHours ?? []}
-        canManage={session.role === 'owner' || session.role === 'admin'}
+        canManage={canManage}
       />
+      <section className="rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
+        <h2 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Expediente presencial</h2>
+        <AvailabilitySettings
+          key={workspace.id}
+          initialRules={rules ?? []}
+          initialExceptions={exceptions ?? []}
+          workspaces={[workspace]}
+          initialWorkspaceId={workspace.id}
+        />
+      </section>
     </div>
   )
 }

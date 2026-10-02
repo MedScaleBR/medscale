@@ -65,6 +65,7 @@ export async function POST(req: NextRequest) {
 
     try {
       await sendReminderTemplate({
+        appointmentId: appt.id,
         to: appt.patient_phone,
         phoneNumberId: conn.phone_number_id,
         token: decryptToken(conn.meta_token),
@@ -82,7 +83,8 @@ export async function POST(req: NextRequest) {
         }),
         address,
       })
-      await supabase.from('appointments').update({ reminder_sent: true }).eq('id', appt.id)
+      const { error: reminderError } = await supabase.from('appointments').update({ reminder_sent: true }).eq('id', appt.id)
+      if (reminderError) throw new Error(reminderError.message)
       sent += 1
     } catch (err) {
       errors.push(`${appt.id}: ${String(err)}`)

@@ -6,7 +6,7 @@ import { KpiCard } from '@/components/dashboard/KpiCard'
 import { AgendaHoje } from '@/components/dashboard/AgendaHoje'
 import { RevenueChart } from '@/components/dashboard/RevenueChart'
 import { RevenueForecast } from '@/components/dashboard/RevenueForecast'
-import { NoShowMeter } from '@/components/dashboard/NoShowMeter'
+import { PendingConfirmations } from '@/components/dashboard/PendingConfirmations'
 import { TrafficTable } from '@/components/dashboard/TrafficTable'
 import { WorkspaceTabs } from '@/components/dashboard/WorkspaceTabs'
 
@@ -72,11 +72,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
       <RevenueForecast forecast={stats.revenueForecast} />
 
-      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+      <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <AgendaHoje items={stats.todayAgenda} />
         </div>
-        <NoShowMeter rate={stats.noShow.rate} total={stats.noShow.total} />
+        <PendingConfirmations items={stats.pendingConfirmations} workspaces={allWorkspaces} />
       </div>
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">

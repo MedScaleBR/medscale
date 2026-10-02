@@ -17,6 +17,13 @@ export interface TrafficChannelStats {
   clicks: number
 }
 
+export interface PendingConfirmationItem {
+  id: string
+  patient_name: string
+  scheduled_at: string
+  workspace_id: string
+}
+
 export interface WorkspaceBreakdown {
   workspaceId: string
   appointments: number
@@ -31,6 +38,7 @@ export interface DashboardStats {
   // mantidos (= received / projected) por compatibilidade.
   revenue: { total: number; confirmed: number; projected: number; realized: number; received: number }
   noShow: { rate: number; total: number }
+  pendingConfirmations: PendingConfirmationItem[] | null
   todayAgenda: TodayAgendaItem[]
   traffic: Record<string, TrafficChannelStats>
   byWorkspace: WorkspaceBreakdown[]
