@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { FinanceEntryType, FinanceInvestment, InvestmentKind, InvestmentRateType } from '@/lib/finance/types'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 const NONE = '__none__'
 const todayISO = () => new Date().toISOString().slice(0, 10)
@@ -212,7 +213,7 @@ export function FinanceInvestmentForm({
             insuficientes&quot; a estimar rendimento sem base.
           </p>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600">{friendlyErrorMessage(error, "Não foi possível atualizar estas informações financeiras. Confira os dados e tente novamente.")}</p>}
         </div>
 
         <DialogFooter>

@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import type { FinanceEntryType, FinanceGoal, GoalMode } from '@/lib/finance/types'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 const NONE = '__none__'
 
@@ -165,7 +166,7 @@ export function FinanceGoalForm({
             </div>
           )}
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600">{friendlyErrorMessage(error, "Não foi possível atualizar estas informações financeiras. Confira os dados e tente novamente.")}</p>}
         </div>
 
         <DialogFooter>

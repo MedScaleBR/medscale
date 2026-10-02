@@ -9,6 +9,7 @@ import { Mic, Square, Loader2 } from 'lucide-react'
 import { useAnalyticsBase } from '@/lib/session/session-context'
 import { trackRecordingStarted, trackRecordingUploaded } from '@/lib/analytics/posthog'
 import { getRecordingLimitState } from '@/lib/transcriptions/recording-limits'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 type RecordingButtonProps = {
   appointmentId?: string
@@ -253,7 +254,7 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
           </>
         )}
       </Button>
-      {error && <p className="text-xs text-red-600">{error}</p>}
+      {error && <p className="text-xs text-red-600">{friendlyErrorMessage(error, "Não foi possível enviar a gravação. Confira sua conexão e tente novamente.")}</p>}
       <ConsentDialog open={consentOpen} onOpenChange={setConsentOpen} onConfirm={startRecording} />
     </div>
   )

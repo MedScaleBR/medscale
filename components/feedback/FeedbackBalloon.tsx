@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { FEEDBACK_MESSAGE_MAX_LENGTH } from '@/lib/feedback/prompt'
 import { useFeedback } from './feedback-context'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 type Step = 'ask' | 'write' | 'sent'
 
@@ -101,7 +102,7 @@ export function FeedbackBalloon() {
             placeholder="Conte o que poderia funcionar melhor, ou o que está faltando…"
             className="mt-2 text-sm"
           />
-          {error && <p className="mt-2 text-xs text-red-600">{error}</p>}
+          {error && <p className="mt-2 text-xs text-red-600">{friendlyErrorMessage(error, "Não foi possível salvar esta alteração. Tente novamente.")}</p>}
           <div className="mt-3 flex items-center justify-between gap-2">
             <span className="text-xs text-gray-400">
               {message.length}/{FEEDBACK_MESSAGE_MAX_LENGTH}

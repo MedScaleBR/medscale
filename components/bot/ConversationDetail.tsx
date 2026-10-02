@@ -1,4 +1,5 @@
 'use client'
+import { formatBrazilianPhone } from '@/lib/phone'
 
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
@@ -164,7 +165,7 @@ export function ConversationDetail({
     }
   }
 
-  const title = patientName ?? patientPhone
+  const title = patientName ?? formatBrazilianPhone(patientPhone)
   const info = statusInfo(status, botPaused, Boolean(archivedAt))
 
   return (
@@ -187,7 +188,7 @@ export function ConversationDetail({
         <InitialsAvatar label={title} seed={conversationId} />
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold text-[var(--navy)]">{title}</p>
-          <p className="truncate text-xs text-gray-400">{patientPhone || 'Sandbox'}</p>
+          <p className="truncate text-xs text-gray-400">{formatBrazilianPhone(patientPhone) || 'Sandbox'}</p>
         </div>
         <span
           title={info.hint}
@@ -396,7 +397,7 @@ export function ConversationDetail({
       <ScheduleDialog
         open={scheduleOpen}
         onOpenChange={setScheduleOpen}
-        patientName={patientName ?? patientPhone}
+        patientName={patientName ?? formatBrazilianPhone(patientPhone)}
         patientPhone={patientPhone}
         patientId={patientId}
         onScheduled={onScheduled}

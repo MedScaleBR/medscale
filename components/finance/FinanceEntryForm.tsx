@@ -8,6 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { FinanceCategoryPicker } from './FinanceCategoryPicker'
 import type { FinanceCategoryTree } from '@/lib/finance/categories'
 import type { FinanceEntry } from '@/lib/finance/types'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 const NONE = '__none__'
 const todayISO = () => new Date().toISOString().slice(0, 10)
@@ -163,7 +164,7 @@ export function FinanceEntryForm({
             </div>
           )}
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600">{friendlyErrorMessage(error, "Não foi possível atualizar estas informações financeiras. Confira os dados e tente novamente.")}</p>}
         </div>
 
         <DialogFooter>

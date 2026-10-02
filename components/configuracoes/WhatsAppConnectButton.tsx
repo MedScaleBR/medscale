@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { loadFbSdk } from '@/lib/meta/fb-sdk'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 interface Props {
   isConnected: boolean
@@ -203,7 +204,7 @@ export function WhatsAppConnectButton({ isConnected, isCoexistence, whatsappNumb
               ? 'Carregando...'
               : 'Conectar WhatsApp'}
       </Button>
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-sm text-red-500">{friendlyErrorMessage(error, "Não foi possível conectar o WhatsApp. Tente novamente. Se o problema continuar, entre em contato com o suporte.")}</p>}
     </div>
   )
 }

@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 export interface InsurerOption {
   id: string
@@ -172,7 +173,7 @@ function InsuranceForm({
           <span className="text-sm text-gray-700">Convênio principal</span>
           <Switch checked={form.is_primary} onCheckedChange={(v) => setForm((f) => ({ ...f, is_primary: v }))} />
         </label>
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-red-600">{friendlyErrorMessage(error, "Não foi possível concluir esta ação de faturamento. Confira os dados e tente novamente.")}</p>}
       </div>
       <DialogFooter>
         <Button

@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { AccountNoteType } from '@/types/database'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 export interface NoteRow {
   id: string
@@ -116,7 +117,7 @@ export function AccountActivityTab({
           >
             {saving ? 'Salvando...' : 'Registrar'}
           </Button>
-          {error && <span className="text-xs text-red-500">{error}</span>}
+          {error && <span className="text-xs text-red-500">{friendlyErrorMessage(error, "Não foi possível salvar esta alteração. Tente novamente.")}</span>}
         </div>
       </form>
 

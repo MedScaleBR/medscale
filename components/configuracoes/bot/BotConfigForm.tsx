@@ -13,6 +13,7 @@ import { WorkspaceBotFields, type WorkspaceBotRow } from './WorkspaceBotFields'
 import { PushToggle } from '@/components/push/PushToggle'
 import { BOT_NAME } from '@/lib/bot/constants'
 import type { Database } from '@/types/database'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 type BotConfigRow = Database['public']['Tables']['bot_config']['Row']
 type HandoffHour = Database['public']['Tables']['handoff_hours']['Row']
@@ -346,7 +347,7 @@ export function BotConfigForm({
         />
       </section>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-sm text-red-500">{friendlyErrorMessage(error, "Não foi possível salvar esta alteração. Tente novamente.")}</p>}
 
       <div className="flex flex-wrap items-center gap-3">
         <Button

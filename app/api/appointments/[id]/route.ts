@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { normalizeBrazilianPhone } from '@/lib/phone'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { cancelEvent, updateEvent } from '@/lib/google/calendar'
 import { requireWorkspaceSession } from '@/lib/session/api'
@@ -21,6 +22,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const supabase = await createClient()
   const body = await req.json()
+  if ('patient_phone' in body) {
+    const phone = normalizeBrazilianPhone(body.patient_phone)
+    if (!phone) return NextResponse.json({ error: 'Informe um telefone válido com DDD.' }, { status: 400 })
+    body.patient_phone = phone
+  }
 
   // Allow-list dos campos gravaveis por esta rota — o corpo cru nunca vai para
   // .update() (workspace_id/account_id/doctor_id/source/gcal_event_id ficam de

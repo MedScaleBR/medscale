@@ -1,4 +1,5 @@
 'use client'
+import { formatBrazilianPhone } from '@/lib/phone'
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
@@ -129,7 +130,7 @@ export function WaitlistClient({ initialEntries }: { initialEntries: WaitlistEnt
                       </span>
                     )}
                   </td>
-                  <td className="px-5 py-3 text-gray-600">{e.patient_phone}</td>
+                  <td className="px-5 py-3 text-gray-600">{formatBrazilianPhone(e.patient_phone)}</td>
                   <td className="px-5 py-3 text-gray-600">{e.notes ?? '—'}</td>
                   <td className="px-5 py-3">
                     <Select value={e.status} onValueChange={(v) => v && updateStatus(e.id, v as WaitlistStatus)}>
@@ -173,11 +174,12 @@ export function WaitlistClient({ initialEntries }: { initialEntries: WaitlistEnt
               />
             </div>
             <div>
-              <Label htmlFor="patient_phone">Telefone (E.164)</Label>
+              <Label htmlFor="patient_phone">Telefone com DDD</Label>
               <Input
                 id="patient_phone"
-                placeholder="+5511999999999"
-                value={form.patient_phone}
+                placeholder="(11) 99999-9999"
+                type="tel"
+                value={formatBrazilianPhone(form.patient_phone)}
                 onChange={(e) => setForm((f) => ({ ...f, patient_phone: e.target.value }))}
               />
             </div>

@@ -8,6 +8,7 @@ import type { AppointmentFormValues, CatalogProcedureOption } from './Appointmen
 import type { InsurerOption } from '@/components/billing/PatientInsurances'
 import type { Database } from '@/types/database'
 import type { BusyBlock } from '@/lib/google/reconcile'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 type Appointment = Database['public']['Tables']['appointments']['Row']
 
@@ -137,7 +138,7 @@ export function AgendaClient({
 
   return (
     <>
-      {error && <p className="mb-3 text-sm text-red-500">{error}</p>}
+      {error && <p className="mb-3 text-sm text-red-500">{friendlyErrorMessage(error, "Não foi possível salvar a alteração na agenda. Tente novamente.")}</p>}
       <CalendarView
         appointments={appointments}
         busyBlocks={busyBlocks}

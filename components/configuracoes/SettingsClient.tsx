@@ -13,6 +13,7 @@ import { GoogleConnectButton } from './GoogleConnectButton'
 import { MetaIntegrationsCard } from './MetaIntegrationsCard'
 import { WorkspaceCalendarMap, type WorkspaceCalendarRow } from './WorkspaceCalendarMap'
 import type { AdAccountMapRow } from './AdAccountMap'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 interface SettingsClientProps {
   initialProfile: {
@@ -166,7 +167,7 @@ export function SettingsClient({
             {saving ? 'Salvando...' : 'Salvar perfil'}
           </Button>
           {saved && <span className="text-xs text-green-600">Salvo com sucesso.</span>}
-          {error && <span className="text-xs text-red-600">{error}</span>}
+          {error && <span className="text-xs text-red-600">{friendlyErrorMessage(error, "Não foi possível salvar esta alteração. Tente novamente.")}</span>}
         </div>
       </div>
 

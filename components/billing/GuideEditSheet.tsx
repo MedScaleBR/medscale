@@ -12,6 +12,7 @@ import { GUIDE_TYPE_LABELS, MISSING_FIELD_LABELS, SETTINGS_FIELDS } from '@/lib/
 import type { GuidePayload, GuideStatus, MissingField } from '@/lib/billing/types'
 import type { TissGuideType } from '@/types/database'
 import { formatCents } from './money'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 export interface GuideRow {
   id: string
@@ -254,7 +255,7 @@ function GuideEditor({ guide, onSaved, onClose }: { guide: GuideRow; onSaved: (g
             />
           </div>
         </div>
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-red-600">{friendlyErrorMessage(error, "Não foi possível concluir esta ação de faturamento. Confira os dados e tente novamente.")}</p>}
       </div>
 
       {editable && (

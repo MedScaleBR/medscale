@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { SUPPORTED_TISS_VERSIONS, GUIDE_TYPE_LABELS } from '@/lib/billing/constants'
 import type { TissGuideType } from '@/types/database'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 export interface InsurerRow {
   id: string
@@ -223,7 +224,7 @@ function InsurerFormBody({
           <span className="text-sm text-gray-700">Ativa</span>
           <Switch checked={form.is_active} onCheckedChange={(v) => setForm((f) => ({ ...f, is_active: v }))} />
         </label>
-        {error && <p className="text-xs text-red-600">{error}</p>}
+        {error && <p className="text-xs text-red-600">{friendlyErrorMessage(error, "Não foi possível concluir esta ação de faturamento. Confira os dados e tente novamente.")}</p>}
       </div>
       <DialogFooter>
         <Button

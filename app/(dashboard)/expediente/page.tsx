@@ -9,14 +9,15 @@ export default async function ExpedientePage() {
   if (!session) return null
 
   const supabase = await createClient()
+  const workspaceIds = session.allWorkspaces.map((workspace) => workspace.id)
   const [{ data: rules }, { data: exceptions }] = await Promise.all([
     supabase
       .from('availability_rules')
       .select('*')
-      .eq('workspace_id', session.workspaceId)
+      .in('workspace_id', workspaceIds)
       .order('day_of_week')
       .order('start_time'),
-    supabase.from('availability_exceptions').select('*').eq('workspace_id', session.workspaceId).order('date'),
+    supabase.from('availability_exceptions').select('*').in('workspace_id', workspaceIds).order('date'),
   ])
 
   return (
@@ -31,7 +32,13 @@ export default async function ExpedientePage() {
       </div>
 
       <div className="rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
-        <AvailabilitySettings initialRules={rules ?? []} initialExceptions={exceptions ?? []} />
+        <AvailabilitySettings
+          key={session.accountId}
+          initialRules={rules ?? []}
+          initialExceptions={exceptions ?? []}
+          workspaces={session.allWorkspaces}
+          initialWorkspaceId={session.workspaceId}
+        />
       </div>
     </div>
   )

@@ -30,6 +30,8 @@ const SESSION = { userId: 'u1', accountId: 'acc1', workspaceId: 'w1', role: 'own
 
 function setup(config: SupabaseMockConfig = {}) {
   g.supabase = createSupabaseMock({
+    patients: { select: { data: { id: 'p1', full_name: 'Maria Silva', phone: '5511999990000' } } },
+    appointments: { select: { data: { id: 'appt-1', patient_id: 'p1', patient_name: 'Maria Silva', patient_phone: '5511999990000' } } },
     transcriptions: { insert: { data: { id: 't-nova' } }, select: { data: null } },
     ...config,
   })
@@ -213,7 +215,7 @@ describe('POST /api/transcriptions — criação do registro depois do upload', 
   })
 
   it('deve retornar 500 quando o insert falha, sem disparar o processamento', async () => {
-    const supabase = setup({
+    setup({
       transcriptions: { insert: { data: null, error: { message: 'violação de RLS' } }, select: { data: null } },
     })
     const res = await createTranscription(request('https://app.test/api/transcriptions', validBody))

@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 export interface AdAccountMapRow {
   id: string
@@ -88,7 +89,7 @@ export function AdAccountMap({ workspaces }: { workspaces: AdAccountMapRow[] }) 
         nos relatórios da unidade escolhida.
       </p>
 
-      {loadError && <p className="mt-3 text-xs text-red-500">{loadError}</p>}
+      {loadError && <p className="mt-3 text-xs text-red-500">{friendlyErrorMessage(loadError, "Não foi possível atualizar as contas de anúncio. Confira a conexão com a Meta e tente novamente.")}</p>}
       {loading && <p className="mt-3 text-xs text-gray-400">Carregando contas de anúncio…</p>}
 
       {!loading && (
@@ -118,7 +119,7 @@ export function AdAccountMap({ workspaces }: { workspaces: AdAccountMapRow[] }) 
                   </SelectContent>
                 </Select>
                 {savingId === w.id && <span className="text-xs text-gray-400">salvando…</span>}
-                {rowError[w.id] && <span className="text-xs text-red-500">{rowError[w.id]}</span>}
+                {rowError[w.id] && <span className="text-xs text-red-500">{friendlyErrorMessage(rowError[w.id], 'Não foi possível atualizar as contas de anúncio. Confira a conexão com a Meta e tente novamente.')}</span>}
               </div>
             )
           })}

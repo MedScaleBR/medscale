@@ -13,9 +13,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Plus, X } from 'lucide-react'
+import { toast } from 'sonner'
 import { useAnalyticsBase } from '@/lib/session/session-context'
 import { trackAvailabilityRulesSaved } from '@/lib/analytics/posthog'
 import type { Database } from '@/types/database'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 type AvailabilityRule = Database['public']['Tables']['availability_rules']['Row']
 type AvailabilityException = Database['public']['Tables']['availability_exceptions']['Row']
@@ -28,9 +30,12 @@ const DAY_ITEMS = Object.fromEntries(DAY_LABEL.map((label, i) => [String(i), lab
 interface AvailabilitySettingsProps {
   initialRules: AvailabilityRule[]
   initialExceptions: AvailabilityException[]
+  workspaces: Array<{ id: string; name: string }>
+  initialWorkspaceId: string
 }
 
-export function AvailabilitySettings({ initialRules, initialExceptions }: AvailabilitySettingsProps) {
+export function AvailabilitySettings({ initialRules, initialExceptions, workspaces, initialWorkspaceId }: AvailabilitySettingsProps) {
+  const [workspaceId, setWorkspaceId] = useState(initialWorkspaceId)
   const [rules, setRules] = useState(initialRules)
   const [exceptions, setExceptions] = useState(initialExceptions)
   const [ruleForm, setRuleForm] = useState({ day_of_week: '1', start_time: '08:00', end_time: '12:00', slot_duration: '30' })
@@ -38,11 +43,27 @@ export function AvailabilitySettings({ initialRules, initialExceptions }: Availa
   const [excForm, setExcForm] = useState({ date: '', reason: '' })
   const [savingExc, setSavingExc] = useState(false)
   const analyticsBase = useAnalyticsBase()
+  const workspaceItems = Object.fromEntries(workspaces.map((workspace) => [workspace.id, workspace.name]))
+  const workspaceName = workspaceItems[workspaceId]
+  const selectedRules = rules.filter((rule) => rule.workspace_id === workspaceId)
+  const selectedExceptions = exceptions.filter((exception) => exception.workspace_id === workspaceId)
+
+  async function availabilityRequest(url: string, options: RequestInit) {
+    const response = await fetch(url, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', 'x-workspace-id': workspaceId },
+    })
+    if (!response.ok) {
+      const body = await response.json().catch(() => null)
+      throw new Error(body?.error || 'Não foi possível salvar o expediente. Tente novamente.')
+    }
+    return response
+  }
 
   const addRule = async () => {
     setSavingRule(true)
     try {
-      const res = await fetch('/api/availability/rules', {
+      const res = await availabilityRequest('/api/availability/rules', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -58,24 +79,31 @@ export function AvailabilitySettings({ initialRules, initialExceptions }: Availa
         setRules(next.sort((a, b) => a.day_of_week - b.day_of_week || a.start_time.localeCompare(b.start_time)))
         trackAvailabilityRulesSaved({
           ...analyticsBase,
-          days_configured: new Set(next.map((r) => r.day_of_week)).size,
+          workspace_id: workspaceId,
+          days_configured: new Set(next.filter((r) => r.workspace_id === workspaceId).map((r) => r.day_of_week)).size,
         })
       }
+    } catch (error) {
+      toast.error(friendlyErrorMessage(error instanceof Error ? error.message : 'Não foi possível salvar o horário.', "Não foi possível atualizar a disponibilidade. Tente novamente."))
     } finally {
       setSavingRule(false)
     }
   }
 
   const removeRule = async (id: string) => {
-    setRules((prev) => prev.filter((r) => r.id !== id))
-    await fetch(`/api/availability/rules/${id}`, { method: 'DELETE' })
+    try {
+      await availabilityRequest(`/api/availability/rules/${id}`, { method: 'DELETE' })
+      setRules((prev) => prev.filter((r) => r.id !== id))
+    } catch (error) {
+      toast.error(friendlyErrorMessage(error instanceof Error ? error.message : 'Não foi possível excluir o horário.', "Não foi possível atualizar a disponibilidade. Tente novamente."))
+    }
   }
 
   const addException = async () => {
     if (!excForm.date) return
     setSavingExc(true)
     try {
-      const res = await fetch('/api/availability/exceptions', {
+      const res = await availabilityRequest('/api/availability/exceptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ date: excForm.date, type: 'blocked', reason: excForm.reason || null }),
@@ -85,18 +113,45 @@ export function AvailabilitySettings({ initialRules, initialExceptions }: Availa
         setExceptions((prev) => [...prev, created].sort((a, b) => a.date.localeCompare(b.date)))
         setExcForm({ date: '', reason: '' })
       }
+    } catch (error) {
+      toast.error(friendlyErrorMessage(error instanceof Error ? error.message : 'Não foi possível bloquear o dia.', "Não foi possível atualizar a disponibilidade. Tente novamente."))
     } finally {
       setSavingExc(false)
     }
   }
 
   const removeException = async (id: string) => {
-    setExceptions((prev) => prev.filter((e) => e.id !== id))
-    await fetch(`/api/availability/exceptions/${id}`, { method: 'DELETE' })
+    try {
+      await availabilityRequest(`/api/availability/exceptions/${id}`, { method: 'DELETE' })
+      setExceptions((prev) => prev.filter((e) => e.id !== id))
+    } catch (error) {
+      toast.error(friendlyErrorMessage(error instanceof Error ? error.message : 'Não foi possível remover o bloqueio.', "Não foi possível atualizar a disponibilidade. Tente novamente."))
+    }
   }
 
   return (
     <div className="space-y-6">
+      <div>
+        <Label htmlFor="availability-workspace">Local de atendimento</Label>
+        <Select
+          items={workspaceItems}
+          value={workspaceId}
+          onValueChange={(value) => value && setWorkspaceId(value)}
+          disabled={savingRule || savingExc}
+        >
+          <SelectTrigger id="availability-workspace" className="mt-2 w-full sm:w-72">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {workspaces.map((workspace) => (
+              <SelectItem key={workspace.id} value={workspace.id}>{workspace.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="mt-2 text-xs text-gray-400">
+          A Clara oferece os horários deste expediente quando o paciente escolhe este local.
+        </p>
+      </div>
       <div>
         <h3 className="text-sm font-medium text-gray-900">Horários de atendimento recorrentes</h3>
         <p className="mt-0.5 text-xs text-gray-400">
@@ -105,15 +160,15 @@ export function AvailabilitySettings({ initialRules, initialExceptions }: Availa
 
         <div className="mt-3 space-y-2">
           {DAY_LABEL.map((label, day) => {
-            const dayRules = rules.filter((r) => r.day_of_week === day)
+            const dayRules = selectedRules.filter((r) => r.day_of_week === day)
             if (dayRules.length === 0) return null
             return (
               <div key={day} className="flex flex-wrap items-center gap-2">
                 <span className="w-20 shrink-0 text-xs font-medium text-gray-500">{label}</span>
                 {dayRules.map((r) => (
                   <Badge key={r.id} className="gap-1.5 border-none bg-[var(--navy-06)] text-[var(--navy)]">
-                    {r.start_time.slice(0, 5)}–{r.end_time.slice(0, 5)} ({r.slot_duration}min)
-                    <button onClick={() => removeRule(r.id)} className="ml-0.5 hover:text-red-600">
+                    {workspaceName} · {r.start_time.slice(0, 5)}–{r.end_time.slice(0, 5)} ({r.slot_duration}min)
+                    <button aria-label={`Excluir horário de ${label} em ${workspaceName}`} onClick={() => removeRule(r.id)} className="ml-0.5 hover:text-red-600">
                       <X className="h-3 w-3" />
                     </button>
                   </Badge>
@@ -121,7 +176,7 @@ export function AvailabilitySettings({ initialRules, initialExceptions }: Availa
               </div>
             )
           })}
-          {rules.length === 0 && <p className="text-sm text-gray-400">Nenhum horário configurado ainda.</p>}
+          {selectedRules.length === 0 && <p className="text-sm text-gray-400">Nenhum horário configurado para este local.</p>}
         </div>
 
         <div className="mt-4 flex flex-wrap items-end gap-2">
@@ -188,16 +243,16 @@ export function AvailabilitySettings({ initialRules, initialExceptions }: Availa
         <p className="mt-0.5 text-xs text-gray-400">Feriados, férias ou qualquer dia sem atendimento.</p>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          {exceptions.map((e) => (
+          {selectedExceptions.map((e) => (
             <Badge key={e.id} className="gap-1.5 border-none bg-red-50 text-red-600">
               {new Date(`${e.date}T12:00:00`).toLocaleDateString('pt-BR')}
               {e.reason ? ` — ${e.reason}` : ''}
-              <button onClick={() => removeException(e.id)} className="ml-0.5 hover:text-red-800">
+              <button aria-label={`Remover bloqueio de ${e.date} em ${workspaceName}`} onClick={() => removeException(e.id)} className="ml-0.5 hover:text-red-800">
                 <X className="h-3 w-3" />
               </button>
             </Badge>
           ))}
-          {exceptions.length === 0 && <p className="text-sm text-gray-400">Nenhum dia bloqueado.</p>}
+          {selectedExceptions.length === 0 && <p className="text-sm text-gray-400">Nenhum dia bloqueado para este local.</p>}
         </div>
 
         <div className="mt-4 flex flex-wrap items-end gap-2">

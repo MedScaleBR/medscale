@@ -1,4 +1,5 @@
 'use client'
+import { formatBrazilianPhone } from '@/lib/phone'
 
 import { useState } from 'react'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -15,7 +16,9 @@ export function NewTranscriptionButton({ patients }: { patients: Patient[] }) {
   const [selected, setSelected] = useState<Patient | null>(null)
 
   const filtered = patients.filter(
-    (p) => p.full_name.toLowerCase().includes(search.toLowerCase()) || p.phone.includes(search)
+    (p) => p.full_name.toLowerCase().includes(search.toLowerCase()) ||
+      p.phone.includes(search.replace(/\D/g, '') || search) ||
+      formatBrazilianPhone(p.phone).includes(search)
   )
 
   const reset = () => {
@@ -57,7 +60,7 @@ export function NewTranscriptionButton({ patients }: { patients: Patient[] }) {
               </button>
               <div className="rounded-lg border border-[var(--navy-06)] bg-[var(--navy-06)]/20 p-3">
                 <p className="text-sm font-medium text-gray-900">{selected.full_name}</p>
-                <p className="text-xs text-gray-400">{selected.phone}</p>
+                <p className="text-xs text-gray-400">{formatBrazilianPhone(selected.phone)}</p>
               </div>
               <div className="flex justify-end">
                 <RecordingButton patientId={selected.id} onComplete={() => setOpen(false)} />
@@ -87,7 +90,7 @@ export function NewTranscriptionButton({ patients }: { patients: Patient[] }) {
                       className="flex w-full flex-col items-start gap-0.5 border-b border-[var(--navy-06)] px-3 py-2 text-left last:border-0 hover:bg-[var(--navy-06)]/40"
                     >
                       <span className="text-sm font-medium text-gray-900">{p.full_name}</span>
-                      <span className="text-xs text-gray-400">{p.phone}</span>
+                      <span className="text-xs text-gray-400">{formatBrazilianPhone(p.phone)}</span>
                     </button>
                   ))
                 )}

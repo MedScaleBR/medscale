@@ -12,6 +12,7 @@ import { Loader2, Archive, ArchiveRestore } from 'lucide-react'
 import { useAnalyticsBase } from '@/lib/session/session-context'
 import { trackTranscriptionSigned } from '@/lib/analytics/posthog'
 import type { Transcription } from '@/lib/transcriptions/types'
+import { transcriptionErrorMessage } from '@/lib/friendly-errors'
 
 const STATUS_MESSAGE: Record<string, string> = {
   pending: 'Na fila para transcrição...',
@@ -135,8 +136,8 @@ export function TranscriptionDetailClient({ initial }: { initial: Transcription 
         </div>
         <div className="space-y-4 rounded-xl border border-red-200 bg-red-50 p-6">
           <div>
-            <p className="text-sm font-medium text-red-800">Ocorreu um erro no processamento</p>
-            <p className="mt-1 text-sm text-red-700">{transcription.error_message ?? 'Erro desconhecido.'}</p>
+            <p className="text-sm font-medium text-red-800">Não foi possível processar esta consulta</p>
+            <p className="mt-1 text-sm text-red-700">{transcriptionErrorMessage(transcription.error_message)}</p>
           </div>
           <Button onClick={handleRetry} disabled={retrying} variant="destructive">
             {retrying ? 'Reprocessando...' : 'Tentar novamente'}
