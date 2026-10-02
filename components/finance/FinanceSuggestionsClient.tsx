@@ -9,6 +9,7 @@ import { FinanceSuggestionCard } from './FinanceSuggestionCard'
 import { monthLabel } from '@/lib/finance/summary'
 import type { Suggestion } from '@/lib/finance/suggestions'
 import type { FinanceEntryType } from '@/lib/finance/types'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 export function FinanceSuggestionsClient({
   periodMonth,
@@ -124,7 +125,7 @@ export function FinanceSuggestionsClient({
           </div>
         </div>
 
-        {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
+        {error && <p className="mt-2 text-sm text-red-600">{friendlyErrorMessage(error, "Não foi possível atualizar estas informações financeiras. Confira os dados e tente novamente.")}</p>}
 
         <div className="mt-3 flex justify-end">
           <Button onClick={saveTolerance} disabled={pending}>

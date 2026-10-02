@@ -15,6 +15,7 @@ import {
 import { cn } from '@/lib/utils'
 import { Mail, UserPlus, UserX } from 'lucide-react'
 import type { AccountPlan } from '@/types/database'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 const PLAN_OPTIONS: { value: AccountPlan; label: string }[] = [
   { value: 'essencial', label: 'Essencial' },
@@ -203,7 +204,7 @@ export function NewAccountForm() {
         />
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-sm text-red-500">{friendlyErrorMessage(error, "Não foi possível salvar esta alteração. Tente novamente.")}</p>}
 
       <Button
         onClick={handleSubmit}

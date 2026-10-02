@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 export interface WorkspaceCalendarRow {
   id: string
@@ -93,7 +94,7 @@ export function WorkspaceCalendarMap({ workspaces }: { workspaces: WorkspaceCale
         calendário escolhido; a disponibilidade é lida dele.
       </p>
 
-      {loadError && <p className="mt-3 text-xs text-red-500">{loadError}</p>}
+      {loadError && <p className="mt-3 text-xs text-red-500">{friendlyErrorMessage(loadError, "Não foi possível atualizar os calendários. Confira a conexão com o Google e tente novamente.")}</p>}
       {loading && <p className="mt-3 text-xs text-gray-400">Carregando calendários…</p>}
 
       {!loading && (
@@ -126,7 +127,7 @@ export function WorkspaceCalendarMap({ workspaces }: { workspaces: WorkspaceCale
                   </SelectContent>
                 </Select>
                 {savingId === w.id && <span className="text-xs text-gray-400">salvando…</span>}
-                {rowError[w.id] && <span className="text-xs text-red-500">{rowError[w.id]}</span>}
+                {rowError[w.id] && <span className="text-xs text-red-500">{friendlyErrorMessage(rowError[w.id], 'Não foi possível atualizar os calendários. Confira a conexão com o Google e tente novamente.')}</span>}
               </div>
             )
           })}

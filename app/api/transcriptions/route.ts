@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
+import { matchesAppointmentPatient, PATIENT_MISMATCH_MESSAGE } from '@/lib/transcriptions/patient-identity'
 
 // Finaliza uma transcrição depois que o browser já subiu o áudio direto pro
 // Storage via a signed upload URL emitida por /api/transcriptions/upload-url
@@ -29,6 +30,28 @@ export async function POST(req: NextRequest) {
   if (!patientId) return NextResponse.json({ error: 'patient_id é obrigatório' }, { status: 400 })
 
   const supabase = await createClient()
+
+  const { data: patient, error: patientError } = await supabase
+    .from('patients')
+    .select('id, full_name, phone')
+    .eq('id', patientId)
+    .eq('account_id', session.accountId)
+    .single()
+  if (patientError || !patient) return NextResponse.json({ error: 'Paciente não encontrado' }, { status: 404 })
+
+  if (appointmentId) {
+    const { data: appointment, error: appointmentError } = await supabase
+      .from('appointments')
+      .select('patient_id, patient_name, patient_phone')
+      .eq('id', appointmentId)
+      .eq('workspace_id', session.workspaceId)
+      .single()
+    if (appointmentError || !appointment) return NextResponse.json({ error: 'Consulta não encontrada' }, { status: 404 })
+    if ((appointment.patient_id && appointment.patient_id !== patientId)
+      || !matchesAppointmentPatient(patient, appointment)) {
+      return NextResponse.json({ error: PATIENT_MISMATCH_MESSAGE }, { status: 409 })
+    }
+  }
 
   const { data: transcription, error: insertError } = await supabase
     .from('transcriptions')

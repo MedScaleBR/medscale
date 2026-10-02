@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 interface ScheduleDialogProps {
   open: boolean
@@ -187,7 +188,7 @@ export function ScheduleDialog({
             )}
           </div>
 
-          {error && <p className="text-sm text-[var(--danger-text)]">{error}</p>}
+          {error && <p className="text-sm text-[var(--danger-text)]">{friendlyErrorMessage(error, "Não foi possível salvar esta alteração. Tente novamente.")}</p>}
         </div>
 
         <DialogFooter>

@@ -1,4 +1,5 @@
 'use client'
+import { formatBrazilianPhone } from '@/lib/phone'
 
 import { useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
@@ -87,7 +88,8 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
       if (!q) return true
       return (
         (c.patient_name ?? '').toLowerCase().includes(q) ||
-        (c.patient_phone ?? '').toLowerCase().includes(q)
+        (c.patient_phone ?? '').includes(q.replace(/\D/g, '') || q) ||
+        formatBrazilianPhone(c.patient_phone ?? '').includes(q)
       )
     })
     return sortConversations(list, sort)
@@ -151,7 +153,7 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
       ) : (
         <ul className="min-h-0 flex-1 overflow-y-auto">
           {visible.map((c) => {
-            const label = c.patient_name ?? c.patient_phone
+            const label = c.patient_name ?? formatBrazilianPhone(c.patient_phone)
             const pill = STATUS_PILL[c.status]
             return (
               <li key={c.id} className="border-b border-[var(--navy-06)] last:border-b-0">

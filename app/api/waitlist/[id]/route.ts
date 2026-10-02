@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { normalizeBrazilianPhone } from '@/lib/phone'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
 import type { Database } from '@/types/database'
@@ -15,6 +16,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const supabase = await createClient()
   const body = await req.json()
+  if ('patient_phone' in body) {
+    const phone = normalizeBrazilianPhone(body.patient_phone)
+    if (!phone) return NextResponse.json({ error: 'Informe um telefone válido com DDD.' }, { status: 400 })
+    body.patient_phone = phone
+  }
 
   // Allow-list — não repassar o corpo cru (account_id/workspace_id/patient_id
   // não devem ser alteráveis pelo cliente).

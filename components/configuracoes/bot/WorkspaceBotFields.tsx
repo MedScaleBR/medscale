@@ -14,6 +14,7 @@ import {
 } from '@/components/ui/select'
 import { HandoffHoursSettings } from './HandoffHoursSettings'
 import type { Database } from '@/types/database'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 type HandoffHour = Database['public']['Tables']['handoff_hours']['Row']
 
@@ -221,7 +222,7 @@ export function WorkspaceBotFields({
           />
         </div>
 
-        {error && <p className="text-sm text-red-500">{error}</p>}
+        {error && <p className="text-sm text-red-500">{friendlyErrorMessage(error, "Não foi possível salvar esta alteração. Tente novamente.")}</p>}
         <Button
           onClick={save}
           disabled={saving}

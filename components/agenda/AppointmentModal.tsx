@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatBrazilianPhone } from '@/lib/phone'
 import {
   Dialog,
   DialogContent,
@@ -108,6 +109,7 @@ export function AppointmentModal({
       <DialogContent className="sm:max-w-md">
         {open && (
           <AppointmentForm
+            key={initialValues?.id ?? 'new'}
             initialValues={initialValues}
             workspaces={workspaces ?? []}
             onSave={onSave}
@@ -269,11 +271,12 @@ function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenCh
             />
           </div>
           <div>
-            <Label htmlFor="patient_phone">Telefone (E.164)</Label>
+            <Label htmlFor="patient_phone">Telefone com DDD</Label>
             <Input
               id="patient_phone"
-              placeholder="+5511999999999"
-              value={values.patient_phone}
+              type="tel"
+              placeholder="(11) 99999-9999"
+              value={formatBrazilianPhone(values.patient_phone)}
               onChange={(e) => setValues((v) => ({ ...v, patient_phone: e.target.value }))}
             />
           </div>

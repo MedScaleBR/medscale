@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Mail } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Label } from '@/components/ui/label'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 export function ForgotPasswordForm() {
   const [email, setEmail] = useState('')
@@ -57,7 +58,7 @@ export function ForgotPasswordForm() {
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-sm text-red-500">{friendlyErrorMessage(error, "Não foi possível enviar o link para redefinir a senha. Tente novamente.")}</p>}
 
       <button
         type="submit"

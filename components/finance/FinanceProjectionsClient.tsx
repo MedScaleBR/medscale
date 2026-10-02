@@ -9,6 +9,7 @@ import { formatBRL } from '@/lib/finance/summary'
 import { projectedMonthlyExpense } from '@/lib/finance/goals'
 import type { CategoryNode, FinanceCategoryTree } from '@/lib/finance/categories'
 import type { FinanceEntry, FinanceEntryType, FinanceProjection } from '@/lib/finance/types'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 const rowKey = (categoryId: string, subcategoryId: string | null) => `${categoryId}:${subcategoryId ?? ''}`
 
@@ -115,7 +116,7 @@ export function FinanceProjectionsClient({
     if (res.ok) router.refresh()
     else {
       const j = await res.json().catch(() => ({}))
-      window.alert(j.error ?? 'Não foi possível salvar a projeção.')
+      window.alert(friendlyErrorMessage(j.error ?? 'Não foi possível salvar a projeção.', "Não foi possível atualizar estas informações financeiras. Confira os dados e tente novamente."))
     }
   }
 

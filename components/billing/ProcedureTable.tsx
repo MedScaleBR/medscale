@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { GUIDE_TYPE_LABELS } from '@/lib/billing/constants'
 import { formatCents, parseCents, centsToInput } from './money'
 import type { TissGuideType } from '@/types/database'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 export interface ProcedureRow {
   id: string
@@ -222,7 +223,7 @@ export function ProcedureTable({ insurerId }: { insurerId: string }) {
               <span className="text-sm text-gray-700">Ativo</span>
               <Switch checked={form.is_active} onCheckedChange={(v) => setForm((f) => ({ ...f, is_active: v }))} />
             </label>
-            {error && <p className="text-xs text-red-600">{error}</p>}
+            {error && <p className="text-xs text-red-600">{friendlyErrorMessage(error, "Não foi possível concluir esta ação de faturamento. Confira os dados e tente novamente.")}</p>}
           </div>
           <DialogFooter>
             <Button

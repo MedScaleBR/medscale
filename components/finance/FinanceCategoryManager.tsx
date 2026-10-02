@@ -25,6 +25,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 // Gerenciador CRUD da árvore de categorias/subcategorias do financeiro,
 // renderizado dentro da tela /finance. Recebe a árvore inicial (2 níveis, com
@@ -296,7 +297,7 @@ export function FinanceCategoryManager({
 
       {error && !dialog && (
         <div className="flex items-center justify-between gap-3 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-          <span>{error}</span>
+          <span>{friendlyErrorMessage(error, "Não foi possível atualizar estas informações financeiras. Confira os dados e tente novamente.")}</span>
           <button
             type="button"
             className="text-red-400 hover:text-red-600"
@@ -542,7 +543,7 @@ export function FinanceCategoryManager({
           />
           {error && (
             <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
-              {error}
+              {friendlyErrorMessage(error, "Não foi possível atualizar estas informações financeiras. Confira os dados e tente novamente.")}
             </p>
           )}
           <DialogFooter>

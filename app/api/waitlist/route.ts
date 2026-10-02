@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { normalizeBrazilianPhone } from '@/lib/phone'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
 
@@ -29,6 +30,8 @@ export async function POST(req: NextRequest) {
 
   const supabase = await createClient()
   const body = await req.json()
+  const phone = normalizeBrazilianPhone(body.patient_phone)
+  if (!phone) return NextResponse.json({ error: 'Informe um telefone válido com DDD.' }, { status: 400 })
   if (!body.patient_name || !body.patient_phone) {
     return NextResponse.json({ error: 'patient_name e patient_phone são obrigatórios' }, { status: 400 })
   }
@@ -40,7 +43,7 @@ export async function POST(req: NextRequest) {
       account_id: session.accountId,
       patient_id: body.patient_id ?? null,
       patient_name: body.patient_name,
-      patient_phone: body.patient_phone,
+      patient_phone: phone,
       doctor_id: session.userId,
       preferred_days: body.preferred_days ?? null,
       preferred_times: body.preferred_times ?? null,

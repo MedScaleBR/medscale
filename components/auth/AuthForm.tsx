@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Mail, Lock, User, Eye, EyeOff } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Label } from '@/components/ui/label'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 interface AuthFormProps {
   mode: 'login' | 'signup'
@@ -12,14 +13,8 @@ interface AuthFormProps {
   initialEmail?: string
 }
 
-const ERROR_MESSAGES: Record<string, string> = {
-  'Invalid login credentials': 'E-mail ou senha incorretos.',
-  'Email not confirmed': 'Confirme seu e-mail antes de entrar — verifique sua caixa de entrada.',
-  'User already registered': 'Já existe uma conta com este e-mail. Tente entrar.',
-}
-
 function translateError(message: string) {
-  return ERROR_MESSAGES[message] ?? message
+  return friendlyErrorMessage(message, 'Não foi possível acessar sua conta. Tente novamente.')
 }
 
 export function AuthForm({ mode, redirectTo = '/dashboard', initialEmail }: AuthFormProps) {
@@ -168,7 +163,7 @@ export function AuthForm({ mode, redirectTo = '/dashboard', initialEmail }: Auth
         {mode === 'signup' && <p className="mt-1 text-xs text-gray-400">Mínimo de 8 caracteres.</p>}
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-sm text-red-500">{friendlyErrorMessage(error, "Não foi possível acessar sua conta. Tente novamente.")}</p>}
 
       <button
         type="submit"

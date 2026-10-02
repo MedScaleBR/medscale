@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import type { FinanceEntryType, ReserveWithBalance } from '@/lib/finance/types'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 // Criar ou renomear uma caixinha. `kind` não é editável depois de criada —
 // mudar o lado PF/PJ moveria patrimônio com histórico de lugar.
@@ -82,7 +83,7 @@ export function FinanceReserveForm({
             </p>
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600">{friendlyErrorMessage(error, "Não foi possível atualizar estas informações financeiras. Confira os dados e tente novamente.")}</p>}
         </div>
 
         <DialogFooter>

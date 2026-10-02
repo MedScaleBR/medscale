@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 export interface ProviderWorkspace {
   id: string
@@ -95,7 +96,7 @@ function WorkspaceProvider({ workspace, showName }: { workspace: ProviderWorkspa
           {saving ? 'Salvando...' : 'Salvar dados da unidade'}
         </Button>
         {saved && <span className="text-xs text-green-600">Salvo.</span>}
-        {error && <span className="text-xs text-red-600">{error}</span>}
+        {error && <span className="text-xs text-red-600">{friendlyErrorMessage(error, "Não foi possível concluir esta ação de faturamento. Confira os dados e tente novamente.")}</span>}
       </div>
     </div>
   )

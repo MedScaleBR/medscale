@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 export function AcceptInviteButton({ token }: { token: string }) {
   const router = useRouter()
@@ -27,7 +28,7 @@ export function AcceptInviteButton({ token }: { token: string }) {
 
   return (
     <div className="space-y-3">
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-sm text-red-500">{friendlyErrorMessage(error, "Não foi possível aceitar o convite. Solicite um novo convite e tente novamente.")}</p>}
       <button
         onClick={handleAccept}
         disabled={loading}

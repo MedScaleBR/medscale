@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { RecordingButton } from './RecordingButton'
 import { Loader2 } from 'lucide-react'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 interface AppointmentRecordingEntryProps {
   appointmentId: string
@@ -11,26 +12,26 @@ interface AppointmentRecordingEntryProps {
   patientPhone: string
 }
 
-// Consultas criadas pela Agenda nem sempre têm patient_id vinculado (o
-// formulário guarda patient_name/patient_phone em texto livre) — resolve (ou
-// cria) o paciente correspondente por telefone antes de habilitar a gravação.
-export function AppointmentRecordingEntry({
+// Resolve e valida o paciente usando a consulta salva antes de habilitar a gravação.
+export function AppointmentRecordingEntry(props: AppointmentRecordingEntryProps) {
+  // A mudança de consulta/paciente descarta inclusive o gravador e requisições anteriores.
+  return <AppointmentPatientResolver key={JSON.stringify([props.appointmentId, props.patientId, props.patientName, props.patientPhone])} {...props} />
+}
+
+function AppointmentPatientResolver({
   appointmentId,
-  patientId,
   patientName,
   patientPhone,
 }: AppointmentRecordingEntryProps) {
-  const [resolvedId, setResolvedId] = useState(patientId)
+  const [resolvedId, setResolvedId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (resolvedId || !patientName || !patientPhone) return
-
     let cancelled = false
     fetch('/api/patients/find-or-create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ full_name: patientName, phone: patientPhone }),
+      body: JSON.stringify({ appointment_id: appointmentId }),
     })
       .then(async (res) => {
         if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error ?? 'Falha ao vincular paciente')
@@ -44,9 +45,9 @@ export function AppointmentRecordingEntry({
     return () => {
       cancelled = true
     }
-  }, [resolvedId, patientName, patientPhone])
+  }, [appointmentId, patientName, patientPhone])
 
-  if (error) return <p className="text-xs text-red-600">{error}</p>
+  if (error) return <p className="text-xs text-red-600">{friendlyErrorMessage(error, "Não foi possível vincular o paciente à consulta. Confira o cadastro e tente novamente.")}</p>
 
   if (!resolvedId) {
     return (

@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import { toast } from 'sonner'
+import { formatBrazilianPhone } from '@/lib/phone'
 import Link from 'next/link'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -15,6 +17,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { Plus, Search } from 'lucide-react'
 import type { Database } from '@/types/database'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 type Patient = Database['public']['Tables']['patients']['Row']
 
@@ -28,7 +31,8 @@ export function PatientsClient({ initialPatients }: { initialPatients: Patient[]
   const filtered = patients.filter(
     (p) =>
       p.full_name.toLowerCase().includes(search.toLowerCase()) ||
-      p.phone.includes(search)
+      p.phone.includes(search.replace(/\D/g, '') || search) ||
+      formatBrazilianPhone(p.phone).includes(search)
   )
 
   const handleCreate = async () => {
@@ -45,6 +49,9 @@ export function PatientsClient({ initialPatients }: { initialPatients: Patient[]
         setPatients((prev) => [created, ...prev])
         setForm({ full_name: '', phone: '', email: '' })
         setOpen(false)
+      } else {
+        const error = await res.json()
+        toast.error(friendlyErrorMessage(error.error ?? 'Não foi possível cadastrar o paciente.', "Não foi possível salvar o paciente. Confira os dados e tente novamente."))
       }
     } finally {
       setSaving(false)
@@ -95,7 +102,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: Patient[]
                       {p.full_name}
                     </Link>
                   </td>
-                  <td className="px-5 py-3 text-gray-600">{p.phone}</td>
+                  <td className="px-5 py-3 text-gray-600">{formatBrazilianPhone(p.phone)}</td>
                   <td className="px-5 py-3 text-gray-600">{p.email ?? '—'}</td>
                   <td className="px-5 py-3">
                     {p.tags.length > 0 ? (
@@ -123,7 +130,7 @@ export function PatientsClient({ initialPatients }: { initialPatients: Patient[]
                   {p.full_name}
                 </Link>
                 <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-gray-500">
-                  <span>{p.phone}</span>
+                  <span>{formatBrazilianPhone(p.phone)}</span>
                   {p.email && (
                     <>
                       <span aria-hidden>·</span>
@@ -162,11 +169,12 @@ export function PatientsClient({ initialPatients }: { initialPatients: Patient[]
               />
             </div>
             <div>
-              <Label htmlFor="phone">Telefone (E.164)</Label>
+              <Label htmlFor="phone">Telefone com DDD</Label>
               <Input
                 id="phone"
-                placeholder="+5511999999999"
-                value={form.phone}
+                type="tel"
+                placeholder="(11) 99999-9999"
+                value={formatBrazilianPhone(form.phone)}
                 onChange={(e) => setForm((f) => ({ ...f, phone: e.target.value }))}
               />
             </div>

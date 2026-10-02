@@ -11,6 +11,7 @@ import type { BatchStatus } from '@/lib/billing/types'
 import type { TissGuideType } from '@/types/database'
 import type { InsurerOption } from './PatientInsurances'
 import { formatCents } from './money'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 interface BatchRow {
   id: string
@@ -147,7 +148,7 @@ export function BatchesTable({ insurers }: { insurers: InsurerOption[] }) {
         </p>
         {message && (
           <p className={message.kind === 'ok' ? 'w-full text-xs text-green-600' : 'w-full text-xs text-red-600'}>
-            {message.text}
+            {message.kind === 'error' ? friendlyErrorMessage(message.text, "Não foi possível concluir esta ação com o lote. Confira os dados das guias e tente novamente.") : message.text}
           </p>
         )}
       </div>
@@ -193,7 +194,7 @@ export function BatchesTable({ insurers }: { insurers: InsurerOption[] }) {
                         <span className="block pt-1 text-xs text-gray-400">{formatDateTime(b.sent_at)}</span>
                       )}
                       {b.status === 'error' && b.error_message && (
-                        <p className="max-w-xs whitespace-pre-line pt-1 text-xs text-red-600">{b.error_message}</p>
+                        <p className="max-w-xs whitespace-pre-line pt-1 text-xs text-red-600">{friendlyErrorMessage(b.error_message, "Não foi possível concluir esta ação com o lote. Confira os dados das guias e tente novamente.")}</p>
                       )}
                     </td>
                     <td className="px-4 py-2.5 text-right">

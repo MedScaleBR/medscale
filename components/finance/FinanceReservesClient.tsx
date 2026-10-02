@@ -10,6 +10,7 @@ import { FinanceReserveForm } from './FinanceReserveForm'
 import { FinanceReserveMovementForm } from './FinanceReserveMovementForm'
 import { formatBRL } from '@/lib/finance/summary'
 import type { FinanceEntryType, ReserveWithBalance } from '@/lib/finance/types'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 export function FinanceReservesClient({ reserves }: { reserves: ReserveWithBalance[] }) {
   const router = useRouter()
@@ -40,7 +41,7 @@ export function FinanceReservesClient({ reserves }: { reserves: ReserveWithBalan
       return
     }
     const j = await res.json().catch(() => ({}))
-    window.alert(j.error ?? 'Não foi possível concluir.')
+    window.alert(friendlyErrorMessage(j.error ?? 'Não foi possível concluir.', "Não foi possível atualizar estas informações financeiras. Confira os dados e tente novamente."))
   }
 
   const archive = (r: ReserveWithBalance, archived: boolean) =>

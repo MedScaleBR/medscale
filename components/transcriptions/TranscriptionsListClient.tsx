@@ -149,7 +149,7 @@ export function TranscriptionsListClient({ rows }: { rows: Row[] }) {
                   </td>
                   <td className="px-5 py-3 text-gray-600">{r.doctorName}</td>
                   <td className="px-5 py-3 text-gray-600">
-                    {new Date(r.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+                    {new Date(r.createdAt).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' })}
                   </td>
                   <td className="px-5 py-3 text-gray-600">{formatDuration(r.durationSeconds)}</td>
                   <td className="px-5 py-3">

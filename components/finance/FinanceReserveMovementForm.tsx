@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { formatBRL } from '@/lib/finance/summary'
 import type { ReserveMovementType, ReserveWithBalance } from '@/lib/finance/types'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 const todayISO = () => new Date().toISOString().slice(0, 10)
 
@@ -100,7 +101,7 @@ export function FinanceReserveMovementForm({
             <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Ex.: sobra do mês" />
           </div>
 
-          {error && <p className="text-sm text-red-600">{error}</p>}
+          {error && <p className="text-sm text-red-600">{friendlyErrorMessage(error, "Não foi possível atualizar estas informações financeiras. Confira os dados e tente novamente.")}</p>}
         </div>
 
         <DialogFooter>

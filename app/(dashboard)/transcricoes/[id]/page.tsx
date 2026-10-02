@@ -38,7 +38,7 @@ export default async function TranscriptionDetailPage({ params }: { params: Prom
           </Link>
           <h1 className="mt-1 text-xl font-medium text-gray-900">{patient?.full_name ?? 'Paciente'}</h1>
           <p className="text-sm text-gray-400">
-            {new Date(row.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
+            {new Date(row.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' })}
           </p>
         </div>
         <TranscriptionStatusBadge status={row.status} />

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { normalizeBrazilianPhone } from '@/lib/phone'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
 import { createEvent, cancelEvent } from '@/lib/google/calendar'
 import { isGoogleConnected } from '@/lib/google/auth'
@@ -34,6 +35,9 @@ export async function POST(req: NextRequest) {
 
   const supabase = await createClient()
   const body = await req.json()
+  const phone = normalizeBrazilianPhone(body.patient_phone)
+  if (!phone) return NextResponse.json({ error: 'Informe um telefone válido com DDD.' }, { status: 400 })
+  body.patient_phone = phone
   if (!body.patient_name || !body.patient_phone || !body.scheduled_at) {
     return NextResponse.json(
       { error: 'patient_name, patient_phone e scheduled_at são obrigatórios' },

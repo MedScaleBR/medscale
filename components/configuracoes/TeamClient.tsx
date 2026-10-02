@@ -10,6 +10,7 @@ import { Mail, X, ChevronDown, ChevronUp, Bell } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { MODULE_NAV } from '@/components/layout/NavLinks'
 import type { MembershipRole, MembershipStatus, ModuleSlug } from '@/types/database'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 type Member = {
   id: string
@@ -156,7 +157,7 @@ export function TeamClient({
             {inviting ? 'Enviando...' : 'Convidar'}
           </Button>
         </form>
-        {error && <p className="mt-2 text-xs break-all text-red-500">{error}</p>}
+        {error && <p className="mt-2 text-xs break-all text-red-500">{friendlyErrorMessage(error, "Não foi possível atualizar a equipe. Confira os dados e tente novamente.")}</p>}
 
         {invites.length > 0 && (
           <ul className="mt-4 divide-y divide-[var(--navy-06)] border-t border-[var(--navy-06)]">

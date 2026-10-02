@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { normalizeBrazilianPhone } from '@/lib/phone'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession } from '@/lib/session/api'
 import type { Database } from '@/types/database'
@@ -35,6 +36,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const supabase = await createClient()
   const body = await req.json()
+  if ('phone' in body) {
+    const phone = normalizeBrazilianPhone(body.phone)
+    if (!phone) return NextResponse.json({ error: 'Informe um telefone válido com DDD.' }, { status: 400 })
+    body.phone = phone
+  }
 
   // Allow-list: nunca repassar o corpo cru para .update() — colunas como
   // account_id/created_by não devem ser alteráveis pelo cliente.

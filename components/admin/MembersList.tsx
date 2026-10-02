@@ -12,6 +12,7 @@ import {
 import { Mail, UserPlus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { MembershipRole, MembershipStatus } from '@/types/database'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 export interface MemberRow {
   id: string
@@ -100,7 +101,7 @@ export function MembersList({
       } else {
         setInvites((prev) => [{ id: data.invite.id, email: data.invite.email, role: data.invite.role, expired: false }, ...prev])
         if (!data.emailSent) {
-          setError('Convite criado, mas o e-mail não foi enviado (SMTP não configurado) — copie o link manualmente se precisar.')
+        setError('Convite criado, mas o e-mail não foi enviado. Copie o link do convite e compartilhe com a pessoa convidada.')
         }
       }
       setEmail('')
@@ -192,7 +193,7 @@ export function MembersList({
           MedScale. Se ela já for membro desta account, isso atualiza a permissão em vez de duplicar.
         </p>
       )}
-      {error && <p className="mt-2 text-xs text-red-500">{error}</p>}
+      {error && <p className="mt-2 text-xs text-red-500">{friendlyErrorMessage(error, "Não foi possível salvar esta alteração. Tente novamente.")}</p>}
       {successMessage && <p className="mt-2 text-xs text-green-600">{successMessage}</p>}
 
       {invites.length > 0 && (

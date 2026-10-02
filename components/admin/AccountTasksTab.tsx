@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import type { AccountTaskStatus } from '@/types/database'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 export interface TaskRow {
   id: string
@@ -197,7 +198,7 @@ export function AccountTasksTab({
             {saving ? 'Salvando...' : 'Criar tarefa'}
           </Button>
         </div>
-        {error && <p className="text-xs text-red-500">{error}</p>}
+        {error && <p className="text-xs text-red-500">{friendlyErrorMessage(error, "Não foi possível salvar esta alteração. Tente novamente.")}</p>}
       </form>
 
       {pending.length === 0 && done.length === 0 ? (

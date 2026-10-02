@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Lock } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { Label } from '@/components/ui/label'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 export function ResetPasswordForm() {
   const router = useRouter()
@@ -78,7 +79,7 @@ export function ResetPasswordForm() {
         </div>
       </div>
 
-      {error && <p className="text-sm text-red-500">{error}</p>}
+      {error && <p className="text-sm text-red-500">{friendlyErrorMessage(error, "Não foi possível atualizar sua senha. Solicite um novo link e tente novamente.")}</p>}
 
       <button
         type="submit"
