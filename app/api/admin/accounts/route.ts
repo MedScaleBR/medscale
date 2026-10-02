@@ -77,14 +77,9 @@ export async function POST(req: NextRequest) {
 
   if (accountError) return NextResponse.json({ error: accountError.message }, { status: 500 })
 
-  const { error: workspaceError } = await admin.from('workspaces').insert({
-    account_id: account.id,
-    name,
-    slug: slugify(name),
-    is_default: true,
-  })
-
-  if (workspaceError) return NextResponse.json({ error: workspaceError.message }, { status: 500 })
+  // A account nasce sem unidade nenhuma: criar uma com o nome da conta gerava
+  // "Dr. Fulano / unidade Dr. Fulano". O owner cadastra a primeira no primeiro
+  // acesso (/primeira-unidade) ou o admin cadastra em /admin/accounts/[id].
 
   if (assignDirectly && ownerProfileId) {
     const { data: membership, error: membershipError } = await admin

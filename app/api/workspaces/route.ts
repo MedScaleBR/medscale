@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { resolveActiveSession } from '@/lib/session/server'
+import { resolveActiveSession, resolveAccountWithoutWorkspace } from '@/lib/session/server'
 
 function slugify(text: string): string {
   return text
@@ -27,7 +27,11 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await resolveActiveSession()
+  // Sem nenhuma unidade ainda não há sessão ativa (ela exige uma workspace) —
+  // é justamente o caso da primeira unidade, cadastrada em /primeira-unidade.
+  const active = await resolveActiveSession()
+  const setup = active ? null : await resolveAccountWithoutWorkspace()
+  const session = active ?? setup
   if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (session.role !== 'owner' && session.role !== 'admin') {
     return NextResponse.json({ error: 'Apenas admins do account podem criar unidades.' }, { status: 403 })
@@ -49,6 +53,7 @@ export async function POST(req: NextRequest) {
       city: body.city ?? null,
       state: body.state ?? null,
       zip_code: body.zip_code ?? null,
+      is_default: setup !== null,
     })
     .select()
     .single()
