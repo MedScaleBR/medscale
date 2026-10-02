@@ -104,7 +104,7 @@ export function AccountTasksTab({
   }
 
   const toggleStatus = async (task: TaskRow) => {
-    const nextStatus: AccountTaskStatus = task.status === 'pending' ? 'done' : 'pending'
+    const nextStatus: AccountTaskStatus = task.status === 'done' ? 'todo' : 'done'
     setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t)))
     await fetch(`/api/admin/tasks/${task.id}`, {
       method: 'PATCH',
@@ -119,7 +119,7 @@ export function AccountTasksTab({
   }
 
   const pending = tasks
-    .filter((t) => t.status === 'pending')
+    .filter((t) => t.status !== 'done')
     .sort((a, b) => {
       if (!a.dueDate) return 1
       if (!b.dueDate) return -1

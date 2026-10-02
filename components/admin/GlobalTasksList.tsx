@@ -41,7 +41,7 @@ export interface AccountOption {
 }
 
 const STATUS_FILTER_ITEMS = {
-  pending: 'Pendentes',
+  open: 'Pendentes',
   done: 'Concluídas',
   all: 'Todas',
 }
@@ -61,7 +61,7 @@ export function GlobalTasksList({
   accounts: AccountOption[]
 }) {
   const [tasks, setTasks] = useState(initialTasks)
-  const [statusFilter, setStatusFilter] = useState<'pending' | 'done' | 'all'>('pending')
+  const [statusFilter, setStatusFilter] = useState<'open' | 'done' | 'all'>('open')
   const [assigneeFilter, setAssigneeFilter] = useState<string>('all')
   const [accountFilter, setAccountFilter] = useState<string>('all')
 
@@ -143,7 +143,7 @@ export function GlobalTasksList({
   }
 
   const toggleStatus = async (task: GlobalTaskRow) => {
-    const nextStatus: AccountTaskStatus = task.status === 'pending' ? 'done' : 'pending'
+    const nextStatus: AccountTaskStatus = task.status === 'done' ? 'todo' : 'done'
     setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t)))
     await fetch(`/api/admin/tasks/${task.id}`, {
       method: 'PATCH',
@@ -160,7 +160,7 @@ export function GlobalTasksList({
   const filtered = useMemo(() => {
     return tasks
       .filter((t) => {
-        if (statusFilter !== 'all' && t.status !== statusFilter) return false
+        if (statusFilter === 'open' ? t.status === 'done' : statusFilter !== 'all' && t.status !== statusFilter) return false
         if (assigneeFilter !== 'all' && t.assignedTo !== assigneeFilter) return false
         if (accountFilter === 'none' && t.accountId) return false
         if (accountFilter !== 'all' && accountFilter !== 'none' && t.accountId !== accountFilter) return false
@@ -242,13 +242,13 @@ export function GlobalTasksList({
         <Select
           items={STATUS_FILTER_ITEMS}
           value={statusFilter}
-          onValueChange={(v) => v && setStatusFilter(v as 'pending' | 'done' | 'all')}
+          onValueChange={(v) => v && setStatusFilter(v as 'open' | 'done' | 'all')}
         >
           <SelectTrigger className="h-9 w-40 text-xs">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="pending">Pendentes</SelectItem>
+            <SelectItem value="open">Pendentes</SelectItem>
             <SelectItem value="done">Concluídas</SelectItem>
             <SelectItem value="all">Todas</SelectItem>
           </SelectContent>

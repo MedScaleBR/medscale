@@ -61,7 +61,8 @@ export type TissGuideType = 'consulta' | 'sp_sadt'
 export type TissGuideStatus = 'draft' | 'ready' | 'batched' | 'sent' | 'cancelled'
 export type TissBatchStatus = 'generated' | 'sent' | 'error'
 export type AccountNoteType = 'note' | 'call' | 'email' | 'meeting'
-export type AccountTaskStatus = 'pending' | 'done'
+export type AccountTaskStatus = 'todo' | 'doing' | 'done'
+export type AccountTaskSourceType = 'cost_alert' | 'feedback'
 export type FeedbackStatus = 'new' | 'reviewed'
 export type FinanceEntryType = 'pf' | 'pj'
 
@@ -229,6 +230,9 @@ export interface Database {
           due_date: string | null
           assigned_to: string | null
           status: AccountTaskStatus
+          position: number
+          source_type: AccountTaskSourceType | null
+          source_ref: string | null
           created_by: string | null
           completed_at: string | null
           created_at: string

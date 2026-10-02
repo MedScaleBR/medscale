@@ -261,7 +261,15 @@ create table public.account_tasks (
   description   text,
   due_date      date,
   assigned_to   uuid references auth.users(id) on delete set null,
-  status        text not null default 'pending' check (status in ('pending','done')),
+  -- Kanban: todo (A fazer) → doing (Em andamento) → done (Concluídas).
+  -- "Entrada" não é status: é calculada (alertas de custo + feedbacks sem tarefa).
+  status        text not null default 'todo' check (status in ('todo','doing','done')),
+  -- Ordem do cartão dentro da coluna (double precision para inserir entre dois).
+  position      double precision not null default 0,
+  -- Origem da tarefa quando criada por "Virar tarefa": alerta de custo
+  -- (source_ref = "kind:accountId:YYYY-MM") ou feedback (source_ref = id).
+  source_type   text check (source_type in ('cost_alert','feedback')),
+  source_ref    text,
   created_by    uuid references auth.users(id) on delete set null,
   completed_at  timestamptz,
   created_at    timestamptz not null default now(),
@@ -1096,6 +1104,8 @@ create index idx_transcriptions_archived_at  on public.transcriptions(archived_a
 create index idx_account_notes_account       on public.account_notes(account_id, created_at desc);
 create index idx_account_tasks_account       on public.account_tasks(account_id, status);
 create index idx_account_tasks_assignee      on public.account_tasks(assigned_to, status, due_date);
+create index idx_account_tasks_board         on public.account_tasks(status, position);
+create unique index uq_account_tasks_source  on public.account_tasks(source_type, source_ref) where source_type is not null;
 create index idx_feedback_status             on public.feedback(status, created_at desc);
 create index idx_finance_entries_account     on public.finance_entries(account_id, entry_date desc);
 create index idx_finance_entries_type        on public.finance_entries(account_id, type);
