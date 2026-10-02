@@ -200,18 +200,32 @@ describe('validação de entrada', () => {
   const base = { name: 'Operadora Fictícia', ans_registry: '123456', provider_code: 'P1' }
 
   it('deve recusar registro ANS com 5 dígitos', () => {
-    const r = parseInsurerInput({ ...base, ans_registry: '12345' }, false)
+    const r = parseInsurerInput({ ...base, ans_registry: '12345' }, false, { tiss: true })
     expect(r).toEqual({ ok: false, error: 'Registro ANS deve ter exatamente 6 dígitos.' })
   })
 
   it('deve recusar mais de 100 guias por lote e dias fora de 0–6', () => {
-    expect(parseInsurerInput({ ...base, max_guides_per_batch: 101 }, false).ok).toBe(false)
-    expect(parseInsurerInput({ ...base, batch_weekdays: [7] }, false).ok).toBe(false)
-    expect(parseInsurerInput({ ...base, tiss_version: '3.05.00' }, false).ok).toBe(false)
+    expect(parseInsurerInput({ ...base, max_guides_per_batch: 101 }, false, { tiss: true }).ok).toBe(false)
+    expect(parseInsurerInput({ ...base, batch_weekdays: [7] }, false, { tiss: true }).ok).toBe(false)
+    expect(parseInsurerInput({ ...base, tiss_version: '3.05.00' }, false, { tiss: true }).ok).toBe(false)
+  })
+
+  it('sem o módulo billing aceita só nome e ativo, ignorando campos TISS', () => {
+    expect(parseInsurerInput({ name: ' Unimed ', ans_registry: '12', batch_hour: 99, is_active: true }, false, { tiss: false })).toEqual({
+      ok: true,
+      value: { name: 'Unimed', is_active: true },
+    })
+  })
+
+  it('com o módulo billing continua exigindo registro ANS no cadastro', () => {
+    expect(parseInsurerInput({ name: 'Unimed' }, false, { tiss: true })).toEqual({
+      ok: false,
+      error: 'Registro ANS deve ter exatamente 6 dígitos.',
+    })
   })
 
   it('PATCH parcial só valida o que veio', () => {
-    expect(parseInsurerInput({ batch_hour: 7 }, true)).toEqual({ ok: true, value: { batch_hour: 7 } })
+    expect(parseInsurerInput({ batch_hour: 7 }, true, { tiss: true })).toEqual({ ok: true, value: { batch_hour: 7 } })
   })
 
   it('valor do procedimento só em centavos inteiros', () => {

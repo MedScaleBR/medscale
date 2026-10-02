@@ -79,10 +79,23 @@ describe('acesso às rotas /api/billing', () => {
     expect(call.filters).toContainEqual(['eq', 'is_active', true])
   })
 
-  it('deve responder 403 com o módulo billing inativo na account', async () => {
-    setup({ accounts: { select: { data: { modules: ['agenda'] } } } })
-    expect((await listInsurers(req('/api/billing/insurers'))).status).toBe(403)
+  it('sem o módulo billing, guias dão 403 mas convênios continuam acessíveis', async () => {
+    setup({ accounts: { select: { data: { modules: ['agenda'] } } }, health_insurers: { select: { data: [] } } })
+    expect((await listInsurers(req('/api/billing/insurers'))).status).toBe(200)
     expect((await listGuides(req('/api/billing/guides'))).status).toBe(403)
+  })
+
+  it('sem o módulo billing, cadastra convênio só com o nome', async () => {
+    setup({
+      accounts: { select: { data: { modules: ['agenda'] } } },
+      health_insurers: { insert: { data: { id: 'ins1', name: 'Unimed' } } },
+    })
+
+    const res = await createInsurer(req('/api/billing/insurers', json({ name: 'Unimed', ans_registry: '12' })))
+
+    expect(res.status).toBe(201)
+    const [call] = g.supabase.callsTo('health_insurers', 'insert')
+    expect(call.payload).toEqual({ name: 'Unimed', account_id: 'acc1' })
   })
 
   it('member não pode cadastrar operadora', async () => {
