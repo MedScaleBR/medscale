@@ -1,65 +1,47 @@
 import { createClient } from '@/lib/supabase/server'
 import { getMedscaleAdmins } from '@/lib/admin/admins'
-import { getAdminQueue, saoPauloDate } from '@/lib/admin/queue'
-import { TaskBoard } from '@/components/admin/tasks/TaskBoard'
-import { inboxId, taskFromRow, type InboxCard, type PersonOption } from '@/components/admin/tasks/board-logic'
+import { GlobalTasksList, type GlobalTaskRow } from '@/components/admin/GlobalTasksList'
 
 export default async function AdminTasksPage() {
   const supabase = await createClient()
 
-  const [
-    {
-      data: { user },
-    },
-    { data: tasksRaw, error },
-    { data: accountsRaw },
-    admins,
-    queue,
-  ] = await Promise.all([
-    supabase.auth.getUser(),
-    // Todas as tarefas: o quadro mostra abertas + concluídas dos últimos 7 dias;
-    // o modo Lista também lista as concluídas antigas.
+  const [{ data: tasksRaw, error }, { data: accountsRaw }, admins] = await Promise.all([
     supabase
       .from('account_tasks')
-      .select(
-        'id, title, description, due_date, status, position, assigned_to, account_id, source_type, source_ref, completed_at, created_at, accounts(name)',
-      )
-      .order('position'),
+      .select('id, title, description, due_date, status, assigned_to, account_id, accounts(name)')
+      .order('created_at', { ascending: false }),
     supabase.from('accounts').select('id, name').order('name'),
     getMedscaleAdmins(),
-    getAdminQueue(supabase),
   ])
 
   if (error) console.error('Erro ao buscar account_tasks:', error.message)
 
-  const people: PersonOption[] = admins.map((a) => ({ id: a.id, name: a.full_name || null, email: a.email }))
+  const adminsById = new Map(admins.map((a) => [a.id, a]))
 
-  const tasks = (tasksRaw ?? []).map((t) => taskFromRow(t, { accountName: t.accounts?.name ?? null, people }))
-
-  // Entrada: alertas de custo e feedbacks sem tarefa, na ordem da fila.
-  const inbox: InboxCard[] = queue.items
-    .filter((i) => i.kind !== 'task' && i.ref && i.sourceType)
-    .map((i, order) => ({
-      id: inboxId(i.ref!),
-      ref: i.ref!,
-      sourceType: i.sourceType!,
-      title: i.title,
-      detail: (i.kind === 'alert' ? i.detail : i.message) ?? null,
-      accountId: i.accountId,
-      accountName: i.accountName,
-      age: i.age,
-      cost: i.cost ?? null,
-      order,
-    }))
+  const tasks: GlobalTaskRow[] = (tasksRaw ?? []).map((t) => ({
+    id: t.id,
+    title: t.title,
+    description: t.description,
+    dueDate: t.due_date,
+    status: t.status,
+    accountId: t.account_id,
+    accountName: t.accounts?.name ?? null,
+    assignedTo: t.assigned_to,
+    assigneeName: (t.assigned_to && adminsById.get(t.assigned_to)?.full_name) ?? null,
+  }))
 
   return (
-    <TaskBoard
-      initialTasks={tasks}
-      initialInbox={inbox}
-      admins={people}
-      accounts={accountsRaw ?? []}
-      currentUserId={user?.id ?? null}
-      today={saoPauloDate(new Date())}
-    />
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-medium text-gray-900">Tarefas</h1>
+        <p className="text-sm text-gray-400">Follow-ups de todas as accounts, e tarefas internas sem cliente atrelado</p>
+      </div>
+
+      <GlobalTasksList
+        tasks={tasks}
+        admins={admins.map((a) => ({ id: a.id, name: a.full_name || a.email || 'Admin' }))}
+        accounts={accountsRaw ?? []}
+      />
+    </div>
   )
 }

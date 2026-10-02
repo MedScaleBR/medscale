@@ -1,8 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AccountPlan, Database } from '@/types/database'
-import type { ProviderGroup } from '@/lib/costs/aggregate'
-import { getCostTotals } from '@/lib/admin/cost-alerts'
-import { OPEN_TASK_STATUSES, saoPauloDate } from '@/lib/admin/queue'
 
 export interface AdminTaskItem {
   id: string
@@ -21,26 +18,22 @@ export interface AdminDashboardStats {
   newLast90Days: number
   overdueTasks: AdminTaskItem[]
   upcomingTasks: AdminTaskItem[]
-  /** Custo variável dos últimos 30 dias, total e por grupo de provedor. */
-  cost30d: { total: number; byProvider: Record<ProviderGroup, number> }
 }
 
 export async function getAdminDashboardStats(supabase: SupabaseClient<Database>): Promise<AdminDashboardStats> {
   const now = new Date()
   const last30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
   const last90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
-  // due_date é dia de São Paulo; o slice do ISO em UTC viraria o dia às 21h.
-  const today = saoPauloDate(now)
+  const today = now.toISOString().slice(0, 10)
 
-  const [accountsRes, tasksRes, costTotals] = await Promise.all([
+  const [accountsRes, tasksRes] = await Promise.all([
     supabase.from('accounts').select('id, plan, is_active, created_at'),
     supabase
       .from('account_tasks')
       .select('id, title, due_date, account_id, accounts(name)')
-      .in('status', OPEN_TASK_STATUSES)
+      .eq('status', 'pending')
       .order('due_date', { ascending: true, nullsFirst: false })
       .limit(20),
-    getCostTotals(supabase, 30, now),
   ])
 
   const accounts = accountsRes.data ?? []
@@ -77,6 +70,5 @@ export async function getAdminDashboardStats(supabase: SupabaseClient<Database>)
     newLast90Days,
     overdueTasks,
     upcomingTasks,
-    cost30d: { total: costTotals.total, byProvider: costTotals.byGroup },
   }
 }

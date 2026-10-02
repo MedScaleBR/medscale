@@ -252,36 +252,3 @@ export function detectExpensiveAccountAlerts(rows: CostEventRow[]): CostAlert[] 
 
   return alerts.sort((a, b) => b.cost - a.cost)
 }
-
-// ============================================================
-// Agrupamento por provedor (cards e barras empilhadas do /admin)
-// ============================================================
-
-// O painel mostra três provedores, não cinco origens: o que a MedScale paga é
-// Anthropic, OpenAI e Meta. A divisão por agente continua em PROVIDER_LABELS
-// para o detalhe por cliente.
-export type ProviderGroup = 'claude' | 'whisper' | 'whatsapp'
-
-export const PROVIDER_GROUP: Record<CostProvider, ProviderGroup> = {
-  claude_agendamento: 'claude',
-  claude_financeiro: 'claude',
-  claude_soap: 'claude',
-  whisper: 'whisper',
-  whatsapp_conversation: 'whatsapp',
-}
-
-export const PROVIDER_GROUP_LABELS: Record<ProviderGroup, string> = {
-  claude: 'Claude',
-  whisper: 'Whisper',
-  whatsapp: 'WhatsApp',
-}
-
-export const PROVIDER_GROUP_ORDER: ProviderGroup[] = ['claude', 'whisper', 'whatsapp']
-
-export function groupByProviderGroup(byProvider: Record<CostProvider, number>): Record<ProviderGroup, number> {
-  const groups: Record<ProviderGroup, number> = { claude: 0, whisper: 0, whatsapp: 0 }
-  for (const provider of PROVIDER_ORDER) {
-    groups[PROVIDER_GROUP[provider]] += byProvider[provider] ?? 0
-  }
-  return groups
-}

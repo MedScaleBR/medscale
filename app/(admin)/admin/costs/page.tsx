@@ -1,68 +1,69 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
-import { CostAlertList } from '@/components/admin/CostAlertList'
-import { COST_PERIODS, getCostOverview, normalizeCostDays, percentChange } from '@/lib/admin/cost-alerts'
-import { getTaskedRefs } from '@/lib/admin/queue'
-import { PROVIDER_GROUP_LABELS, PROVIDER_GROUP_ORDER, type ProviderGroup } from '@/lib/costs/aggregate'
-import { formatBRL } from '@/lib/finance/summary'
+import { CostsChart } from '@/components/admin/CostsChart'
+import {
+  summarizeCosts,
+  detectLoopAlerts,
+  detectExpensiveAccountAlerts,
+  PROVIDER_LABELS,
+  PROVIDER_ORDER,
+  type CostEventRow,
+} from '@/lib/costs/aggregate'
 
 // Painel interno: quanto a MedScale gasta de custo variável (Claude, Whisper e
 // as janelas de WhatsApp que pagamos à Meta) para atender cada cliente. Não é
 // o que o cliente paga — é o que ele custa. O acesso é barrado pela policy de
 // RLS de cost_events (só is_medscale_admin lê) e pelo layout de /admin.
 
-const CARD = 'rounded-xl border border-[var(--navy-06)] bg-white shadow-[var(--shadow-sm)]'
+const PERIODS = [7, 30, 90] as const
+const DEFAULT_DAYS = 30
 
-// Só tokens da casa: navy escuro, cyan e navy translúcido.
-const GROUP_BAR: Record<ProviderGroup, string> = {
-  claude: 'bg-[var(--navy-dark)]',
-  whisper: 'bg-[var(--cyan)]',
-  whatsapp: 'bg-[var(--navy)]/20',
-}
+// Teto de segurança: o painel agrega em memória. Se algum dia bater neste
+// número, a agregação precisa virar SQL — não aumentar o limite.
+const MAX_EVENTS = 50_000
 
-const GROUP_CARD_LABEL: Record<ProviderGroup, string> = {
-  ...PROVIDER_GROUP_LABELS,
-  whatsapp: `${PROVIDER_GROUP_LABELS.whatsapp} (Meta)`,
-}
-
-function formatShare(fraction: number): string {
-  return `${Math.round(fraction * 100)}%`
-}
-
-function formatChange(change: number): string {
-  const rounded = Math.round(change)
-  return `${rounded > 0 ? '+' : ''}${rounded}%`
-}
+const brl = (v: number) => v.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
 export default async function AdminCostsPage({ searchParams }: { searchParams: Promise<{ days?: string }> }) {
   const { days: daysParam } = await searchParams
-  const days = normalizeCostDays(daysParam)
+  const days = PERIODS.includes(Number(daysParam) as (typeof PERIODS)[number]) ? Number(daysParam) : DEFAULT_DAYS
+  const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
 
   const supabase = await createClient()
-  const [overview, taskedRefs] = await Promise.all([getCostOverview(supabase, days), getTaskedRefs(supabase)])
 
-  const total = overview.summary.total
-  const change = overview.previous ? percentChange(total, overview.previous.total) : null
-  const maxAccountTotal = overview.accounts[0]?.total ?? 0
+  // Tudo sai de cost_events: os dois sinais de bot mal configurado são
+  // deriváveis do próprio custo, sem ler conversa nem telefone de paciente.
+  const { data: eventRows, error } = await supabase
+    .from('cost_events')
+    .select('provider, cost_brl, account_id, workspace_id, related_id, accounts(name), workspaces(name)')
+    .gte('created_at', since)
+    .limit(MAX_EVENTS)
+
+  if (error) console.error('Erro ao buscar custos:', error.message)
+
+  const events = (eventRows ?? []) as unknown as CostEventRow[]
+  const summary = summarizeCosts(events)
+  const alerts = [...detectLoopAlerts(events), ...detectExpensiveAccountAlerts(events)]
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-end justify-between gap-4">
+      <div className="flex items-end justify-between">
         <div>
           <h1 className="text-xl font-medium text-gray-900">Custos</h1>
           <p className="text-sm text-gray-400">
-            Custo variável da MedScale por cliente — Claude, Whisper e conversas de WhatsApp
+            Custo variável da MedScale por cliente — Claude, Whisper e conversas de WhatsApp que pagamos à Meta
           </p>
         </div>
-        <nav aria-label="Período" className={`${CARD} flex items-center gap-1 p-1`}>
-          {COST_PERIODS.map((p) => (
+        <nav className="flex items-center gap-1 text-xs">
+          {PERIODS.map((p) => (
             <Link
               key={p}
               href={`/admin/costs?days=${p}`}
-              aria-current={p === days ? 'page' : undefined}
-              className={`rounded-[10px] px-3 py-1.5 text-xs whitespace-nowrap outline-none focus-visible:ring-2 focus-visible:ring-[var(--cyan)] ${
-                p === days ? 'bg-[var(--navy-dark)] text-white' : 'text-gray-500 hover:text-gray-900'
-              }`}
+              className={
+                p === days
+                  ? 'rounded-md bg-[var(--navy-dark)] px-2.5 py-1.5 font-medium text-white'
+                  : 'rounded-md px-2.5 py-1.5 text-gray-400 hover:text-gray-900'
+              }
             >
               {p} dias
             </Link>
@@ -70,94 +71,86 @@ export default async function AdminCostsPage({ searchParams }: { searchParams: P
         </nav>
       </div>
 
-      {overview.error && <p className="text-xs text-red-500">Não foi possível carregar os custos do período.</p>}
-      {overview.truncated && (
-        <p className="text-xs text-gray-400">
-          O período tem mais eventos do que o painel consegue somar — os valores abaixo estão subestimados.
-        </p>
-      )}
-
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <div className={`${CARD} p-5`}>
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
+        <div className="rounded-xl border border-[var(--navy-06)] bg-white p-5 shadow-[var(--shadow-sm)]">
           <p className="text-xs text-gray-400">Total no período</p>
-          <p className="mt-1 text-2xl font-medium tracking-tight text-gray-900">{formatBRL(total)}</p>
-          {change !== null && (
-            <p className="mt-1 text-xs text-gray-400">
-              {formatChange(change)} vs. {days} dias anteriores
-            </p>
-          )}
+          <p className="mt-1 text-2xl font-medium text-gray-900">{brl(summary.total)}</p>
         </div>
-        {PROVIDER_GROUP_ORDER.map((group) => (
-          <div key={group} className={`${CARD} p-5`}>
-            <p className="text-xs text-gray-400">{GROUP_CARD_LABEL[group]}</p>
-            <p className="mt-1 text-2xl font-medium tracking-tight text-gray-900">
-              {formatBRL(overview.byGroup[group])}
-            </p>
-            {total > 0 && (
-              <p className="mt-1 text-xs text-gray-400">{formatShare(overview.byGroup[group] / total)} do total</p>
-            )}
+        {PROVIDER_ORDER.filter((p) => summary.byProvider[p] > 0).map((p) => (
+          <div key={p} className="rounded-xl border border-[var(--navy-06)] bg-white p-5 shadow-[var(--shadow-sm)]">
+            <p className="text-xs text-gray-400">{PROVIDER_LABELS[p]}</p>
+            <p className="mt-1 text-2xl font-medium text-gray-900">{brl(summary.byProvider[p])}</p>
           </div>
         ))}
       </div>
 
-      <CostAlertList alerts={overview.alerts} taskedRefs={taskedRefs} />
-
-      <section className={`${CARD} overflow-hidden`}>
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--navy-06)] px-5 py-3">
-          <h2 className="text-sm font-medium text-gray-900">Custo por cliente</h2>
-          <ul className="flex items-center gap-4" aria-label="Legenda">
-            {PROVIDER_GROUP_ORDER.map((group) => (
-              <li key={group} className="flex items-center gap-1.5 text-xs whitespace-nowrap text-gray-500">
-                <span aria-hidden className={`size-2 rounded-sm ${GROUP_BAR[group]}`} />
-                {PROVIDER_GROUP_LABELS[group]}
+      {alerts.length > 0 && (
+        <div className="overflow-hidden rounded-xl border border-amber-200 bg-amber-50">
+          <div className="border-b border-amber-200 px-5 py-3">
+            <h2 className="text-sm font-medium text-amber-900">Possível bot mal configurado</h2>
+            <p className="text-xs text-amber-700">
+              Conversas que giram sem fechar, ou cliente cuja conversa média sai cara demais — custo que não vira
+              agendamento
+            </p>
+          </div>
+          <ul className="divide-y divide-amber-200">
+            {alerts.map((a) => (
+              <li key={`${a.kind}-${a.accountId}`} className="flex items-center justify-between gap-4 px-5 py-3">
+                <p className="text-sm text-amber-900">
+                  <Link href={`/admin/accounts/${a.accountId}`} className="font-medium hover:underline">
+                    {a.accountName}
+                  </Link>
+                  {' — '}
+                  {a.detail}
+                </p>
+                {a.cost > 0 && <span className="shrink-0 text-sm text-amber-900">{brl(a.cost)}</span>}
               </li>
             ))}
           </ul>
         </div>
-        {overview.accounts.length === 0 ? (
+      )}
+
+      <CostsChart rows={summary.accounts.map((a) => ({ name: a.name, total: a.total }))} />
+
+      <div className="overflow-hidden rounded-xl border border-[var(--navy-06)] bg-white shadow-[var(--shadow-sm)]">
+        <div className="border-b border-[var(--navy-06)] px-5 py-3">
+          <h2 className="text-sm font-medium text-gray-900">Detalhe por cliente</h2>
+        </div>
+        {summary.accounts.length === 0 ? (
           <p className="py-12 text-center text-sm text-gray-400">Nenhum custo registrado no período.</p>
         ) : (
-          <div className="overflow-x-auto">
-            <ul className="min-w-[640px] divide-y divide-[var(--navy-06)]">
-              {overview.accounts.map((account) => (
-                <li key={account.accountId} className="flex items-center gap-4 px-5 py-2.5">
+          <ul className="divide-y divide-[var(--navy-06)]">
+            {summary.accounts.map((account) => (
+              <li key={account.accountId} className="px-5 py-4">
+                <div className="flex items-center justify-between gap-4">
                   <Link
                     href={`/admin/accounts/${account.accountId}`}
-                    className="w-48 shrink-0 truncate text-sm text-gray-900 hover:text-[var(--cyan-dark)]"
-                    title={account.name}
+                    className="text-sm font-medium text-gray-900 hover:text-[var(--cyan-dark)]"
                   >
                     {account.name}
                   </Link>
-                  <div
-                    className="flex h-3 min-w-0 flex-1"
-                    role="img"
-                    aria-label={PROVIDER_GROUP_ORDER.map(
-                      (g) => `${PROVIDER_GROUP_LABELS[g]}: ${formatBRL(account.byGroup[g])}`,
-                    ).join(', ')}
-                  >
-                    {maxAccountTotal > 0 &&
-                      PROVIDER_GROUP_ORDER.map((group) =>
-                        account.byGroup[group] > 0 ? (
-                          <span
-                            key={group}
-                            className={`h-full first:rounded-l-sm last:rounded-r-sm ${GROUP_BAR[group]}`}
-                            style={{ width: `${(account.byGroup[group] / maxAccountTotal) * 100}%` }}
-                          />
-                        ) : null,
-                      )}
-                  </div>
-                  <span className="w-28 shrink-0 text-right text-sm whitespace-nowrap text-gray-900">
-                    {formatBRL(account.total)}
-                  </span>
-                  <span className="w-12 shrink-0 text-right text-xs whitespace-nowrap text-gray-400">
-                    {formatShare(account.share)}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          </div>
+                  <span className="text-sm font-medium text-gray-900">{brl(account.total)}</span>
+                </div>
+                <p className="mt-1 text-xs text-gray-400">
+                  {PROVIDER_ORDER.filter((p) => account.byProvider[p] > 0)
+                    .map((p) => `${PROVIDER_LABELS[p]}: ${brl(account.byProvider[p])}`)
+                    .join(' · ')}
+                </p>
+                {account.units.length > 1 && (
+                  <ul className="mt-2 space-y-1">
+                    {account.units.map((unit) => (
+                      <li key={unit.workspaceId ?? 'none'} className="flex justify-between text-xs text-gray-400">
+                        <span>{unit.name}</span>
+                        <span>{brl(unit.total)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
-      </section>
+      </div>
     </div>
   )
 }

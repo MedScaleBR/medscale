@@ -86,7 +86,7 @@ export function AccountActivityTab({
   }
 
   return (
-    <div className="rounded-xl border border-[var(--navy-06)] bg-white p-5 shadow-[var(--shadow-sm)]">
+    <div className="rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
       <h2 className="text-sm font-medium text-gray-900">Atividade</h2>
 
       <form onSubmit={submit} className="mt-4 space-y-2">
@@ -113,7 +113,7 @@ export function AccountActivityTab({
           <Button
             type="submit"
             disabled={saving || !body.trim()}
-            className="h-9 rounded-[10px] bg-[var(--cyan)] px-4 text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
+            className="bg-[var(--cyan)] text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
           >
             {saving ? 'Salvando...' : 'Registrar'}
           </Button>
@@ -139,12 +139,7 @@ export function AccountActivityTab({
                     </p>
                     <div className="flex items-center gap-2">
                       <span className="text-xs text-gray-400">{new Date(n.createdAt).toLocaleString('pt-BR')}</span>
-                      <button
-                        type="button"
-                        onClick={() => removeNote(n.id)}
-                        aria-label="Remover registro"
-                        className="rounded text-gray-300 outline-none hover:text-red-500 focus-visible:ring-2 focus-visible:ring-[var(--cyan)]"
-                      >
+                      <button onClick={() => removeNote(n.id)} className="text-gray-300 hover:text-red-500">
                         <X className="h-3.5 w-3.5" />
                       </button>
                     </div>

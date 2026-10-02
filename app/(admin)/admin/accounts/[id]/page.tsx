@@ -3,35 +3,16 @@ import { notFound } from 'next/navigation'
 import { ArrowLeft, MapPin } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getMedscaleAdmins } from '@/lib/admin/admins'
-import { MAX_EVENTS } from '@/lib/admin/cost-alerts'
-import { sumCost } from '@/lib/admin/accounts'
-import { formatDateBR, initialsFrom } from '@/lib/admin/format'
-import { OPEN_TASK_STATUSES, isOverdue, saoPauloDate } from '@/lib/admin/queue'
 import { AccountDetailForm } from '@/components/admin/AccountDetailForm'
 import { MembersList, type MemberRow, type PendingInvite } from '@/components/admin/MembersList'
 import { AccountActivityTab, type NoteRow } from '@/components/admin/AccountActivityTab'
 import { AccountTasksTab, type TaskRow } from '@/components/admin/AccountTasksTab'
-import { AccountTabs } from '@/components/admin/account/AccountTabs'
-import { AccountSidebar, type SidebarTask } from '@/components/admin/account/AccountSidebar'
-import { PlanBadge, StatusBadge } from '@/components/admin/account/AccountBadges'
-import { buttonVariants } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
-import type { AccountNoteType, ModuleSlug } from '@/types/database'
-
-const NOTE_TYPE_LABEL: Record<AccountNoteType, string> = {
-  note: 'Nota',
-  call: 'Ligação',
-  email: 'E-mail',
-  meeting: 'Reunião',
-}
-
-const DAY_MS = 24 * 60 * 60 * 1000
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import type { ModuleSlug } from '@/types/database'
 
 export default async function AdminAccountDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
-  const now = new Date()
-  const since30d = new Date(now.getTime() - 30 * DAY_MS).toISOString()
 
   const [
     {
@@ -43,8 +24,6 @@ export default async function AdminAccountDetailPage({ params }: { params: Promi
     { data: notesRaw, error: notesError },
     { data: tasksRaw, error: tasksError },
     admins,
-    { count: workspacesCount, error: workspacesError },
-    { data: costRows, error: costError },
   ] = await Promise.all([
     supabase.auth.getUser(),
     supabase.from('accounts').select('*').eq('id', id).single(),
@@ -70,13 +49,6 @@ export default async function AdminAccountDetailPage({ params }: { params: Promi
       .eq('account_id', id)
       .order('created_at', { ascending: false }),
     getMedscaleAdmins(),
-    supabase.from('workspaces').select('id', { count: 'exact', head: true }).eq('account_id', id),
-    supabase
-      .from('cost_events')
-      .select('cost_brl')
-      .eq('account_id', id)
-      .gte('created_at', since30d)
-      .limit(MAX_EVENTS),
   ])
 
   if (membershipsError) console.error('Erro ao buscar memberships:', membershipsError.message)
@@ -143,111 +115,53 @@ export default async function AdminAccountDetailPage({ params }: { params: Promi
   const adminOptions = admins.map((a) => ({ id: a.id, name: a.full_name || a.email || 'Admin' }))
   const currentAdminName = (user && profilesById.get(user.id)?.full_name) || user?.email || 'Admin'
 
-  // Resumo lateral
-  const today = saoPauloDate(now)
-  const openTasks = tasks
-    .filter((t) => OPEN_TASK_STATUSES.includes(t.status))
-    .sort((a, b) => {
-      if (!a.dueDate) return 1
-      if (!b.dueDate) return -1
-      return a.dueDate.localeCompare(b.dueDate)
-    })
-  const sidebarTasks: SidebarTask[] = openTasks.slice(0, 3).map((t) => ({
-    id: t.id,
-    title: t.title,
-    dueDate: t.dueDate,
-    overdue: isOverdue(t.dueDate, today),
-    assigneeName: t.assigneeName,
-  }))
-
-  const owner = members.find((m) => m.role === 'owner' && m.status === 'active') ?? members.find((m) => m.role === 'owner')
-  const ownerInvite = pendingInvites.find((i) => i.role === 'owner' && !i.expired)
-  const ownerName = owner
-    ? owner.userName !== 'Sem nome'
-      ? owner.userName
-      : owner.userEmail
-    : ownerInvite
-      ? `${ownerInvite.email} (convite pendente)`
-      : null
-  const costList = costRows ?? []
-  const lastNote = notes[0]
-
   return (
-    <div className="space-y-6">
+    <div className="max-w-2xl space-y-6">
       <div>
-        <Link
-          href="/admin/accounts"
-          className="mb-3 inline-flex items-center gap-1 rounded text-xs text-gray-400 outline-none hover:text-gray-600 focus-visible:ring-2 focus-visible:ring-[var(--cyan)]"
-        >
+        <Link href="/admin/accounts" className="mb-2 flex items-center gap-1 text-xs text-gray-400 hover:text-gray-600">
           <ArrowLeft className="h-3.5 w-3.5" />
           Accounts
         </Link>
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div className="flex min-w-0 items-center gap-3">
-            <span
-              aria-hidden="true"
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[var(--cyan-10)] text-sm font-medium text-[var(--cyan-dark)]"
-            >
-              {initialsFrom(account.name)}
-            </span>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl font-medium text-gray-900">{account.name}</h1>
-                <StatusBadge active={account.is_active} />
-                <PlanBadge plan={account.plan} />
-              </div>
-              <p className="text-sm text-gray-400">
-                {account.slug} · criada em {formatDateBR(account.created_at)}
-              </p>
-            </div>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-medium text-gray-900">{account.name}</h1>
+            <p className="text-sm text-gray-400">{account.slug}</p>
           </div>
           <Link
             href={`/admin/accounts/${id}/workspaces`}
-            className={cn(buttonVariants({ variant: 'outline', size: 'lg' }), 'gap-1.5 rounded-[10px] bg-white px-3.5')}
+            className="flex items-center gap-1.5 rounded-lg border border-[var(--navy-06)] bg-white px-3 py-2 text-xs font-medium text-gray-700 hover:border-[var(--cyan)]"
           >
-            <MapPin className="h-4 w-4" />
+            <MapPin className="h-3.5 w-3.5" />
             Gerenciar unidades
           </Link>
         </div>
       </div>
 
-      <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
-        <AccountTabs
-          activityCount={notes.length}
-          openTasksCount={openTasks.length}
-          plan={
-            <>
-              <AccountDetailForm
-                accountId={id}
-                initialPlan={account.plan}
-                initialModules={account.modules as ModuleSlug[]}
-                initialIsActive={account.is_active}
-              />
-              <MembersList accountId={id} initialMembers={members} initialInvites={pendingInvites} />
-            </>
-          }
-          activity={<AccountActivityTab accountId={id} initialNotes={notes} currentAdminName={currentAdminName} />}
-          tasks={<AccountTasksTab accountId={id} initialTasks={tasks} admins={adminOptions} />}
-        />
+      <Tabs defaultValue="plan">
+        <TabsList>
+          <TabsTrigger value="plan">Plano e membros</TabsTrigger>
+          <TabsTrigger value="activity">Atividade</TabsTrigger>
+          <TabsTrigger value="tasks">Tarefas</TabsTrigger>
+        </TabsList>
 
-        <AccountSidebar
-          ownerName={ownerName}
-          workspacesCount={workspacesError ? null : (workspacesCount ?? 0)}
-          cost30d={costError ? null : sumCost(costList)}
-          costTruncated={costList.length >= MAX_EVENTS}
-          openTasks={sidebarTasks}
-          lastActivity={
-            lastNote
-              ? {
-                  typeLabel: NOTE_TYPE_LABEL[lastNote.type] ?? 'Nota',
-                  body: lastNote.body,
-                  authorName: lastNote.authorName,
-                  createdAt: lastNote.createdAt,
-                }
-              : null
-          }
-        />
-      </div>
+        <TabsContent value="plan" className="mt-4 space-y-6">
+          <AccountDetailForm
+            accountId={id}
+            initialPlan={account.plan}
+            initialModules={account.modules as ModuleSlug[]}
+            initialIsActive={account.is_active}
+          />
+          <MembersList accountId={id} initialMembers={members} initialInvites={pendingInvites} />
+        </TabsContent>
+
+        <TabsContent value="activity" className="mt-4">
+          <AccountActivityTab accountId={id} initialNotes={notes} currentAdminName={currentAdminName} />
+        </TabsContent>
+
+        <TabsContent value="tasks" className="mt-4">
+          <AccountTasksTab accountId={id} initialTasks={tasks} admins={adminOptions} />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

@@ -1,80 +1,44 @@
-import Link from 'next/link'
-import { Building2, CircleCheck, TrendingUp, Users } from 'lucide-react'
+import { Building2, CheckCircle2, TrendingUp, Users } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
 import { getAdminDashboardStats } from '@/lib/admin/dashboard'
-import { getAdminQueue } from '@/lib/admin/queue'
-import { PROVIDER_GROUP_LABELS, PROVIDER_GROUP_ORDER } from '@/lib/costs/aggregate'
-import { formatBRL } from '@/lib/finance/summary'
 import { KpiCard } from '@/components/dashboard/KpiCard'
-import { QueueList } from '@/components/admin/QueueList'
-import { PlanSummary } from '@/components/admin/PlanSummary'
+import { TasksWidget } from '@/components/admin/TasksWidget'
+import { Badge } from '@/components/ui/badge'
 
-function share(part: number, total: number): number {
-  return total > 0 ? Math.round((part / total) * 100) : 0
-}
+const PLAN_LABEL: Record<string, string> = { essencial: 'Essencial', avancado: 'Avançado', premium: 'Premium' }
 
 export default async function AdminDashboardPage() {
   const supabase = await createClient()
-  const [stats, queue] = await Promise.all([getAdminDashboardStats(supabase), getAdminQueue(supabase)])
-
-  const total = stats.totalAccounts
-  const cost = stats.cost30d
-  const costSplit = PROVIDER_GROUP_ORDER.map(
-    (g) => `${PROVIDER_GROUP_LABELS[g]} ${share(cost.byProvider[g] ?? 0, cost.total)}%`,
-  ).join(' · ')
+  const stats = await getAdminDashboardStats(supabase)
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-xl font-medium text-gray-900">Dashboard</h1>
-        <p className="text-sm text-gray-400">Sua fila de trabalho de hoje</p>
+        <p className="text-sm text-gray-400">Visão geral das accounts da MedScale</p>
       </div>
 
-      <div className="grid items-start gap-4 lg:grid-cols-[2fr_1fr]">
-        <QueueList items={queue.items} />
+      <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
+        <KpiCard label="Total de accounts" value={stats.totalAccounts} icon={Building2} />
+        <KpiCard label="Accounts ativas" value={stats.activeAccounts} icon={CheckCircle2} barColor="green" />
+        <KpiCard label="Novas (30 dias)" value={stats.newLast30Days} icon={TrendingUp} />
+        <KpiCard label="Novas (90 dias)" value={stats.newLast90Days} icon={Users} />
+      </div>
 
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <KpiCard label="Total de accounts" value={total} icon={Building2} barWidth={total > 0 ? 100 : 0} />
-            <KpiCard
-              label="Accounts ativas"
-              value={stats.activeAccounts}
-              icon={CircleCheck}
-              barColor="green"
-              barWidth={share(stats.activeAccounts, total)}
-            />
-            <KpiCard
-              label="Novas (30 dias)"
-              value={stats.newLast30Days}
-              icon={TrendingUp}
-              barWidth={share(stats.newLast30Days, total)}
-            />
-            <KpiCard
-              label="Novas (90 dias)"
-              value={stats.newLast90Days}
-              icon={Users}
-              barWidth={share(stats.newLast90Days, total)}
-            />
-          </div>
-
-          <PlanSummary byPlan={stats.byPlan} />
-
-          <div className="rounded-xl border border-[var(--navy-06)] bg-white p-5 shadow-[var(--shadow-sm)]">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-medium text-gray-900">Custo 30 dias</h2>
-              <Link
-                href="/admin/costs"
-                className="rounded-[10px] text-xs text-[var(--cyan-dark)] outline-none hover:underline focus-visible:ring-2 focus-visible:ring-[var(--cyan)]"
-              >
-                Custos
-              </Link>
-            </div>
-            <p className="mt-3 text-2xl font-medium tracking-tight text-gray-900">{formatBRL(cost.total)}</p>
-            <p className="mt-1 text-xs text-gray-400">
-              {cost.total > 0 ? costSplit : 'Sem custos nos últimos 30 dias'}
-            </p>
-          </div>
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="rounded-xl border border-[var(--navy-06)] bg-white p-5 shadow-[var(--shadow-sm)]">
+          <h2 className="text-sm font-medium text-gray-900">Accounts por plano</h2>
+          <ul className="mt-3 space-y-2">
+            {(Object.entries(stats.byPlan) as [string, number][]).map(([plan, count]) => (
+              <li key={plan} className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">{PLAN_LABEL[plan] ?? plan}</span>
+                <Badge className="border-none bg-[var(--navy-06)] text-gray-700">{count}</Badge>
+              </li>
+            ))}
+          </ul>
         </div>
+
+        <TasksWidget overdue={stats.overdueTasks} upcoming={stats.upcomingTasks} />
       </div>
     </div>
   )
