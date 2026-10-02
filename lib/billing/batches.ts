@@ -5,6 +5,7 @@ import { trackBillingBatchGenerated } from '@/lib/analytics/posthog-server'
 import type { BatchGuide, GuidePayload, GuideType, TissVersionModule } from './types'
 import type { Database } from '@/types/database'
 import { TISS_BUCKET, type TissStorage } from './storage'
+import type { TissIdentity } from './insurer'
 
 type BillingClient = SupabaseClient<Database>
 type InsurerRow = Database['public']['Tables']['health_insurers']['Row']
@@ -52,7 +53,7 @@ interface CreateOptions {
 // do client autenticado que lê e altera o banco.
 export async function createBatchesForInsurer(
   supabase: BillingClient,
-  insurer: Pick<InsurerRow, 'id' | 'account_id' | 'ans_registry' | 'provider_code' | 'tiss_version' | 'max_guides_per_batch'>,
+  insurer: Pick<InsurerRow, 'id' | 'account_id' | 'tiss_version' | 'max_guides_per_batch'> & TissIdentity,
   options: CreateOptions,
 ): Promise<BatchResult[]> {
   const versions = options.versions ?? TISS_VERSIONS
@@ -88,7 +89,7 @@ export async function createBatchesForInsurer(
 
 async function createOneBatch(
   supabase: BillingClient,
-  insurer: Pick<InsurerRow, 'id' | 'account_id' | 'ans_registry' | 'provider_code'>,
+  insurer: Pick<InsurerRow, 'id' | 'account_id'> & TissIdentity,
   tiss: TissVersionModule,
   guides: Array<BatchGuide & { total_cents: number; updated_at: string }>,
   options: CreateOptions,

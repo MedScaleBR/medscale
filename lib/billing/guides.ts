@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { trackBillingGuideCreated } from '@/lib/analytics/posthog-server'
 import { BILLING_TZ, BRAZIL_UFS } from './constants'
 import type { GuidePayload, GuideStatus, GuideType, MissingField } from './types'
+import { hasTissIdentity, type TissIdentity } from './insurer'
 import type { Database } from '@/types/database'
 
 type BillingClient = SupabaseClient<Database>
@@ -17,7 +18,7 @@ type ProcedureRow = Database['public']['Tables']['insurer_procedures']['Row']
 // para o snapshot ser uma função pura (testável sem banco).
 export interface GuideSources {
   appointment: Pick<AppointmentRow, 'scheduled_at' | 'type' | 'patient_name' | 'authorization_number' | 'authorization_date'>
-  insurer: Pick<InsurerRow, 'ans_registry' | 'provider_code' | 'tiss_version' | 'default_consult_guide'>
+  insurer: Pick<InsurerRow, 'tiss_version' | 'default_consult_guide'> & TissIdentity
   procedure: Pick<ProcedureRow, 'tuss_code' | 'description' | 'price_cents' | 'guide_type'> | null
   patientInsurance: { card_number: string; valid_until: string | null } | null
   patientName: string | null
@@ -248,7 +249,8 @@ export async function loadGuideSources(
         .maybeSingle(),
     ])
 
-  if (!insurer || !workspace) return null
+  // Operadora sem ANS/código (convênio cadastrado só para a Clara) não vira guia.
+  if (!insurer || !workspace || !hasTissIdentity(insurer)) return null
 
   // Procedimento/carteirinha de outra operadora (edição inconsistente) não
   // entram na guia — ela fica em rascunho pedindo o dado certo.

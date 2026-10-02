@@ -4,6 +4,7 @@ import { createBillingStorage } from '@/lib/billing/storage'
 import { requireBilling } from '@/lib/billing/access'
 import { BATCH_COLUMNS } from '@/lib/billing/constants'
 import { createBatchesForInsurer, reportBatchFailure } from '@/lib/billing/batches'
+import { hasTissIdentity, INCOMPLETE_INSURER_ERROR } from '@/lib/billing/insurer'
 
 // XML + validação XSD (xmllint-wasm) de até 100 guias por lote.
 export const maxDuration = 60
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
     .eq('account_id', session.accountId)
     .maybeSingle()
   if (!insurer) return NextResponse.json({ error: 'Operadora não encontrada' }, { status: 404 })
+  if (!hasTissIdentity(insurer)) return NextResponse.json({ error: INCOMPLETE_INSURER_ERROR }, { status: 400 })
 
   try {
     const batches = await createBatchesForInsurer(supabase, insurer, {
