@@ -2,34 +2,15 @@
 
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Label } from '@/components/ui/label'
 import { Switch } from '@/components/ui/switch'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
+import { TOGGLEABLE_MODULES } from '@/lib/admin/accounts'
+import { cn } from '@/lib/utils'
 import type { AccountPlan, ModuleSlug } from '@/types/database'
 
 const PLAN_OPTIONS: { value: AccountPlan; label: string }[] = [
   { value: 'essencial', label: 'Essencial' },
   { value: 'avancado', label: 'Avançado' },
   { value: 'premium', label: 'Premium' },
-]
-
-const TOGGLEABLE_MODULES: { slug: ModuleSlug; label: string }[] = [
-  { slug: 'agenda', label: 'Minha agenda' },
-  { slug: 'conversations', label: 'Conversas' },
-  { slug: 'locations', label: 'Meus locais' },
-  { slug: 'schedule', label: 'Meu expediente' },
-  { slug: 'waitlist', label: 'Lista de espera' },
-  { slug: 'campaigns', label: 'Atribuição' },
-  { slug: 'transcriptions', label: 'Transcrições' },
-  { slug: 'finance', label: 'Financeiro (agente PF/PJ)' },
-  { slug: 'revenue_cycle', label: 'Ciclo de receita' },
-  { slug: 'billing', label: 'Faturamento de convênios (TISS)' },
 ]
 
 interface AccountDetailFormProps {
@@ -39,14 +20,40 @@ interface AccountDetailFormProps {
   initialIsActive: boolean
 }
 
+interface Snapshot {
+  plan: AccountPlan
+  modules: ModuleSlug[]
+  isActive: boolean
+}
+
+// Cada campo diferente do último estado salvo conta 1: plano, status e cada
+// módulo ligado/desligado.
+function countChanges(current: Snapshot, saved: Snapshot): number {
+  let n = 0
+  if (current.plan !== saved.plan) n += 1
+  if (current.isActive !== saved.isActive) n += 1
+  for (const m of TOGGLEABLE_MODULES) {
+    if (current.modules.includes(m.slug) !== saved.modules.includes(m.slug)) n += 1
+  }
+  return n
+}
+
 export function AccountDetailForm({ accountId, initialPlan, initialModules, initialIsActive }: AccountDetailFormProps) {
   const [plan, setPlan] = useState(initialPlan)
   const [modules, setModules] = useState<ModuleSlug[]>(initialModules)
   const [isActive, setIsActive] = useState(initialIsActive)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [savedState, setSavedState] = useState<Snapshot>({
+    plan: initialPlan,
+    modules: initialModules,
+    isActive: initialIsActive,
+  })
+
+  const changes = countChanges({ plan, modules, isActive }, savedState)
 
   const toggleModule = (slug: ModuleSlug) => {
+    setSaved(false)
     setModules((prev) => (prev.includes(slug) ? prev.filter((m) => m !== slug) : [...prev, slug]))
   }
 
@@ -59,65 +66,91 @@ export function AccountDetailForm({ accountId, initialPlan, initialModules, init
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ plan, modules, is_active: isActive }),
       })
-      if (res.ok) setSaved(true)
+      if (res.ok) {
+        setSaved(true)
+        setSavedState({ plan, modules, isActive })
+      }
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <div className="rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
-      <h2 className="text-sm font-medium text-gray-900">Plano e módulos</h2>
-      <div className="mt-4 space-y-4">
-        <div>
-          <Label>Plano</Label>
-          <Select value={plan} onValueChange={(v) => v && setPlan(v as AccountPlan)}>
-            <SelectTrigger className="w-48">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PLAN_OPTIONS.map((p) => (
-                <SelectItem key={p.value} value={p.value}>
-                  {p.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
-        <div className="flex items-center gap-3">
-          <Switch checked={isActive} onCheckedChange={setIsActive} />
-          <Label>Account ativa</Label>
-        </div>
-
-        <div>
-          <Label className="mb-2 block">Módulos ativos</Label>
-          <p className="mb-2 text-xs text-gray-400">Dashboard, Pacientes e Configurações estão sempre ativos.</p>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-            {TOGGLEABLE_MODULES.map((m) => (
-              <label key={m.slug} className="flex items-center gap-2 text-sm text-gray-700">
-                <input
-                  type="checkbox"
-                  checked={modules.includes(m.slug)}
-                  onChange={() => toggleModule(m.slug)}
-                  className="h-4 w-4 rounded border-gray-300 accent-[var(--cyan)]"
-                />
-                {m.label}
-              </label>
-            ))}
+    <div className="overflow-hidden rounded-xl border border-[var(--navy-06)] bg-white shadow-[var(--shadow-sm)]">
+      <div className="space-y-5 p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-sm font-medium text-gray-900">Plano e módulos</h2>
+            <p className="mt-0.5 text-xs text-gray-400">Dashboard, Pacientes e Configurações estão sempre ativos.</p>
           </div>
+          <label className="flex shrink-0 items-center gap-2.5 text-sm text-gray-700">
+            Account ativa
+            <Switch
+              checked={isActive}
+              onCheckedChange={(v) => {
+                setSaved(false)
+                setIsActive(v)
+              }}
+            />
+          </label>
         </div>
 
-        <div className="flex items-center gap-3">
-          <Button
-            onClick={save}
-            disabled={saving}
-            className="bg-[var(--cyan)] text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
-          >
-            {saving ? 'Salvando...' : 'Salvar'}
-          </Button>
-          {saved && <span className="text-xs text-green-600">Salvo com sucesso.</span>}
+        <div role="radiogroup" aria-label="Plano" className="grid gap-2 sm:grid-cols-3">
+          {PLAN_OPTIONS.map((p) => {
+            const selected = plan === p.value
+            return (
+              <button
+                key={p.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                onClick={() => {
+                  setSaved(false)
+                  setPlan(p.value)
+                }}
+                className={cn(
+                  'rounded-[10px] border px-4 py-3 text-left text-sm transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--cyan)] active:translate-y-px',
+                  selected
+                    ? 'border-[var(--cyan)] bg-[var(--cyan-10)] text-gray-900'
+                    : 'border-[var(--navy-10)] text-gray-700 hover:border-[var(--cyan)]'
+                )}
+              >
+                {p.label}
+              </button>
+            )
+          })}
         </div>
+
+        <ul className="grid gap-x-8 sm:grid-cols-2" aria-label="Módulos">
+          {TOGGLEABLE_MODULES.map((m) => {
+            const on = modules.includes(m.slug)
+            return (
+              <li key={m.slug} className="border-t border-[var(--navy-06)]">
+                <label className="flex cursor-pointer items-center justify-between gap-3 py-2.5 text-sm">
+                  <span className={on ? 'text-gray-900' : 'text-gray-500'}>{m.label}</span>
+                  <Switch size="sm" checked={on} onCheckedChange={() => toggleModule(m.slug)} />
+                </label>
+              </li>
+            )
+          })}
+        </ul>
+      </div>
+
+      <div className="flex items-center gap-3 border-t border-[var(--navy-06)] bg-[var(--navy-06)]/40 px-5 py-3">
+        <Button
+          onClick={save}
+          disabled={saving}
+          className="h-9 rounded-[10px] bg-[var(--cyan)] px-4 text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
+        >
+          {saving ? 'Salvando...' : 'Salvar'}
+        </Button>
+        {changes > 0 ? (
+          <span className="text-xs whitespace-nowrap text-gray-500">
+            {changes} {changes === 1 ? 'alteração não salva' : 'alterações não salvas'}
+          </span>
+        ) : (
+          saved && <span className="text-xs text-green-700">Salvo com sucesso.</span>
+        )}
       </div>
     </div>
   )

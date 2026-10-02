@@ -3,7 +3,6 @@
 import { useMemo, useState } from 'react'
 import Link from 'next/link'
 import { ChevronDown, ChevronUp, Search } from 'lucide-react'
-import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -12,9 +11,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { PlanBadge, StatusBadge } from '@/components/admin/account/AccountBadges'
+import { COST_HIGHLIGHT_BRL, type AccountListRow } from '@/lib/admin/accounts'
+import { formatDateBR } from '@/lib/admin/format'
+import { formatBRL } from '@/lib/finance/summary'
+import { cn } from '@/lib/utils'
 import type { AccountPlan } from '@/types/database'
 
-const PLAN_LABEL: Record<string, string> = { essencial: 'Essencial', avancado: 'Avançado', premium: 'Premium' }
+const PAGE_SIZE = 50
 
 const PLAN_FILTER_ITEMS = {
   all: 'Todos os planos',
@@ -23,22 +27,30 @@ const PLAN_FILTER_ITEMS = {
   premium: 'Premium',
 }
 
-const STATUS_FILTER_ITEMS = {
-  all: 'Todos os status',
-  active: 'Ativas',
-  inactive: 'Inativas',
-}
+type StatusChip = 'all' | 'active' | 'inactive' | 'overdue'
 
-export interface AccountRow {
-  id: string
-  name: string
-  slug: string
-  plan: AccountPlan
-  is_active: boolean
-  created_at: string
-}
+type SortField = 'name' | 'plan' | 'is_active' | 'modules' | 'members' | 'cost' | 'tasks' | 'created_at'
 
-type SortField = 'name' | 'plan' | 'is_active' | 'created_at'
+function compareRows(a: AccountListRow, b: AccountListRow, field: SortField): number {
+  switch (field) {
+    case 'name':
+      return a.name.localeCompare(b.name, 'pt-BR')
+    case 'plan':
+      return a.plan.localeCompare(b.plan)
+    case 'is_active':
+      return Number(a.is_active) - Number(b.is_active)
+    case 'modules':
+      return a.modulesOn - b.modulesOn
+    case 'members':
+      return a.members - b.members
+    case 'cost':
+      return a.cost30d - b.cost30d
+    case 'tasks':
+      return a.overdueTasks - b.overdueTasks || a.openTasks - b.openTasks
+    default:
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  }
+}
 
 function SortHeader({
   field,
@@ -46,30 +58,89 @@ function SortHeader({
   sortField,
   sortDir,
   onToggle,
+  align = 'left',
 }: {
   field: SortField
   label: string
   sortField: SortField
   sortDir: 'asc' | 'desc'
   onToggle: (field: SortField) => void
+  align?: 'left' | 'right'
 }) {
+  const active = sortField === field
   return (
-    <th className="px-5 py-3 font-normal">
-      <button type="button" onClick={() => onToggle(field)} className="flex items-center gap-1 hover:text-gray-700">
+    <th
+      scope="col"
+      aria-sort={active ? (sortDir === 'asc' ? 'ascending' : 'descending') : undefined}
+      className={cn('px-5 py-3 font-normal', align === 'right' && 'text-right')}
+    >
+      <button
+        type="button"
+        onClick={() => onToggle(field)}
+        className={cn(
+          'inline-flex items-center gap-1 rounded whitespace-nowrap outline-none hover:text-gray-700 focus-visible:ring-2 focus-visible:ring-[var(--cyan)]',
+          align === 'right' && 'flex-row-reverse',
+          active && 'text-gray-700'
+        )}
+      >
         {label}
-        {sortField === field &&
-          (sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
+        {active && (sortDir === 'asc' ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />)}
       </button>
     </th>
   )
 }
 
-export function AccountsTable({ accounts }: { accounts: AccountRow[] }) {
+function FilterChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        'h-9 rounded-full border px-3.5 text-xs whitespace-nowrap transition-colors outline-none focus-visible:ring-2 focus-visible:ring-[var(--cyan)] active:translate-y-px',
+        active
+          ? 'border-[var(--navy-dark)] bg-[var(--navy-dark)] text-white'
+          : 'border-[var(--navy-10)] bg-white text-gray-600 hover:border-[var(--cyan)] hover:text-gray-900'
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
+function TasksCell({ row }: { row: AccountListRow }) {
+  if (row.overdueTasks > 0) {
+    return (
+      <span className="whitespace-nowrap text-red-500">
+        {row.overdueTasks} {row.overdueTasks === 1 ? 'vencida' : 'vencidas'}
+      </span>
+    )
+  }
+  if (row.openTasks > 0) {
+    return (
+      <span className="whitespace-nowrap text-gray-600">
+        {row.openTasks} {row.openTasks === 1 ? 'aberta' : 'abertas'}
+      </span>
+    )
+  }
+  return <span className="text-gray-400">—</span>
+}
+
+export function AccountsTable({ accounts }: { accounts: AccountListRow[] }) {
   const [search, setSearch] = useState('')
   const [planFilter, setPlanFilter] = useState<AccountPlan | 'all'>('all')
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all')
+  const [statusFilter, setStatusFilter] = useState<StatusChip>('all')
   const [sortField, setSortField] = useState<SortField>('created_at')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [visible, setVisible] = useState(PAGE_SIZE)
 
   const toggleSort = (field: SortField) => {
     if (field === sortField) {
@@ -80,42 +151,73 @@ export function AccountsTable({ accounts }: { accounts: AccountRow[] }) {
     }
   }
 
-  const filtered = useMemo(() => {
+  // Busca e plano valem para as contagens dos chips; o chip só escolhe o recorte.
+  const searched = useMemo(() => {
     const term = search.trim().toLowerCase()
-    let rows = accounts.filter((a) => {
+    return accounts.filter((a) => {
       if (term && !a.name.toLowerCase().includes(term) && !a.slug.toLowerCase().includes(term)) return false
       if (planFilter !== 'all' && a.plan !== planFilter) return false
-      if (statusFilter === 'active' && !a.is_active) return false
-      if (statusFilter === 'inactive' && a.is_active) return false
       return true
     })
+  }, [accounts, search, planFilter])
 
-    rows = [...rows].sort((a, b) => {
-      let cmp = 0
-      if (sortField === 'name') cmp = a.name.localeCompare(b.name)
-      else if (sortField === 'plan') cmp = a.plan.localeCompare(b.plan)
-      else if (sortField === 'is_active') cmp = Number(a.is_active) - Number(b.is_active)
-      else cmp = new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+  const chipCounts = useMemo(
+    () => ({
+      active: searched.filter((a) => a.is_active).length,
+      inactive: searched.filter((a) => !a.is_active).length,
+      overdue: searched.filter((a) => a.overdueTasks > 0).length,
+    }),
+    [searched]
+  )
+
+  const filtered = useMemo(() => {
+    const rows = searched.filter((a) => {
+      if (statusFilter === 'active') return a.is_active
+      if (statusFilter === 'inactive') return !a.is_active
+      if (statusFilter === 'overdue') return a.overdueTasks > 0
+      return true
+    })
+    return [...rows].sort((a, b) => {
+      const cmp = compareRows(a, b, sortField)
       return sortDir === 'asc' ? cmp : -cmp
     })
+  }, [searched, statusFilter, sortField, sortDir])
 
-    return rows
-  }, [accounts, search, planFilter, statusFilter, sortField, sortDir])
+  const shown = filtered.slice(0, visible)
+
+  const selectStatus = (value: StatusChip) => {
+    setStatusFilter(value)
+    setVisible(PAGE_SIZE)
+  }
+
+  const headerProps = { sortField, sortDir, onToggle: toggleSort }
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
-        <div className="relative flex-1 min-w-[200px]">
+        <div className="relative min-w-[220px] flex-1">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
           <Input
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              setSearch(e.target.value)
+              setVisible(PAGE_SIZE)
+            }}
             placeholder="Buscar por nome ou slug..."
-            className="h-9 pl-9"
+            aria-label="Buscar por nome ou slug"
+            className="h-9 bg-white pl-9"
           />
         </div>
-        <Select items={PLAN_FILTER_ITEMS} value={planFilter} onValueChange={(v) => v && setPlanFilter(v as AccountPlan | 'all')}>
-          <SelectTrigger className="h-9 w-36 text-xs">
+        <Select
+          items={PLAN_FILTER_ITEMS}
+          value={planFilter}
+          onValueChange={(v) => {
+            if (!v) return
+            setPlanFilter(v as AccountPlan | 'all')
+            setVisible(PAGE_SIZE)
+          }}
+        >
+          <SelectTrigger className="h-9 w-36 bg-white text-xs" aria-label="Filtrar por plano">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -125,20 +227,20 @@ export function AccountsTable({ accounts }: { accounts: AccountRow[] }) {
             <SelectItem value="premium">Premium</SelectItem>
           </SelectContent>
         </Select>
-        <Select
-          items={STATUS_FILTER_ITEMS}
-          value={statusFilter}
-          onValueChange={(v) => v && setStatusFilter(v as 'all' | 'active' | 'inactive')}
-        >
-          <SelectTrigger className="h-9 w-36 text-xs">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Todos os status</SelectItem>
-            <SelectItem value="active">Ativas</SelectItem>
-            <SelectItem value="inactive">Inativas</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtrar por status">
+          <FilterChip active={statusFilter === 'all'} onClick={() => selectStatus('all')}>
+            Todos
+          </FilterChip>
+          <FilterChip active={statusFilter === 'active'} onClick={() => selectStatus('active')}>
+            Ativas {chipCounts.active}
+          </FilterChip>
+          <FilterChip active={statusFilter === 'inactive'} onClick={() => selectStatus('inactive')}>
+            Inativas {chipCounts.inactive}
+          </FilterChip>
+          <FilterChip active={statusFilter === 'overdue'} onClick={() => selectStatus('overdue')}>
+            Com tarefa vencida {chipCounts.overdue}
+          </FilterChip>
+        </div>
       </div>
 
       <div className="overflow-hidden rounded-xl border border-[var(--navy-06)] bg-white shadow-[var(--shadow-sm)]">
@@ -147,49 +249,78 @@ export function AccountsTable({ accounts }: { accounts: AccountRow[] }) {
             {accounts.length === 0 ? 'Nenhuma account cadastrada ainda.' : 'Nenhuma account encontrada com esses filtros.'}
           </p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[520px] text-sm">
-              <thead>
-                <tr className="border-b border-[var(--navy-06)] bg-[var(--navy-06)]/40 text-left text-xs text-gray-400">
-                  <SortHeader field="name" label="Nome" sortField={sortField} sortDir={sortDir} onToggle={toggleSort} />
-                  <SortHeader field="plan" label="Plano" sortField={sortField} sortDir={sortDir} onToggle={toggleSort} />
-                  <SortHeader
-                    field="is_active"
-                    label="Status"
-                    sortField={sortField}
-                    sortDir={sortDir}
-                    onToggle={toggleSort}
-                  />
-                  <SortHeader
-                    field="created_at"
-                    label="Criada em"
-                    sortField={sortField}
-                    sortDir={sortDir}
-                    onToggle={toggleSort}
-                  />
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((a) => (
-                  <tr key={a.id} className="border-b border-[var(--navy-06)] last:border-0 hover:bg-[var(--navy-06)]/40">
-                    <td className="px-5 py-3">
-                      <Link href={`/admin/accounts/${a.id}`} className="font-medium text-gray-900 hover:text-[var(--cyan-dark)]">
-                        {a.name}
-                      </Link>
-                      <p className="text-xs text-gray-400">{a.slug}</p>
-                    </td>
-                    <td className="px-5 py-3 text-gray-600">{PLAN_LABEL[a.plan] ?? a.plan}</td>
-                    <td className="px-5 py-3">
-                      <Badge className={a.is_active ? 'border-none bg-green-50 text-green-700' : 'border-none bg-red-50 text-red-600'}>
-                        {a.is_active ? 'Ativa' : 'Inativa'}
-                      </Badge>
-                    </td>
-                    <td className="px-5 py-3 text-gray-600">{new Date(a.created_at).toLocaleDateString('pt-BR')}</td>
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[960px] text-sm">
+                <thead>
+                  <tr className="border-b border-[var(--navy-06)] text-left text-xs text-gray-400">
+                    <SortHeader field="name" label="Nome" {...headerProps} />
+                    <SortHeader field="plan" label="Plano" {...headerProps} />
+                    <SortHeader field="is_active" label="Status" {...headerProps} />
+                    <SortHeader field="modules" label="Módulos" {...headerProps} />
+                    <SortHeader field="members" label="Membros" {...headerProps} />
+                    <SortHeader field="cost" label="Custo 30d" align="right" {...headerProps} />
+                    <SortHeader field="tasks" label="Tarefas" {...headerProps} />
+                    <SortHeader field="created_at" label="Criada em" align="right" {...headerProps} />
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {shown.map((a) => (
+                    <tr key={a.id} className="border-b border-[var(--navy-06)] last:border-0 hover:bg-[var(--navy-06)]/40">
+                      <td className="px-5 py-3">
+                        <Link
+                          href={`/admin/accounts/${a.id}`}
+                          className="rounded text-gray-900 outline-none hover:text-[var(--cyan-dark)] focus-visible:ring-2 focus-visible:ring-[var(--cyan)]"
+                        >
+                          {a.name}
+                        </Link>
+                        <p className="text-xs text-gray-400">{a.slug}</p>
+                      </td>
+                      <td className="px-5 py-3">
+                        <PlanBadge plan={a.plan} />
+                      </td>
+                      <td className="px-5 py-3">
+                        <StatusBadge active={a.is_active} />
+                      </td>
+                      <td className="px-5 py-3 whitespace-nowrap text-gray-600 tabular-nums">
+                        {a.modulesOn}/{a.modulesTotal}
+                      </td>
+                      <td className="px-5 py-3 text-gray-600 tabular-nums">{a.members}</td>
+                      <td
+                        className={cn(
+                          'px-5 py-3 text-right whitespace-nowrap tabular-nums',
+                          a.cost30d > COST_HIGHLIGHT_BRL ? 'text-red-600' : 'text-gray-600'
+                        )}
+                      >
+                        {formatBRL(a.cost30d)}
+                      </td>
+                      <td className="px-5 py-3 text-xs">
+                        <TasksCell row={a} />
+                      </td>
+                      <td className="px-5 py-3 text-right whitespace-nowrap text-gray-600 tabular-nums">
+                        {formatDateBR(a.created_at)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--navy-06)] bg-[var(--navy-06)]/40 px-5 py-3 text-xs text-gray-500">
+              <span className="whitespace-nowrap">
+                Mostrando {shown.length} de {filtered.length}
+              </span>
+              {shown.length < filtered.length && (
+                <button
+                  type="button"
+                  onClick={() => setVisible((v) => v + PAGE_SIZE)}
+                  className="h-8 rounded-[10px] border border-[var(--navy-10)] bg-white px-3 text-xs text-gray-700 outline-none hover:border-[var(--cyan)] focus-visible:ring-2 focus-visible:ring-[var(--cyan)] active:translate-y-px"
+                >
+                  Carregar mais {Math.min(PAGE_SIZE, filtered.length - shown.length)}
+                </button>
+              )}
+              <span className="whitespace-nowrap">Custo 30d em vermelho = acima de {formatBRL(COST_HIGHLIGHT_BRL)}</span>
+            </div>
+          </>
         )}
       </div>
     </div>

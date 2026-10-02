@@ -66,6 +66,15 @@ describe('POST /api/admin/tasks', () => {
     expect((call.payload as { completed_at: string | null }).completed_at).toEqual(expect.any(String))
   })
 
+  it('marca o feedback como reviewed quando a tarefa já nasce done', async () => {
+    const s = setup({ account_tasks: { insert: { data: { id: 't1' } } } })
+    const res = await POST(req('POST', { title: 'x', status: 'done', source_type: 'feedback', source_ref: 'f1' }))
+    expect(res.status).toBe(201)
+    const [fb] = s.callsTo('feedback', 'update')
+    expect(fb.payload).toEqual({ status: 'reviewed' })
+    expect(filterValue(fb, 'eq', 'id')).toBe('f1')
+  })
+
   it('rejeita status, source_type e position inválidos com 400', async () => {
     for (const body of [
       { title: 'x', status: 'pending' },

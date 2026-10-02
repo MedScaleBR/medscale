@@ -74,5 +74,15 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Não foi possível salvar a tarefa' }, { status: 500 })
   }
 
+  // Feedback arrastado direto para Concluídas: mesma regra do PATCH — marca o
+  // feedback como lido, best-effort.
+  if (status === 'done' && sourceType === 'feedback') {
+    try {
+      await supabase.from('feedback').update({ status: 'reviewed' }).eq('id', sourceRef)
+    } catch {
+      // ignora
+    }
+  }
+
   return NextResponse.json(data, { status: 201 })
 }
