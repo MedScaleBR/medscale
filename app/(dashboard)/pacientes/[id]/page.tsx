@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { Badge } from '@/components/ui/badge'
 import { RecordingButton } from '@/components/transcriptions/RecordingButton'
+import { hasTissIdentity } from '@/lib/billing/insurer'
 import { PatientInsurances, type PatientInsuranceRow } from '@/components/billing/PatientInsurances'
 
 const STATUS_LABEL: Record<string, string> = {
@@ -43,7 +44,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
     ? await Promise.all([
         supabase
           .from('health_insurers')
-          .select('id, name')
+          .select('id, name, ans_registry, provider_code')
           .eq('account_id', session.accountId)
           .eq('is_active', true)
           .order('name'),
@@ -87,7 +88,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
       {showBilling && (
         <PatientInsurances
           patientId={patient.id}
-          insurers={insurers ?? []}
+          insurers={(insurers ?? []).filter(hasTissIdentity).map(({ id, name }) => ({ id, name }))}
           initialInsurances={(insurances ?? []) as unknown as PatientInsuranceRow[]}
         />
       )}

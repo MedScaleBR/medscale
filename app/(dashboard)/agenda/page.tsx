@@ -1,6 +1,7 @@
 import { resolveActiveSession } from '@/lib/session/server'
 import { createClient } from '@/lib/supabase/server'
 import { reconcileAccountCalendars } from '@/lib/google/reconcile'
+import { hasTissIdentity } from '@/lib/billing/insurer'
 import { AgendaClient } from '@/components/agenda/AgendaClient'
 
 export default async function AgendaPage() {
@@ -48,12 +49,15 @@ export default async function AgendaPage() {
   // em Convênios. Com o módulo billing, o modal usa as operadoras (com id).
   const { data: insurerRows } = await supabase
     .from('health_insurers')
-    .select('id, name')
+    .select('id, name, ans_registry, provider_code')
     .eq('account_id', session.accountId)
     .eq('is_active', true)
     .order('name')
   const healthPlans = (insurerRows ?? []).map((i) => i.name)
-  const billingInsurers = session.accountModules.includes('billing') ? (insurerRows ?? []) : []
+  // Com billing, só operadoras com registro ANS e código do prestador (prontas p/ TISS).
+  const billingInsurers = session.accountModules.includes('billing')
+    ? (insurerRows ?? []).filter(hasTissIdentity).map(({ id, name }) => ({ id, name }))
+    : []
 
   return (
     <div className="space-y-6">
@@ -69,7 +73,7 @@ export default async function AgendaPage() {
         showTranscriptions={session.userModules.includes('transcriptions')}
         proceduresByWorkspace={proceduresByWorkspace}
         healthPlans={healthPlans}
-        billingInsurers={billingInsurers ?? []}
+        billingInsurers={billingInsurers}
       />
     </div>
   )
