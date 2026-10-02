@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { requireBilling } from '@/lib/billing/access'
+import { requireInsurerAccess } from '@/lib/billing/access'
 import { parseInsurerInput } from '@/lib/billing/validation'
 import type { Database } from '@/types/database'
 
@@ -11,10 +11,10 @@ const COLUMNS =
   'id, name, ans_registry, provider_code, tiss_version, default_consult_guide, batch_weekdays, batch_hour, ' +
   'max_guides_per_batch, is_active, created_at'
 
-// Qualquer membro: operadoras ativas, para o seletor da agenda. Owner/admin
+// Qualquer membro: convênios ativos (seletor da agenda), com ou sem o módulo billing. Owner/admin
 // pode pedir ?all=1 para incluir as inativas (tela de configuração).
 export async function GET(req: NextRequest) {
-  const result = await requireBilling(req, { adminOnly: false })
+  const result = await requireInsurerAccess(req, { adminOnly: false })
   if ('error' in result) return result.error
   const { session } = result
 
@@ -29,11 +29,11 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const result = await requireBilling(req, { adminOnly: true })
+  const result = await requireInsurerAccess(req, { adminOnly: true })
   if ('error' in result) return result.error
-  const { session } = result
+  const { session, billingEnabled } = result
 
-  const parsed = parseInsurerInput(await req.json(), false)
+  const parsed = parseInsurerInput(await req.json(), false, { tiss: billingEnabled })
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
 
   const supabase = await createClient()
@@ -53,13 +53,13 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const result = await requireBilling(req, { adminOnly: true })
+  const result = await requireInsurerAccess(req, { adminOnly: true })
   if ('error' in result) return result.error
-  const { session } = result
+  const { session, billingEnabled } = result
 
   const body = await req.json()
   if (typeof body.id !== 'string' || !body.id) return NextResponse.json({ error: 'id é obrigatório' }, { status: 400 })
-  const parsed = parseInsurerInput(body, true)
+  const parsed = parseInsurerInput(body, true, { tiss: billingEnabled })
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
 
   const supabase = await createClient()

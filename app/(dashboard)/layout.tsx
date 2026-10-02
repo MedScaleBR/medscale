@@ -1,6 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
-import { resolveActiveSession, listMyAccounts } from '@/lib/session/server'
+import { resolveActiveSession, resolveAccountWithoutWorkspace, listMyAccounts } from '@/lib/session/server'
 import { SessionProvider } from '@/lib/session/session-context'
 import { PostHogIdentify } from '@/components/analytics/PostHogIdentify'
 import { Sidebar } from '@/components/layout/Sidebar'
@@ -23,7 +23,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   if (!user) redirect('/login')
 
   const session = await resolveActiveSession()
-  if (!session) redirect('/sem-acesso')
+  if (!session) redirect((await resolveAccountWithoutWorkspace()) ? '/primeira-unidade' : '/sem-acesso')
 
   const [{ data: profile }, { data: account }, { data: membership }, accounts] = await Promise.all([
     supabase.from('profiles').select('full_name, feedback_prompt_dismissed_at').eq('id', user.id).single(),

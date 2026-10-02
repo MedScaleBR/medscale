@@ -1,31 +1,23 @@
 'use client'
 
+import Link from 'next/link'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
-import { Switch } from '@/components/ui/switch'
-import { TagInput } from './TagInput'
 import { FaqInput, type FaqItem } from './FaqInput'
 import { BotPreview } from './BotPreview'
-import { WorkspaceBotFields, type WorkspaceBotRow } from './WorkspaceBotFields'
+import { ClinicDataLinks, type ClinicData } from './ClinicDataLinks'
 import { PushToggle } from '@/components/push/PushToggle'
 import { BOT_NAME } from '@/lib/bot/constants'
 import type { Database } from '@/types/database'
 import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 type BotConfigRow = Database['public']['Tables']['bot_config']['Row']
-type HandoffHour = Database['public']['Tables']['handoff_hours']['Row']
 
 interface FormState {
   specialty: string
-  procedures: string[]
-  insurance_plans: string[]
-  accepts_private: boolean
-  payment_methods: string[]
-  pricing_info: string
-  exam_preparation: string
   policies: string
   tone_of_voice: string
   handoff_instructions: string
@@ -38,9 +30,7 @@ interface FormState {
 
 interface BotConfigFormProps {
   initialConfig: BotConfigRow | null
-  workspaces: WorkspaceBotRow[]
-  handoffHoursByWorkspace: Record<string, HandoffHour[]>
-  activeWorkspaceId: string
+  clinicData: ClinicData
   doctorPhone: string
   initialHandoffPushEnabled: boolean
 }
@@ -48,12 +38,6 @@ interface BotConfigFormProps {
 function toFormState(config: BotConfigRow | null): FormState {
   return {
     specialty: config?.specialty ?? '',
-    procedures: config?.procedures ?? [],
-    insurance_plans: config?.insurance_plans ?? [],
-    accepts_private: config?.accepts_private ?? true,
-    payment_methods: config?.payment_methods ?? [],
-    pricing_info: config?.pricing_info ?? '',
-    exam_preparation: config?.exam_preparation ?? '',
     policies: config?.policies ?? '',
     tone_of_voice: config?.tone_of_voice ?? '',
     handoff_instructions: config?.handoff_instructions ?? '',
@@ -69,9 +53,7 @@ function toFormState(config: BotConfigRow | null): FormState {
 
 export function BotConfigForm({
   initialConfig,
-  workspaces,
-  handoffHoursByWorkspace,
-  activeWorkspaceId,
+  clinicData,
   doctorPhone,
   initialHandoffPushEnabled,
 }: BotConfigFormProps) {
@@ -146,67 +128,7 @@ export function BotConfigForm({
             </div>
           </section>
 
-          <section className="mb-6 break-inside-avoid rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
-            <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Serviços e convênios</h3>
-            <div className="space-y-4">
-              <div>
-                <Label>Procedimentos realizados</Label>
-                <p className="mb-2 text-xs text-gray-400">Digite e pressione Enter para adicionar</p>
-                <TagInput value={form.procedures} onChange={(v) => setForm((f) => ({ ...f, procedures: v }))} placeholder="Ex: Rinoplastia" />
-              </div>
-              <div>
-                <Label>Convênios aceitos</Label>
-                <p className="mb-2 text-xs text-gray-400">Deixe vazio se não aceita convênios</p>
-                <TagInput
-                  value={form.insurance_plans}
-                  onChange={(v) => setForm((f) => ({ ...f, insurance_plans: v }))}
-                  placeholder="Ex: Unimed"
-                />
-              </div>
-              <div className="flex items-center gap-3">
-                <Switch
-                  id="accepts_private"
-                  checked={form.accepts_private}
-                  onCheckedChange={(v) => setForm((f) => ({ ...f, accepts_private: v }))}
-                />
-                <Label htmlFor="accepts_private">Aceita consultas particulares</Label>
-              </div>
-              <div>
-                <Label>Formas de pagamento</Label>
-                <p className="mb-2 text-xs text-gray-400">Digite e pressione Enter para adicionar</p>
-                <TagInput
-                  value={form.payment_methods}
-                  onChange={(v) => setForm((f) => ({ ...f, payment_methods: v }))}
-                  placeholder="Ex: Pix, Cartão, Dinheiro"
-                />
-              </div>
-              <div>
-                <Label htmlFor="pricing_info">Preços — detalhes por procedimento</Label>
-                <p className="mb-1 text-xs text-gray-400">
-                  Use para valores de exames e procedimentos além da consulta acima
-                </p>
-                <Textarea
-                  id="pricing_info"
-                  value={form.pricing_info}
-                  onChange={(e) => setForm((f) => ({ ...f, pricing_info: e.target.value }))}
-                  rows={3}
-                  className="mt-1"
-                  placeholder="Ex: Retorno: R$150. Exame X: R$300."
-                />
-              </div>
-              <div>
-                <Label htmlFor="exam_preparation">Preparo para exames/procedimentos</Label>
-                <Textarea
-                  id="exam_preparation"
-                  value={form.exam_preparation}
-                  onChange={(e) => setForm((f) => ({ ...f, exam_preparation: e.target.value }))}
-                  rows={3}
-                  className="mt-1"
-                  placeholder="Ex: Jejum de 8h para exame X. Trazer exames anteriores."
-                />
-              </div>
-            </div>
-          </section>
+          <ClinicDataLinks data={clinicData} />
 
           <section className="mb-6 break-inside-avoid rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
             <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Mensagens automáticas</h3>
@@ -274,8 +196,11 @@ export function BotConfigForm({
           <section className="mb-6 break-inside-avoid rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
             <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Atendimento humano (handoff)</h3>
             <p className="mb-4 text-xs text-gray-400">
-              O número de transferência e o horário de atendimento humano são configurados por
-              unidade, na seção &quot;Dados por unidade&quot; abaixo.
+              O número de transferência e o horário de atendimento humano ficam em cada unidade, em{' '}
+              <Link href="/locais" className="text-[var(--cyan-dark)] hover:underline">
+                Meus locais
+              </Link>
+              .
             </p>
             <div className="space-y-4">
               <div>
@@ -330,22 +255,13 @@ export function BotConfigForm({
           <BotPreview
             config={{
               specialty: form.specialty,
-              procedures: form.procedures,
-              insurance_plans: form.insurance_plans,
+              procedures: clinicData.serviceNames,
+              insurance_plans: clinicData.insurerNames,
               welcome_message: form.welcome_message,
             }}
           />
         </div>
       </div>
-
-      <section className="rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
-        <h3 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Dados por unidade</h3>
-        <WorkspaceBotFields
-          workspaces={workspaces}
-          handoffHoursByWorkspace={handoffHoursByWorkspace}
-          activeWorkspaceId={activeWorkspaceId}
-        />
-      </section>
 
       {error && <p className="text-sm text-red-500">{friendlyErrorMessage(error, "Não foi possível salvar esta alteração. Tente novamente.")}</p>}
 

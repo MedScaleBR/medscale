@@ -4,8 +4,6 @@ import type { BotConfig } from '@/lib/bot/config'
 
 const BASE_CONFIG: BotConfig = {
   specialty: 'Ortopedia',
-  procedures: [],
-  insurancePlans: [],
   acceptsPrivate: true,
   paymentMethods: [],
   pricingInfo: null,

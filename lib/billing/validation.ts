@@ -22,9 +22,17 @@ export interface InsurerInput {
   is_active?: boolean
 }
 
-export function parseInsurerInput(body: Record<string, unknown>, partial: boolean): Result<InsurerInput> {
+// Campos de um convênio sem o módulo billing — é só o nome que a Clara informa.
+const BASIC_INSURER_FIELDS = ['name', 'is_active']
+
+export function parseInsurerInput(
+  body: Record<string, unknown>,
+  partial: boolean,
+  { tiss }: { tiss: boolean },
+): Result<InsurerInput> {
+  if (!tiss) body = Object.fromEntries(Object.entries(body).filter(([k]) => BASIC_INSURER_FIELDS.includes(k)))
   const out: InsurerInput = {}
-  const has = (k: string) => !partial || k in body
+  const has = (k: string) => (!partial && (tiss || BASIC_INSURER_FIELDS.includes(k))) || k in body
 
   if (has('name')) {
     const name = str(body.name)

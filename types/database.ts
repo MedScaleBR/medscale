@@ -120,7 +120,7 @@ export interface Database {
           business_hours: string | null
           directions_parking: string | null
           contact_info: string | null
-          consultation_price_from: number | null
+          consultation_price_from: number | null // abandonado: o app não lê nem grava (ver spec 2026-10-02-clara-config-split)
           handoff_number: string | null
           // Calendário Google desta unidade dentro da conexão única da account
           // (google_tokens é por account). null = calendário "primary".
@@ -368,8 +368,8 @@ export interface Database {
           id: string
           account_id: string
           name: string
-          ans_registry: string
-          provider_code: string
+          ans_registry: string | null
+          provider_code: string | null
           tiss_version: string
           default_consult_guide: TissGuideType
           batch_weekdays: number[]
@@ -384,8 +384,6 @@ export interface Database {
         Insert: Partial<Database['public']['Tables']['health_insurers']['Row']> & {
           account_id: string
           name: string
-          ans_registry: string
-          provider_code: string
         }
         Update: Partial<Database['public']['Tables']['health_insurers']['Row']>
         Relationships: [
@@ -936,8 +934,8 @@ export interface Database {
           account_id: string
           bot_name: string
           specialty: string | null
-          procedures: string[]
-          insurance_plans: string[]
+          procedures: string[] // abandonado: o app não lê nem grava (ver spec 2026-10-02-clara-config-split)
+          insurance_plans: string[] // abandonado: o app não lê nem grava (ver spec 2026-10-02-clara-config-split)
           accepts_private: boolean
           payment_methods: string[]
           pricing_info: string | null

@@ -68,6 +68,9 @@ begin
   v_insurer_id := coalesce(a.insurer_id, pi.insurer_id, pr.insurer_id);
   select * into i from public.health_insurers where id = v_insurer_id and account_id = a.account_id;
   if not found then return jsonb_build_object('status', 'skipped', 'reason', 'no_insurer'); end if;
+  if i.ans_registry is null or i.provider_code is null then
+    return jsonb_build_object('status', 'skipped', 'reason', 'no_insurer');
+  end if;
   if pi.insurer_id is distinct from i.id then pi := null; end if;
   if pr.insurer_id is distinct from i.id then pr := null; end if;
   select * into w from public.workspaces where id = a.workspace_id and account_id = a.account_id;

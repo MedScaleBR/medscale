@@ -1,6 +1,7 @@
 import { cookies } from 'next/headers'
 import { createClient } from '@/lib/supabase/server'
 import { ALWAYS_ON_MODULES, type ActiveSession, type AccountSummary, type ModuleSlug } from './context'
+import type { MembershipRole } from '@/types/database'
 
 interface MembershipRow {
   role: 'owner' | 'admin' | 'member'
@@ -19,11 +20,9 @@ function mergeAlwaysOn(modules: ModuleSlug[]): ModuleSlug[] {
   return [...ALWAYS_ON_MODULES, ...modules.filter((m) => !ALWAYS_ON_MODULES.includes(m))]
 }
 
-// Resolve a account + workspace ativos do usuário logado, a partir das
-// cookies `ms_account_id`/`ms_workspace_id` (gravadas por switchAccount/
-// switchWorkspace) com fallback para profiles.last_workspace_id, depois o
-// workspace padrão da account, depois o primeiro disponível.
-export async function resolveActiveSession(): Promise<ActiveSession | null> {
+// Membership ativa (account escolhida pela cookie `ms_account_id`, senão a
+// mais antiga) do usuário logado, já com as workspaces da account.
+async function loadActiveMembership() {
   const supabase = await createClient()
   const {
     data: { user },
@@ -32,7 +31,6 @@ export async function resolveActiveSession(): Promise<ActiveSession | null> {
 
   const cookieStore = await cookies()
   const savedAccountId = cookieStore.get('ms_account_id')?.value
-  const savedWorkspaceId = cookieStore.get('ms_workspace_id')?.value
 
   const [{ data: membershipsRaw }, { data: profile }] = await Promise.all([
     supabase
@@ -58,8 +56,23 @@ export async function resolveActiveSession(): Promise<ActiveSession | null> {
   if (memberships.length === 0) return null
 
   const membership = memberships.find((m) => m.account.id === savedAccountId) ?? memberships[0]
+  if (!membership.account.is_active) return null
+
+  return { user, membership, profile }
+}
+
+// Resolve a account + workspace ativos do usuário logado, a partir das
+// cookies `ms_account_id`/`ms_workspace_id` (gravadas por switchAccount/
+// switchWorkspace) com fallback para profiles.last_workspace_id, depois o
+// workspace padrão da account, depois o primeiro disponível.
+export async function resolveActiveSession(): Promise<ActiveSession | null> {
+  const loaded = await loadActiveMembership()
+  if (!loaded) return null
+  const { user, membership, profile } = loaded
   const { account } = membership
-  if (!account.is_active) return null
+
+  const cookieStore = await cookies()
+  const savedWorkspaceId = cookieStore.get('ms_workspace_id')?.value
 
   const allWorkspaces = account.workspaces
     .filter((w) => w.is_active)
@@ -90,6 +103,23 @@ export async function resolveActiveSession(): Promise<ActiveSession | null> {
     role: membership.role,
     userModules,
   }
+}
+
+// Account recém-criada ainda sem nenhuma unidade ativa — o cadastro da conta
+// não cria unidade sozinho, então o primeiro acesso cai aqui em vez de
+// resolveActiveSession (que exige uma workspace) e é levado a cadastrar a
+// primeira em /primeira-unidade. Retorna null se a account já tem unidade
+// (mesmo que o usuário não tenha acesso a nenhuma — aí é /sem-acesso).
+export async function resolveAccountWithoutWorkspace(): Promise<{
+  accountId: string
+  accountName: string
+  role: MembershipRole
+} | null> {
+  const loaded = await loadActiveMembership()
+  if (!loaded) return null
+  const { account, role } = loaded.membership
+  if (account.workspaces.some((w) => w.is_active)) return null
+  return { accountId: account.id, accountName: account.name, role }
 }
 
 // Todas as accounts (ativas) em que o usuário logado é membro — usado pelo AccountSwitcher.

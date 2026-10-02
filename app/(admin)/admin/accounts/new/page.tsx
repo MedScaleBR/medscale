@@ -11,7 +11,7 @@ export default function NewAccountPage() {
           Accounts
         </Link>
         <h1 className="text-xl font-medium text-gray-900">Nova account</h1>
-        <p className="text-sm text-gray-400">Cria a account, uma workspace padrão e convida o owner.</p>
+        <p className="text-sm text-gray-400">Cria a account (sem unidades — o owner cadastra a primeira no primeiro acesso) e convida o owner.</p>
       </div>
       <NewAccountForm />
     </div>

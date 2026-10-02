@@ -61,7 +61,7 @@ export async function POST(req: NextRequest) {
     targetWorkspaceId = ws.id
   }
 
-  // Convênio da consulta (bot_config.insurance_plans). Consulta por convênio
+  // Convênio da consulta (nome de um convênio de health_insurers). Consulta por convênio
   // fica fora do ciclo de receita: sem preço, sem procedimento, sem entrada.
   // Com o módulo "billing", o convênio vem das operadoras cadastradas
   // (health_insurers) e o health_plan passa a ser o nome da operadora.

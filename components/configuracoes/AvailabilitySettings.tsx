@@ -18,6 +18,7 @@ import { useAnalyticsBase } from '@/lib/session/session-context'
 import { trackAvailabilityRulesSaved } from '@/lib/analytics/posthog'
 import type { Database } from '@/types/database'
 import { friendlyErrorMessage } from '@/lib/friendly-errors'
+import { groupBlockedDays } from '@/lib/availability/blocked-ranges'
 
 type AvailabilityRule = Database['public']['Tables']['availability_rules']['Row']
 type AvailabilityException = Database['public']['Tables']['availability_exceptions']['Row']
@@ -26,6 +27,8 @@ const DAY_LABEL = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 
 // O Select (Base UI) só resolve o label da opção selecionada automaticamente
 // se receber esse mapa — sem ele, mostra o value bruto (ex: "1" em vez de "Segunda").
 const DAY_ITEMS = Object.fromEntries(DAY_LABEL.map((label, i) => [String(i), label]))
+
+const formatDate = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR')
 
 interface AvailabilitySettingsProps {
   initialRules: AvailabilityRule[]
@@ -40,13 +43,17 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
   const [exceptions, setExceptions] = useState(initialExceptions)
   const [ruleForm, setRuleForm] = useState({ day_of_week: '1', start_time: '08:00', end_time: '12:00', slot_duration: '30' })
   const [savingRule, setSavingRule] = useState(false)
-  const [excForm, setExcForm] = useState({ date: '', reason: '' })
+  const [excForm, setExcForm] = useState({ date: '', end_date: '', reason: '' })
   const [savingExc, setSavingExc] = useState(false)
   const analyticsBase = useAnalyticsBase()
   const workspaceItems = Object.fromEntries(workspaces.map((workspace) => [workspace.id, workspace.name]))
   const workspaceName = workspaceItems[workspaceId]
   const selectedRules = rules.filter((rule) => rule.workspace_id === workspaceId)
   const selectedExceptions = exceptions.filter((exception) => exception.workspace_id === workspaceId)
+  // Só bloqueios de dia inteiro viram períodos; o resto aparece dia a dia.
+  const isFullDayBlock = (e: AvailabilityException) => e.type === 'blocked' && !e.start_time
+  const blockedRanges = groupBlockedDays(selectedExceptions.filter(isFullDayBlock))
+  const otherExceptions = selectedExceptions.filter((e) => !isFullDayBlock(e))
 
   async function availabilityRequest(url: string, options: RequestInit) {
     const response = await fetch(url, {
@@ -101,17 +108,23 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
 
   const addException = async () => {
     if (!excForm.date) return
+    const endDate = excForm.end_date && excForm.end_date !== excForm.date ? excForm.end_date : null
+    if (endDate && endDate < excForm.date) {
+      toast.error('A data final precisa ser igual ou posterior à inicial.')
+      return
+    }
     setSavingExc(true)
     try {
       const res = await availabilityRequest('/api/availability/exceptions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ date: excForm.date, type: 'blocked', reason: excForm.reason || null }),
+        body: JSON.stringify({ date: excForm.date, end_date: endDate, type: 'blocked', reason: excForm.reason || null }),
       })
       if (res.ok) {
-        const created = await res.json()
-        setExceptions((prev) => [...prev, created].sort((a, b) => a.date.localeCompare(b.date)))
-        setExcForm({ date: '', reason: '' })
+        const body = await res.json()
+        const created: AvailabilityException[] = Array.isArray(body) ? body : [body]
+        setExceptions((prev) => [...prev, ...created].sort((a, b) => a.date.localeCompare(b.date)))
+        setExcForm({ date: '', end_date: '', reason: '' })
       }
     } catch (error) {
       toast.error(friendlyErrorMessage(error instanceof Error ? error.message : 'Não foi possível bloquear o dia.', "Não foi possível atualizar a disponibilidade. Tente novamente."))
@@ -120,10 +133,14 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
     }
   }
 
-  const removeException = async (id: string) => {
+  const removeException = async (ids: string[]) => {
     try {
-      await availabilityRequest(`/api/availability/exceptions/${id}`, { method: 'DELETE' })
-      setExceptions((prev) => prev.filter((e) => e.id !== id))
+      if (ids.length === 1) {
+        await availabilityRequest(`/api/availability/exceptions/${ids[0]}`, { method: 'DELETE' })
+      } else {
+        await availabilityRequest('/api/availability/exceptions', { method: 'DELETE', body: JSON.stringify({ ids }) })
+      }
+      setExceptions((prev) => prev.filter((e) => !ids.includes(e.id)))
     } catch (error) {
       toast.error(friendlyErrorMessage(error instanceof Error ? error.message : 'Não foi possível remover o bloqueio.', "Não foi possível atualizar a disponibilidade. Tente novamente."))
     }
@@ -240,14 +257,29 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
 
       <div className="border-t border-[var(--navy-06)] pt-5">
         <h3 className="text-sm font-medium text-gray-900">Dias bloqueados</h3>
-        <p className="mt-0.5 text-xs text-gray-400">Feriados, férias ou qualquer dia sem atendimento.</p>
+        <p className="mt-0.5 text-xs text-gray-400">
+          Feriados, férias ou qualquer dia sem atendimento. Preencha &quot;Até&quot; para bloquear um período inteiro.
+        </p>
 
         <div className="mt-3 flex flex-wrap gap-2">
-          {selectedExceptions.map((e) => (
+          {blockedRanges.map((range) => {
+            const label = range.start === range.end ? formatDate(range.start) : `${formatDate(range.start)} a ${formatDate(range.end)}`
+            return (
+              <Badge key={range.ids[0]} className="gap-1.5 border-none bg-red-50 text-red-600">
+                {label}
+                {range.reason ? ` — ${range.reason}` : ''}
+                <button aria-label={`Remover bloqueio de ${label} em ${workspaceName}`} onClick={() => removeException(range.ids)} className="ml-0.5 hover:text-red-800">
+                  <X className="h-3 w-3" />
+                </button>
+              </Badge>
+            )
+          })}
+          {otherExceptions.map((e) => (
             <Badge key={e.id} className="gap-1.5 border-none bg-red-50 text-red-600">
-              {new Date(`${e.date}T12:00:00`).toLocaleDateString('pt-BR')}
+              {formatDate(e.date)}
+              {e.start_time && e.end_time ? ` ${e.start_time.slice(0, 5)}–${e.end_time.slice(0, 5)}` : ''}
               {e.reason ? ` — ${e.reason}` : ''}
-              <button aria-label={`Remover bloqueio de ${e.date} em ${workspaceName}`} onClick={() => removeException(e.id)} className="ml-0.5 hover:text-red-800">
+              <button aria-label={`Remover bloqueio de ${e.date} em ${workspaceName}`} onClick={() => removeException([e.id])} className="ml-0.5 hover:text-red-800">
                 <X className="h-3 w-3" />
               </button>
             </Badge>
@@ -257,11 +289,20 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
 
         <div className="mt-4 flex flex-wrap items-end gap-2">
           <div>
-            <Label className="text-xs">Data</Label>
+            <Label className="text-xs">De</Label>
             <Input
               type="date"
               value={excForm.date}
               onChange={(e) => setExcForm((f) => ({ ...f, date: e.target.value }))}
+            />
+          </div>
+          <div>
+            <Label className="text-xs">Até (opcional)</Label>
+            <Input
+              type="date"
+              min={excForm.date || undefined}
+              value={excForm.end_date}
+              onChange={(e) => setExcForm((f) => ({ ...f, end_date: e.target.value }))}
             />
           </div>
           <div>
@@ -274,7 +315,7 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
           </div>
           <Button onClick={addException} disabled={savingExc} size="sm" variant="outline" className="gap-1.5">
             <Plus className="h-4 w-4" />
-            Bloquear dia
+            {excForm.end_date && excForm.end_date !== excForm.date ? 'Bloquear período' : 'Bloquear dia'}
           </Button>
         </div>
       </div>

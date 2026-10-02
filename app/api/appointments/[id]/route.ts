@@ -59,7 +59,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: fetchError?.message ?? 'Consulta não encontrada' }, { status: 404 })
   }
 
-  // Convênio da consulta (bot_config.insurance_plans). Consulta por convênio
+  // Convênio da consulta (nome de um convênio de health_insurers). Consulta por convênio
   // fica fora do ciclo de receita: limpa preço/procedimento na mesma gravação
   // e não cria entrada. body.health_plan ausente = não mexeu; '' = particular.
   // Com o módulo "billing" e body.billing_type presente, o convênio vem das

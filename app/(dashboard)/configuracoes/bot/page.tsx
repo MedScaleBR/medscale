@@ -14,23 +14,17 @@ export default async function BotConfigPage() {
   if (session.role !== 'owner' && session.role !== 'admin') redirect('/configuracoes')
 
   const supabase = await createClient()
-  const [{ data: botConfig }, { data: profile }, { data: handoffHours }, { data: workspaces }, { data: membership }] =
+  const [{ data: botConfig }, { data: profile }, { data: workspaces }, { data: insurers }, { data: membership }] =
     await Promise.all([
       supabase.from('bot_config').select('*').eq('account_id', session.accountId).maybeSingle(),
       supabase.from('profiles').select('phone').eq('id', session.userId).single(),
+      supabase.from('workspaces').select('id').eq('account_id', session.accountId).eq('is_active', true),
       supabase
-        .from('handoff_hours')
-        .select('*')
-        .order('day_of_week')
-        .order('start_time'),
-      supabase
-        .from('workspaces')
-        .select(
-          'id, name, address, business_hours, directions_parking, contact_info, consultation_price_from, handoff_number'
-        )
+        .from('health_insurers')
+        .select('name')
         .eq('account_id', session.accountId)
         .eq('is_active', true)
-        .order('display_order'),
+        .order('name'),
       supabase
         .from('memberships')
         .select('handoff_push_enabled')
@@ -39,14 +33,13 @@ export default async function BotConfigPage() {
         .maybeSingle(),
     ])
 
-  const workspaceList = workspaces ?? []
-  const workspaceIds = new Set(workspaceList.map((w) => w.id))
-  type HandoffHour = NonNullable<typeof handoffHours>[number]
-  const handoffHoursByWorkspace: Record<string, HandoffHour[]> = {}
-  for (const h of handoffHours ?? []) {
-    if (!workspaceIds.has(h.workspace_id)) continue
-    ;(handoffHoursByWorkspace[h.workspace_id] ??= []).push(h)
-  }
+  const workspaceIds = (workspaces ?? []).map((w) => w.id)
+  const { data: catalog } = await supabase
+    .from('procedure_catalog')
+    .select('name')
+    .in('workspace_id', workspaceIds)
+    .eq('is_active', true)
+    .order('name')
 
   return (
     <div className="space-y-6">
@@ -57,17 +50,18 @@ export default async function BotConfigPage() {
         </Link>
         <h1 className="text-xl font-medium text-gray-900">Configurar a Clara (WhatsApp)</h1>
         <p className="text-sm text-gray-400">
-          Conexão com a Meta, personalidade e regras da Clara (uma configuração para toda a conta) e
-          os dados que variam por unidade. A Clara conversa e agenda 24/7 — só o atendimento humano
-          tem horário próprio.
+          Conexão com a Meta e o jeito da Clara atender: mensagens, tom de voz, políticas, FAQ e
+          transferência para humano. Serviços, convênios e unidades ficam nas páginas de cada um.
         </p>
       </div>
 
       <BotConfigForm
         initialConfig={botConfig}
-        workspaces={workspaceList}
-        handoffHoursByWorkspace={handoffHoursByWorkspace}
-        activeWorkspaceId={session.workspaceId}
+        clinicData={{
+          serviceNames: [...new Set((catalog ?? []).map((p) => p.name))],
+          insurerNames: (insurers ?? []).map((i) => i.name),
+          unitCount: workspaceIds.length,
+        }}
         doctorPhone={profile?.phone ?? ''}
         initialHandoffPushEnabled={membership?.handoff_push_enabled ?? false}
       />

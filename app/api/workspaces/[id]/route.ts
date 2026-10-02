@@ -42,7 +42,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     'business_hours',
     'directions_parking',
     'contact_info',
-    'consultation_price_from',
     'handoff_number',
   ] as const) {
     if (field in body) update[field] = body[field]

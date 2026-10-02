@@ -9,21 +9,17 @@ export default async function ReceitaSettingsPage() {
   const session = await resolveActiveSession()
   if (!session) return null
 
-  // Catálogo de procedimentos + preferências do ciclo de receita: exclusivo
-  // do owner, e só quando o módulo está ativo.
+  // Preferências do ciclo de receita: exclusivo do owner, e só com o módulo ativo.
   if (session.role !== 'owner' || !session.userModules.includes('revenue_cycle')) {
     redirect('/configuracoes')
   }
 
   const supabase = await createClient()
-  const [{ data: procedures }, { data: settings }] = await Promise.all([
-    supabase
-      .from('procedure_catalog')
-      .select('*')
-      .eq('workspace_id', session.workspaceId)
-      .order('name', { ascending: true }),
-    supabase.from('revenue_settings').select('*').eq('workspace_id', session.workspaceId).maybeSingle(),
-  ])
+  const { data: settings } = await supabase
+    .from('revenue_settings')
+    .select('*')
+    .eq('workspace_id', session.workspaceId)
+    .maybeSingle()
 
   return (
     <div className="max-w-2xl space-y-6">
@@ -37,12 +33,15 @@ export default async function ReceitaSettingsPage() {
         </Link>
         <h1 className="text-xl font-medium text-gray-900">Receita</h1>
         <p className="text-sm text-gray-400">
-          Catálogo de procedimentos e preferências do fechamento diário.
+          Preferências do fechamento diário. O catálogo de procedimentos fica em{' '}
+          <Link href="/configuracoes/servicos" className="text-[var(--cyan-dark)] hover:underline">
+            Serviços
+          </Link>
+          .
         </p>
       </div>
 
       <RevenueSettingsClient
-        initialProcedures={procedures ?? []}
         initialSettings={
           settings ?? {
             daily_summary_enabled: true,

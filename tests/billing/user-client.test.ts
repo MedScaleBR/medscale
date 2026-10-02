@@ -58,7 +58,7 @@ describe('operações de usuário respeitam a sessão e RLS', () => {
   })
 
   it('gera lote manual com o client autenticado no banco', async () => {
-    g.user = createSupabaseMock({ health_insurers: { select: { data: { id: 'ins1', account_id: 'acc1', tiss_version: '4.03.00' } } } })
+    g.user = createSupabaseMock({ health_insurers: { select: { data: { id: 'ins1', account_id: 'acc1', tiss_version: '4.03.00', ans_registry: '999999', provider_code: 'P1' } } } })
     g.admin.mockReturnValue({ storage: g.user.client.storage })
     g.createBatches.mockResolvedValue([])
     const request = new NextRequest('http://localhost/api/billing/batches', {

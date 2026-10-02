@@ -1,6 +1,7 @@
 import { resolveActiveSession } from '@/lib/session/server'
 import { createClient } from '@/lib/supabase/server'
 import { reconcileAccountCalendars } from '@/lib/google/reconcile'
+import { hasTissIdentity } from '@/lib/billing/insurer'
 import { AgendaClient } from '@/components/agenda/AgendaClient'
 
 export default async function AgendaPage() {
@@ -44,25 +45,19 @@ export default async function AgendaPage() {
     }
   }
 
-  // Convênios atendidos (seletor "Atendimento" do modal). Config da Clara é
-  // única por account (bot_config.insurance_plans).
-  const { data: botConfig } = await supabase
-    .from('bot_config')
-    .select('insurance_plans')
+  // Convênios aceitos (seletor "Atendimento" do modal) — os ativos cadastrados
+  // em Convênios. Com o módulo billing, o modal usa as operadoras (com id).
+  const { data: insurerRows } = await supabase
+    .from('health_insurers')
+    .select('id, name, ans_registry, provider_code')
     .eq('account_id', session.accountId)
-    .maybeSingle()
-  const healthPlans = botConfig?.insurance_plans ?? []
-
-  // Faturamento TISS: com o módulo ativo, o seletor lista as operadoras
-  // cadastradas (qualquer membro que agenda pode escolher o convênio).
-  const { data: billingInsurers } = session.accountModules.includes('billing')
-    ? await supabase
-        .from('health_insurers')
-        .select('id, name')
-        .eq('account_id', session.accountId)
-        .eq('is_active', true)
-        .order('name')
-    : { data: null }
+    .eq('is_active', true)
+    .order('name')
+  const healthPlans = (insurerRows ?? []).map((i) => i.name)
+  // Com billing, só operadoras com registro ANS e código do prestador (prontas p/ TISS).
+  const billingInsurers = session.accountModules.includes('billing')
+    ? (insurerRows ?? []).filter(hasTissIdentity).map(({ id, name }) => ({ id, name }))
+    : []
 
   return (
     <div className="space-y-6">
@@ -78,7 +73,7 @@ export default async function AgendaPage() {
         showTranscriptions={session.userModules.includes('transcriptions')}
         proceduresByWorkspace={proceduresByWorkspace}
         healthPlans={healthPlans}
-        billingInsurers={billingInsurers ?? []}
+        billingInsurers={billingInsurers}
       />
     </div>
   )

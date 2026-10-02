@@ -175,7 +175,7 @@ export function NewAccountForm() {
       )}
       {mode === 'none' && (
         <p className="text-xs text-gray-400">
-          Cria só a account e a workspace padrão, sem ninguém vinculado — convide ou atribua o owner depois, na
+          Cria só a account, sem unidade nem ninguém vinculado — convide ou atribua o owner depois, na
           página da própria account.
         </p>
       )}

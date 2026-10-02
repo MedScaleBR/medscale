@@ -155,4 +155,17 @@ describe('migração de faturamento em PostgreSQL com RLS real', () => {
     expect((await db.query<{ status: string }>('select status from public.tiss_guides')).rows[0].status).toBe('ready')
     expect((await db.query('select * from public.tiss_batches')).rows).toEqual([])
   })
+
+  it('operadora sem registro ANS ou código do prestador não gera guia', async () => {
+    await db.exec(`update public.health_insurers set ans_registry = null, provider_code = null`)
+    await asUser(ids.member)
+    expect(await ensure()).toEqual({ status: 'skipped', reason: 'no_insurer' })
+  })
+
+  it('aceita várias operadoras sem ANS na mesma conta, mas não duas com o mesmo ANS', async () => {
+    await db.exec(`insert into public.health_insurers (account_id, name) values ('${ids.account}', 'Unimed'), ('${ids.account}', 'Bradesco')`)
+    await expect(
+      db.exec(`insert into public.health_insurers (account_id, name, ans_registry, provider_code) values ('${ids.account}', 'Duplicada', '999999', 'X')`),
+    ).rejects.toThrow()
+  })
 })

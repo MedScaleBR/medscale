@@ -47,7 +47,6 @@ interface UnitInfo {
   businessHours: string | null
   directionsParking: string | null
   contactInfo: string | null
-  consultationPriceFrom: number | null
 }
 
 interface BuildPromptInput {
@@ -58,6 +57,8 @@ interface BuildPromptInput {
   freeSlotsByUnit: Record<string, Record<string, string[]>>
   // catálogo estruturado por unidade (ciclo de receita); vazio = sem catálogo
   procedureCatalogByUnit: Record<string, CatalogProcedure[]>
+  // Convênios ativos da account (health_insurers) — a Clara só informa estes.
+  insurancePlans: string[]
   isFirstMessage: boolean
   upcomingAppointments: UpcomingAppointment[] // consultas futuras já agendadas deste paciente (todas as unidades)
   // Nome da unidade que o paciente já mencionou nesta conversa — DICA de
@@ -85,6 +86,7 @@ export function buildDynamicSystemPrompt({
   units,
   freeSlotsByUnit,
   procedureCatalogByUnit,
+  insurancePlans,
   isFirstMessage,
   upcomingAppointments,
   currentUnitName = null,
@@ -92,19 +94,22 @@ export function buildDynamicSystemPrompt({
 }: BuildPromptInput): string {
   const multiUnit = units.length > 1
 
-  // ── Procedimentos ──────────────────────────────────────────────────────────
-  const proceduresText = config.procedures.length > 0 ? config.procedures.join(', ') : 'consultas gerais'
+  // ── Procedimentos (nomes do catálogo das unidades, sem repetir) ─────────────
+  const procedureNames = [
+    ...new Set(units.flatMap((u) => (procedureCatalogByUnit[u.id] ?? []).map((p) => p.name))),
+  ]
+  const proceduresText = procedureNames.length > 0 ? procedureNames.join(', ') : 'consultas gerais'
 
   // ── Convênios ──────────────────────────────────────────────────────────────
   const insuranceText = (() => {
-    if (config.insurancePlans.length === 0 && config.acceptsPrivate) {
+    if (insurancePlans.length === 0 && config.acceptsPrivate) {
       return 'Atendimento apenas particular (sem convênios).'
     }
-    if (config.insurancePlans.length > 0 && config.acceptsPrivate) {
-      return `Convênios aceitos: ${config.insurancePlans.join(', ')}. Também atende particular.`
+    if (insurancePlans.length > 0 && config.acceptsPrivate) {
+      return `Convênios aceitos: ${insurancePlans.join(', ')}. Também atende particular.`
     }
-    if (config.insurancePlans.length > 0 && !config.acceptsPrivate) {
-      return `Convênios aceitos: ${config.insurancePlans.join(', ')}. Não atende particular.`
+    if (insurancePlans.length > 0 && !config.acceptsPrivate) {
+      return `Convênios aceitos: ${insurancePlans.join(', ')}. Não atende particular.`
     }
     return 'Consulte a equipe para informações sobre convênios.'
   })()
@@ -117,7 +122,6 @@ export function buildDynamicSystemPrompt({
         u.businessHours ? `Horário presencial: ${u.businessHours}` : null,
         u.directionsParking ? `Como chegar/estacionamento: ${u.directionsParking}` : null,
         u.contactInfo ? `Contato: ${u.contactInfo}` : null,
-        u.consultationPriceFrom ? `Consulta particular a partir de R$${u.consultationPriceFrom.toFixed(0)}` : null,
       ].filter(Boolean)
       return `• ${u.name} (id: ${u.id})${bits.length ? `\n  ${bits.join('\n  ')}` : ''}`
     })
@@ -150,13 +154,13 @@ PROCEDIMENTO_ID: <id>
 (copie o id do procedimento mais adequado ao que o paciente descreveu, da unidade escolhida, exatamente como está entre parênteses). Nunca invente um id. Se nenhum procedimento se aplicar, omita essa linha. Nunca mostre o id nem os valores desta lista ao paciente de forma diferente do que já está configurado.\n`
     : ''
 
-  // ── Preço (quando há uma unidade só, ou preço uniforme) ───────────────────
-  const singlePrice = !multiUnit ? units[0]?.consultationPriceFrom ?? null : null
-  const priceText = singlePrice
-    ? `Consulta particular a partir de R$${singlePrice.toFixed(0)}.`
-    : multiUnit
-      ? 'O valor da consulta particular varia por unidade (ver lista de Unidades acima).'
-      : 'Para informações sobre valores, informe que a equipe entrará em contato.'
+  // ── Preço: só o que está no catálogo ─────────────────────────────────────
+  const priceText =
+    procedureNames.length > 0
+      ? 'Valores: use a tabela "Procedimentos e valores" abaixo e as observações de preço configuradas; nunca invente valores.'
+      : config.pricingInfo
+        ? 'Valores: use as observações de preço configuradas; nunca invente valores.'
+        : 'Para informações sobre valores, informe que a equipe entrará em contato.'
 
   // ── Local, contato e pagamento ──────────────────────────────────────────────
   const paymentText = config.paymentMethods.length > 0 ? config.paymentMethods.join(', ') : null

@@ -6,6 +6,7 @@ import { BILLING_TZ } from '@/lib/billing/constants'
 import { ensureGuideSafely } from '@/lib/billing/guides'
 import { isBatchDue } from '@/lib/billing/schedule'
 import { createBatchesForInsurer, reportBatchFailure } from '@/lib/billing/batches'
+import { hasTissIdentity } from '@/lib/billing/insurer'
 
 export const maxDuration = 300
 
@@ -66,7 +67,7 @@ export async function POST(req: NextRequest) {
     .in('account_id', accountIds)
     .eq('is_active', true)
 
-  const due = (insurers ?? []).filter((i) => isBatchDue(i, now))
+  const due = (insurers ?? []).filter(hasTissIdentity).filter((i) => isBatchDue(i, now))
   const guardSince = new Date(now.getTime() - RERUN_GUARD_MINUTES * 60 * 1000).toISOString()
   const summary: Array<{ insurerId: string; result: string; guides?: number }> = []
 

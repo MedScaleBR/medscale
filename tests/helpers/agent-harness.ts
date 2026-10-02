@@ -10,7 +10,6 @@ export const UNIT: UnitContext = {
   businessHours: null,
   directionsParking: null,
   contactInfo: null,
-  consultationPriceFrom: null,
   handoffNumber: '+5511999998888',
 }
 
@@ -51,8 +50,6 @@ export const claudeCreate = vi.fn(async () => {
 
 export const DEFAULT_BOT_CONFIG: BotConfig = {
   specialty: 'Ortopedia',
-  procedures: [],
-  insurancePlans: [],
   acceptsPrivate: true,
   paymentMethods: [],
   pricingInfo: null,
@@ -86,6 +83,7 @@ export function defaultSupabaseConfig(): SupabaseMockConfig {
     messages: { insert: { data: null }, select: { data: [{ role: 'user', content: PARAMS.message }] } },
     appointments: { select: { data: [] }, insert: { data: null }, update: { data: null } },
     procedure_catalog: { select: { data: [] } },
+    health_insurers: { select: { data: [] } },
     handoff_hours: { select: { data: [], count: 0 } },
     handoff_logs: { insert: { data: null } },
   }

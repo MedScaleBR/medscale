@@ -79,10 +79,23 @@ describe('acesso às rotas /api/billing', () => {
     expect(call.filters).toContainEqual(['eq', 'is_active', true])
   })
 
-  it('deve responder 403 com o módulo billing inativo na account', async () => {
-    setup({ accounts: { select: { data: { modules: ['agenda'] } } } })
-    expect((await listInsurers(req('/api/billing/insurers'))).status).toBe(403)
+  it('sem o módulo billing, guias dão 403 mas convênios continuam acessíveis', async () => {
+    setup({ accounts: { select: { data: { modules: ['agenda'] } } }, health_insurers: { select: { data: [] } } })
+    expect((await listInsurers(req('/api/billing/insurers'))).status).toBe(200)
     expect((await listGuides(req('/api/billing/guides'))).status).toBe(403)
+  })
+
+  it('sem o módulo billing, cadastra convênio só com o nome', async () => {
+    setup({
+      accounts: { select: { data: { modules: ['agenda'] } } },
+      health_insurers: { insert: { data: { id: 'ins1', name: 'Unimed' } } },
+    })
+
+    const res = await createInsurer(req('/api/billing/insurers', json({ name: 'Unimed', ans_registry: '12' })))
+
+    expect(res.status).toBe(201)
+    const [call] = g.supabase.callsTo('health_insurers', 'insert')
+    expect(call.payload).toEqual({ name: 'Unimed', account_id: 'acc1' })
   })
 
   it('member não pode cadastrar operadora', async () => {
@@ -149,7 +162,7 @@ describe('lotes', () => {
   })
 
   it('"Gerar lote agora" usa a operadora da account e registra o autor', async () => {
-    setup({ health_insurers: { select: { data: { id: 'ins1', account_id: 'acc1', tiss_version: '4.03.00' } } } })
+    setup({ health_insurers: { select: { data: { id: 'ins1', account_id: 'acc1', tiss_version: '4.03.00', ans_registry: '999999', provider_code: 'P1' } } } })
     g.createBatches.mockResolvedValue([{ status: 'generated', batchId: 'b1', batchNumber: 1, guideCount: 3 }])
 
     const res = await generateBatch(req('/api/billing/batches', json({ insurer_id: 'ins1' })))
@@ -158,6 +171,17 @@ describe('lotes', () => {
     expect(g.createBatches).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ id: 'ins1' }), expect.objectContaining({ createdBy: 'u1' }))
     const [call] = g.supabase.callsTo('health_insurers', 'select')
     expect(call.filters).toContainEqual(['eq', 'account_id', 'acc1'])
+  })
+
+  it('"Gerar lote agora" recusa operadora sem registro ANS', async () => {
+    g.createBatches.mockClear()
+    setup({ health_insurers: { select: { data: { id: 'ins1', account_id: 'acc1', tiss_version: '4.03.00', ans_registry: null, provider_code: null } } } })
+
+    const res = await generateBatch(req('/api/billing/batches', json({ insurer_id: 'ins1' })))
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe('Complete o registro ANS e o código do prestador desta operadora em Convênios.')
+    expect(g.createBatches).not.toHaveBeenCalled()
   })
 
   it('marcar como enviado usa a função transacional com o client do usuário', async () => {
@@ -242,6 +266,22 @@ describe('cron /api/cron/tiss-batches', () => {
     expect(body.batches).toEqual([{ insurerId: 'ins1', result: 'already_ran' }])
     const [guard] = g.supabase.callsTo('tiss_batches', 'select')
     expect(guard.filters).toContainEqual(['is', 'created_by', null])
+    vi.useRealTimers()
+  })
+
+  it('ignora operadora sem registro ANS no horário do lote', async () => {
+    g.createBatches.mockClear()
+    setup({
+      accounts: { select: { data: [{ id: 'acc1' }] } },
+      appointments: { select: { data: [] } },
+      health_insurers: { select: { data: [{ ...insurer, ans_registry: null }] } },
+      tiss_batches: { select: { data: [] } },
+    })
+
+    const res = await cron(cronReq())
+
+    expect(res.status).toBe(200)
+    expect(g.createBatches).not.toHaveBeenCalled()
     vi.useRealTimers()
   })
 

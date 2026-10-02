@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
+import { requireWorkspaceSession, requireModule, requireRole } from '@/lib/session/api'
 
-// Catálogo de procedimentos (ciclo de receita). Leitura: qualquer membro da
-// workspace com o módulo — a /agenda precisa da lista para o seletor de
-// procedimento. Escrita: exclusiva do owner (cadastro de preços é dado
-// sensível, mesmo padrão de /api/revenue).
+// Catálogo de procedimentos. Leitura: qualquer membro com o ciclo de receita
+// (a /agenda usa no seletor). Escrita: owner/admin, sem depender de módulo —
+// o catálogo alimenta a Clara em qualquer conta (página Serviços).
 
 export async function GET(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
@@ -32,11 +31,8 @@ export async function POST(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
   if ('error' in result) return result.error
   const { session } = result
-  const moduleCheck = requireModule(session, 'revenue_cycle')
-  if (moduleCheck) return moduleCheck
-  if (session.role !== 'owner') {
-    return NextResponse.json({ error: 'Restrito ao owner da account' }, { status: 403 })
-  }
+  const roleCheck = requireRole(session, ['owner', 'admin'])
+  if (roleCheck) return roleCheck
 
   const body = await req.json()
   const price = Number(body.default_price)

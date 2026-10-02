@@ -61,4 +61,17 @@ describe('expediente por local', () => {
     expect(html).toContain('Férias da Zona Sul')
     expect(html).not.toContain('Feriado do Centro')
   })
+
+  it('mostra dias bloqueados seguidos como um único período', () => {
+    const html = renderToStaticMarkup(createElement(AvailabilitySettings, {
+      initialRules: [],
+      initialExceptions: ['2030-07-01', '2030-07-02', '2030-07-03'].map((date, i) => (
+        { id: `e${i}`, workspace_id: 'w1', date, type: 'blocked', start_time: null, reason: 'Férias' }
+      )) as Database['public']['Tables']['availability_exceptions']['Row'][],
+      workspaces: [{ id: 'w1', name: 'Centro' }],
+      initialWorkspaceId: 'w1',
+    } as Parameters<typeof AvailabilitySettings>[0]))
+    expect(html).toContain('01/07/2030 a 03/07/2030')
+    expect(html.match(/Férias/g)).toHaveLength(1)
+  })
 })

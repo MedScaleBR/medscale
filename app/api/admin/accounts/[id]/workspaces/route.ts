@@ -32,9 +32,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const body = await req.json()
   if (!body.name) return NextResponse.json({ error: 'name é obrigatório' }, { status: 400 })
 
+  // A account nasce sem unidade — a primeira cadastrada vira a padrão.
+  const { count } = await supabase
+    .from('workspaces')
+    .select('id', { count: 'exact', head: true })
+    .eq('account_id', id)
+
   const { data, error } = await supabase
     .from('workspaces')
-    .insert({ account_id: id, name: body.name, slug: slugify(body.slug || body.name) })
+    .insert({ account_id: id, name: body.name, slug: slugify(body.slug || body.name), is_default: count === 0 })
     .select()
     .single()
 

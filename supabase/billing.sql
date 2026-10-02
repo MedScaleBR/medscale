@@ -17,8 +17,10 @@ create table if not exists public.health_insurers (
   id                    uuid primary key default gen_random_uuid(),
   account_id            uuid not null references public.accounts(id) on delete cascade,
   name                  text not null,
-  ans_registry          text not null check (ans_registry ~ '^\d{6}$'),
-  provider_code         text not null,           -- código do prestador na operadora
+  -- ANS e código do prestador só existem com o módulo billing: sem ele o
+  -- convênio é só o nome que a Clara informa ao paciente.
+  ans_registry          text check (ans_registry ~ '^\d{6}$'),
+  provider_code         text,                    -- código do prestador na operadora
   tiss_version          text not null default '4.03.00',
   default_consult_guide text not null default 'consulta'
                         check (default_consult_guide in ('consulta','sp_sadt')),
@@ -30,9 +32,14 @@ create table if not exists public.health_insurers (
   next_batch_number     bigint not null default 1,
   is_active             boolean not null default true,
   created_at            timestamptz not null default now(),
-  updated_at            timestamptz not null default now(),
-  unique (account_id, ans_registry)
+  updated_at            timestamptz not null default now()
 );
+-- Bancos criados antes de ANS/código ficarem opcionais.
+alter table public.health_insurers alter column ans_registry drop not null;
+alter table public.health_insurers alter column provider_code drop not null;
+alter table public.health_insurers drop constraint if exists health_insurers_account_id_ans_registry_key;
+create unique index if not exists health_insurers_account_ans_unique
+  on public.health_insurers (account_id, ans_registry) where ans_registry is not null;
 
 create table if not exists public.insurer_procedures (
   id          uuid primary key default gen_random_uuid(),
@@ -441,6 +448,9 @@ begin
   v_insurer_id := coalesce(a.insurer_id, pi.insurer_id, pr.insurer_id);
   select * into i from public.health_insurers where id = v_insurer_id and account_id = a.account_id;
   if not found then return jsonb_build_object('status', 'skipped', 'reason', 'no_insurer'); end if;
+  if i.ans_registry is null or i.provider_code is null then
+    return jsonb_build_object('status', 'skipped', 'reason', 'no_insurer');
+  end if;
   if pi.insurer_id is distinct from i.id then pi := null; end if;
   if pr.insurer_id is distinct from i.id then pr := null; end if;
   select * into w from public.workspaces where id = a.workspace_id and account_id = a.account_id;
