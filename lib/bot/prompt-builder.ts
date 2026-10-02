@@ -157,8 +157,10 @@ PROCEDIMENTO_ID: <id>
   // ── Preço: só o que está no catálogo ─────────────────────────────────────
   const priceText =
     procedureNames.length > 0
-      ? 'Valores: informe só os da tabela "Procedimentos e valores" abaixo.'
-      : 'Para informações sobre valores, informe que a equipe entrará em contato.'
+      ? 'Valores: use a tabela "Procedimentos e valores" abaixo e as observações de preço configuradas; nunca invente valores.'
+      : config.pricingInfo
+        ? 'Valores: use as observações de preço configuradas; nunca invente valores.'
+        : 'Para informações sobre valores, informe que a equipe entrará em contato.'
 
   // ── Local, contato e pagamento ──────────────────────────────────────────────
   const paymentText = config.paymentMethods.length > 0 ? config.paymentMethods.join(', ') : null

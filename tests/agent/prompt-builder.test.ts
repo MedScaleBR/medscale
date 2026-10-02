@@ -85,7 +85,13 @@ describe('buildDynamicSystemPrompt — convênios e valores', () => {
   it('com catálogo, manda usar só os valores da tabela', () => {
     const prompt = build({}, { procedureCatalogByUnit: { w1: [{ id: 'p1', name: 'Consulta', price: 300 }] } })
     expect(prompt).toContain('R$300')
-    expect(prompt).toContain('Valores: informe só os da tabela')
+    expect(prompt).toContain('Valores: use a tabela "Procedimentos e valores" abaixo e as observações de preço configuradas')
+  })
+
+  it('sem catálogo mas com observações de preço, manda usar as observações', () => {
+    const prompt = build({ pricingInfo: 'Retorno em 30 dias é gratuito.' })
+    expect(prompt).toContain('use as observações de preço configuradas')
+    expect(prompt).not.toContain('a equipe entrará em contato')
   })
 })
 
