@@ -8,6 +8,7 @@ import { decryptToken } from '@/lib/crypto'
 import { checkRateLimit, RATE_LIMIT_NOTICE_MESSAGE } from '@/lib/rate-limit/webhook'
 import { sendWhatsAppMessage } from '@/lib/whatsapp/send'
 import { parseReferral, recordAttribution } from '@/lib/whatsapp/referral'
+import { confirmReminderAppointment } from '@/lib/whatsapp/confirm-appointment'
 
 // Valida a assinatura HMAC enviada pela Meta para garantir que o payload
 // realmente veio da Meta e não foi forjado. `secret` é o App Secret do App
@@ -140,6 +141,23 @@ export async function POST(req: NextRequest) {
           token: decryptToken(botConn.meta_token),
         }).catch((err) => console.error('[whatsapp webhook] rate limit notice failed', err))
       }
+      return
+    }
+
+    try {
+      const confirmation = await confirmReminderAppointment(supabase, accountId, from, message)
+      if (confirmation.handled) {
+        if (confirmation.reply && botConn.phone_number_id && botConn.meta_token) {
+          await sendWhatsAppMessage({
+            to: from, message: confirmation.reply,
+            phoneNumberId: botConn.phone_number_id, token: decryptToken(botConn.meta_token),
+          })
+        }
+        return
+      }
+    } catch (err) {
+      console.error('confirmReminderAppointment failed', err)
+      if (webhookLog) await supabase.from('webhook_logs').update({ error: String(err) }).eq('id', webhookLog.id)
       return
     }
 

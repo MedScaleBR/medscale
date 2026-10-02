@@ -36,6 +36,7 @@ export async function sendWhatsAppMessage({ to, message, phoneNumberId, token }:
 }
 
 interface SendReminderParams {
+  appointmentId: string
   to: string
   phoneNumberId: string
   token: string
@@ -48,6 +49,7 @@ interface SendReminderParams {
 // Mensagens iniciadas pelo sistema (fora da janela de 24h) precisam usar
 // um template aprovado pela Meta — texto livre é rejeitado pela API.
 export async function sendReminderTemplate({
+  appointmentId,
   to,
   phoneNumberId,
   token,
@@ -78,9 +80,15 @@ export async function sendReminderTemplate({
               { type: 'text', text: appointmentDate },
               { type: 'text', text: appointmentTime },
               { type: 'text', text: address },
-            ],
-          },
-        ],
+          ],
+        },
+        {
+          type: 'button',
+          sub_type: 'quick_reply',
+          index: '0',
+          parameters: [{ type: 'payload', payload: `confirm_appointment:${appointmentId}` }],
+        },
+      ],
       },
     }),
   })

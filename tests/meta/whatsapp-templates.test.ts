@@ -27,6 +27,7 @@ describe('ensureWhatsAppTemplates', () => {
     const [component] = JSON.parse(body.get('components')!)
     expect(component.type).toBe('BODY')
     expect(component.example.body_text[0]).toHaveLength(4)
+    expect(JSON.parse(body.get('components')!)[1]).toEqual({ type: 'BUTTONS', buttons: [{ type: 'QUICK_REPLY', text: 'Confirmar consulta' }] })
   })
 
   it('não recria o que já existe no WABA', async () => {
