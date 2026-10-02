@@ -368,8 +368,8 @@ export interface Database {
           id: string
           account_id: string
           name: string
-          ans_registry: string
-          provider_code: string
+          ans_registry: string | null
+          provider_code: string | null
           tiss_version: string
           default_consult_guide: TissGuideType
           batch_weekdays: number[]
@@ -384,8 +384,6 @@ export interface Database {
         Insert: Partial<Database['public']['Tables']['health_insurers']['Row']> & {
           account_id: string
           name: string
-          ans_registry: string
-          provider_code: string
         }
         Update: Partial<Database['public']['Tables']['health_insurers']['Row']>
         Relationships: [
