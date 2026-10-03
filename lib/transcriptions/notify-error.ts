@@ -4,7 +4,8 @@ import { broadcastToWorkspace } from '@/lib/realtime/broadcast'
 interface FailedTranscription {
   id: string
   workspace_id: string
-  patient_id: string
+  patient_id: string | null
+  patient_name?: string | null
   recorded_by: string
 }
 
@@ -17,12 +18,12 @@ export async function notifyTranscriptionFailed(transcription: FailedTranscripti
   try {
     const supabase = createAdminClient()
 
-    const { data: patient } = await supabase
+    const { data: patient } = transcription.patient_id ? await supabase
       .from('patients')
       .select('full_name')
       .eq('id', transcription.patient_id)
-      .single()
-    const patientName = patient?.full_name ?? 'Paciente'
+      .single() : { data: null }
+    const patientName = patient?.full_name ?? transcription.patient_name ?? 'Paciente'
 
     const { sendTranscriptionErrorPush } = await import('@/lib/push/send')
 

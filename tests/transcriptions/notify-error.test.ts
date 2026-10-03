@@ -27,6 +27,19 @@ function setup() {
   return g.supabase
 }
 
+it('uses the supplied patient name without querying a patient record', async () => {
+  const supabase = setup()
+  g.sendTranscriptionErrorPush = vi.fn(async () => {})
+  g.broadcastToWorkspace = vi.fn(async () => {})
+  await notifyTranscriptionFailed({
+    id: 't-1', workspace_id: 'w-1', patient_id: null,
+    patient_name: 'Maria Silva', recorded_by: 'u-1',
+  })
+  expect(supabase.callsTo('patients')).toHaveLength(0)
+  expect(g.broadcastToWorkspace).toHaveBeenCalledWith('w-1', 'transcription_error',
+    expect.objectContaining({ patientName: 'Maria Silva' }))
+})
+
 describe('notifyTranscriptionFailed — avisa o médico quando a transcrição esgota as tentativas', () => {
   beforeEach(() => {
     g.sendTranscriptionErrorPush = vi.fn(async () => {})

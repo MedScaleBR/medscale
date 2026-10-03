@@ -13,6 +13,7 @@ type Row = {
   createdAt: string
   durationSeconds: number | null
   patientName: string
+  unitName?: string | null
   doctorName: string
   archivedAt: string | null
 }
@@ -146,6 +147,7 @@ export function TranscriptionsListClient({ rows }: { rows: Row[] }) {
                     >
                       {r.patientName}
                     </Link>
+                    {r.unitName && <p className="mt-0.5 text-xs text-gray-500">{r.unitName}</p>}
                   </td>
                   <td className="px-5 py-3 text-gray-600">{r.doctorName}</td>
                   <td className="px-5 py-3 text-gray-600">

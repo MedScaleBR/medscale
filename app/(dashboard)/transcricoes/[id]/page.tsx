@@ -36,8 +36,9 @@ export default async function TranscriptionDetailPage({ params }: { params: Prom
           <Link href="/transcricoes" className="text-xs text-gray-400 hover:text-[var(--cyan-dark)]">
             ← Transcrições
           </Link>
-          <h1 className="mt-1 text-xl font-medium text-gray-900">{patient?.full_name ?? 'Paciente'}</h1>
+          <h1 className="mt-1 text-xl font-medium text-gray-900">{patient?.full_name ?? row.patient_name ?? 'Paciente'}</h1>
           <p className="text-sm text-gray-400">
+            {row.unit_name && <>{row.unit_name} · </>}
             {new Date(row.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short', timeZone: 'America/Sao_Paulo' })}
           </p>
         </div>

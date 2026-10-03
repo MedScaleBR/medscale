@@ -602,7 +602,9 @@ export interface Database {
           workspace_id: string
           account_id: string
           appointment_id: string | null
-          patient_id: string
+          patient_id: string | null
+          patient_name: string | null
+          unit_name: string | null
           recorded_by: string
           audio_path: string
           duration_seconds: number | null
@@ -623,7 +625,6 @@ export interface Database {
         Insert: Partial<Database['public']['Tables']['transcriptions']['Row']> & {
           workspace_id: string
           account_id: string
-          patient_id: string
           recorded_by: string
           audio_path: string
         }
