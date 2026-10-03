@@ -8,6 +8,12 @@ export default async function TranscricoesPage() {
   if (!session) return null
 
   const supabase = await createClient()
+  const { data: units } = await supabase
+    .from('workspaces')
+    .select('id, name')
+    .eq('account_id', session.accountId)
+    .order('display_order')
+
   const { data: patients } = await supabase
     .from('patients')
     .select('id, full_name, phone')
@@ -49,7 +55,7 @@ export default async function TranscricoesPage() {
           <h1 className="text-xl font-medium text-gray-900">Transcrições</h1>
           <p className="text-sm text-gray-400">{rows.length} transcrições registradas</p>
         </div>
-        <NewTranscriptionButton patients={patients ?? []} />
+        <NewTranscriptionButton patients={patients ?? []} units={units ?? []} />
       </div>
       <TranscriptionsListClient rows={rows} />
     </div>

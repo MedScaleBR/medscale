@@ -9,15 +9,20 @@ import { RecordingButton } from './RecordingButton'
 import { Mic, Search, ChevronLeft } from 'lucide-react'
 
 type Patient = { id: string; full_name: string; phone: string }
+type Unit = { id: string; name: string }
 
-export function NewTranscriptionButton({ patients }: { patients: Patient[] }) {
+export function NewTranscriptionButton({ patients, units }: { patients: Patient[]; units: Unit[] }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Patient | null>(null)
   const [withoutRegistration, setWithoutRegistration] = useState(false)
   const [patientName, setPatientName] = useState('')
   const [unitName, setUnitName] = useState('')
+  const [unitSelection, setUnitSelection] = useState(units.length ? '' : 'custom')
   const [busy, setBusy] = useState(false)
+  const resolvedUnitName = unitSelection === 'custom'
+    ? unitName.trim()
+    : units.find((unit) => unit.id === unitSelection)?.name ?? ''
 
   const filtered = patients.filter(
     (p) => p.full_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -32,6 +37,7 @@ export function NewTranscriptionButton({ patients }: { patients: Patient[] }) {
     setWithoutRegistration(false)
     setPatientName('')
     setUnitName('')
+    setUnitSelection(units.length ? '' : 'custom')
   }
 
   return (
@@ -68,10 +74,27 @@ export function NewTranscriptionButton({ patients }: { patients: Patient[] }) {
                 <Input id="transcription-patient-name" autoFocus required disabled={busy} maxLength={200} value={patientName} onChange={(e) => setPatientName(e.target.value)} placeholder="Nome completo" />
               </div>
               <div className="space-y-1.5">
-                <label htmlFor="transcription-unit-name" className="text-sm font-medium">Unidade</label>
-                <Input id="transcription-unit-name" required disabled={busy} maxLength={200} value={unitName} onChange={(e) => setUnitName(e.target.value)} placeholder="Nome da unidade" />
+                <label htmlFor="transcription-unit" className="text-sm font-medium">Unidade</label>
+                <select
+                  id="transcription-unit"
+                  required
+                  disabled={busy}
+                  value={unitSelection}
+                  onChange={(e) => setUnitSelection(e.target.value)}
+                  className="h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:border-ring focus-visible:outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50"
+                >
+                  <option value="" disabled>Selecione uma unidade</option>
+                  {units.map((unit) => <option key={unit.id} value={unit.id}>{unit.name}</option>)}
+                  <option value="custom">Outra unidade (texto livre)</option>
+                </select>
               </div>
-              <RecordingButton patientName={patientName.trim()} unitName={unitName.trim()} disabled={!patientName.trim() || !unitName.trim()} onBusyChange={setBusy} onComplete={() => { setOpen(false); reset() }} />
+              {unitSelection === 'custom' && (
+                <div className="space-y-1.5">
+                  <label htmlFor="transcription-unit-name" className="text-sm font-medium">Nome da unidade</label>
+                  <Input id="transcription-unit-name" required disabled={busy} maxLength={200} value={unitName} onChange={(e) => setUnitName(e.target.value)} placeholder="Digite o nome da unidade" />
+                </div>
+              )}
+              <RecordingButton patientName={patientName.trim()} unitName={resolvedUnitName} disabled={!patientName.trim() || !resolvedUnitName} onBusyChange={setBusy} onComplete={() => { setOpen(false); reset() }} />
             </div>
           ) : selected ? (
             <div className="space-y-4">
