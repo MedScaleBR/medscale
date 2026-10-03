@@ -148,7 +148,7 @@ export function AppointmentBillingFields({
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <Label htmlFor="authorization_number">Autorização (senha)</Label>
+          <Label htmlFor="authorization_number">Código de autorização</Label>
           <Input
             id="authorization_number"
             maxLength={20}

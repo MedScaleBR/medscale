@@ -222,7 +222,7 @@ function GuideEditor({ guide, onSaved, onClose }: { guide: GuideRow; onSaved: (g
           </div>
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <Label htmlFor="g_auth">Autorização (senha)</Label>
+              <Label htmlFor="g_auth">Código de autorização</Label>
               <Input
                 id="g_auth"
                 maxLength={20}
