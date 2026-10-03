@@ -104,7 +104,7 @@ export function AccountTasksTab({
   }
 
   const toggleStatus = async (task: TaskRow) => {
-    const nextStatus: AccountTaskStatus = task.status === 'pending' ? 'done' : 'pending'
+    const nextStatus: AccountTaskStatus = task.status === 'done' ? 'todo' : 'done'
     setTasks((prev) => prev.map((t) => (t.id === task.id ? { ...t, status: nextStatus } : t)))
     await fetch(`/api/admin/tasks/${task.id}`, {
       method: 'PATCH',
@@ -119,7 +119,7 @@ export function AccountTasksTab({
   }
 
   const pending = tasks
-    .filter((t) => t.status === 'pending')
+    .filter((t) => t.status !== 'done')
     .sort((a, b) => {
       if (!a.dueDate) return 1
       if (!b.dueDate) return -1
@@ -131,7 +131,11 @@ export function AccountTasksTab({
     <li key={task.id} className="flex items-start justify-between gap-3 py-3">
       <div className="flex items-start gap-3">
         <div className="mt-0.5">
-          <Switch checked={task.status === 'done'} onCheckedChange={() => toggleStatus(task)} />
+          <Switch
+            checked={task.status === 'done'}
+            onCheckedChange={() => toggleStatus(task)}
+            aria-label={task.status === 'done' ? `Reabrir ${task.title}` : `Concluir ${task.title}`}
+          />
         </div>
         <div>
           <p className={cn('text-sm font-medium', task.status === 'done' ? 'text-gray-400 line-through' : 'text-gray-900')}>
@@ -148,14 +152,19 @@ export function AccountTasksTab({
           </p>
         </div>
       </div>
-      <button onClick={() => removeTask(task.id)} className="text-gray-300 hover:text-red-500">
+      <button
+        type="button"
+        onClick={() => removeTask(task.id)}
+        aria-label={`Remover tarefa ${task.title}`}
+        className="rounded text-gray-300 outline-none hover:text-red-500 focus-visible:ring-2 focus-visible:ring-[var(--cyan)]"
+      >
         <X className="h-4 w-4" />
       </button>
     </li>
   )
 
   return (
-    <div className="rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
+    <div className="rounded-xl border border-[var(--navy-06)] bg-white p-5 shadow-[var(--shadow-sm)]">
       <h2 className="text-sm font-medium text-gray-900">Tarefas</h2>
 
       <form onSubmit={submit} className="mt-4 space-y-2">
@@ -171,7 +180,8 @@ export function AccountTasksTab({
             type="date"
             value={dueDate}
             onChange={(e) => setDueDate(e.target.value)}
-            className="h-9 rounded-lg border border-gray-200 px-2.5 text-sm outline-none focus:border-[var(--cyan)] focus:ring-2 focus:ring-[var(--cyan-20)]"
+            aria-label="Prazo"
+            className="h-9 rounded-[10px] border border-gray-200 px-2.5 text-sm outline-none focus:border-[var(--cyan)] focus:ring-2 focus:ring-[var(--cyan-20)]"
           />
           <Select
             items={assigneeItems}
@@ -193,7 +203,7 @@ export function AccountTasksTab({
           <Button
             type="submit"
             disabled={saving || !title.trim()}
-            className="bg-[var(--cyan)] text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
+            className="h-9 rounded-[10px] bg-[var(--cyan)] px-4 text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
           >
             {saving ? 'Salvando...' : 'Criar tarefa'}
           </Button>
