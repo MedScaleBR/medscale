@@ -2,8 +2,9 @@
 -- Rode isto no SQL Editor do Supabase DEPOIS de já ter rodado
 -- supabase/migration_crm_admin.sql e supabase/migration_crm_admin_v2.sql.
 -- Este conteúdo também já foi incorporado em supabase/schema.sql.
--- Idempotente: pode rodar de novo sem quebrar (o backfill de position só
--- reordena as colunas pela mesma regra).
+-- Idempotente: pode rodar de novo sem quebrar. O backfill de position só roda
+-- enquanto todas as posições ainda são 0 — não desfaz a ordem arrumada no kanban.
+-- Para voltar ao código anterior, veja supabase/rollback_crm_admin_v3.sql.
 --
 -- - status passa de pending/done para todo/doing/done (pending vira todo);
 -- - position ordena os cartões dentro de cada coluna do kanban;
@@ -28,7 +29,8 @@ update public.account_tasks t
     select id, row_number() over (partition by status order by due_date nulls last, created_at) rn
       from public.account_tasks
   ) s
- where s.id = t.id;
+ where s.id = t.id
+   and not exists (select 1 from public.account_tasks where position <> 0);
 
 alter table public.account_tasks
   add column if not exists source_type text check (source_type in ('cost_alert','feedback')),
