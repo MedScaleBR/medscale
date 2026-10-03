@@ -13,7 +13,11 @@ import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 type RecordingButtonProps = {
   appointmentId?: string
-  patientId: string
+  patientId?: string
+  patientName?: string
+  unitName?: string
+  disabled?: boolean
+  onBusyChange?: (busy: boolean) => void
   onComplete?: (transcriptionId: string) => void
 }
 
@@ -47,7 +51,7 @@ function formatDuration(seconds: number) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
-export function RecordingButton({ appointmentId, patientId, onComplete }: RecordingButtonProps) {
+export function RecordingButton({ appointmentId, patientId, patientName, unitName, disabled, onBusyChange, onComplete }: RecordingButtonProps) {
   const router = useRouter()
   const analyticsBase = useAnalyticsBase()
   const [state, setState] = useState<RecordingState>('idle')
@@ -63,6 +67,10 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
   const startedAtRef = useRef<number>(0)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const autoStopTriggeredRef = useRef(false)
+
+  useEffect(() => {
+    onBusyChange?.(state !== 'idle')
+  }, [state, onBusyChange])
 
   useEffect(() => {
     return () => {
@@ -170,7 +178,9 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
         body: JSON.stringify({
           audio_path: path,
           appointment_id: appointmentId ?? null,
-          patient_id: patientId,
+          patient_id: patientId ?? null,
+          patient_name: patientName,
+          unit_name: unitName,
           consent_confirmed: true,
           duration_seconds: durationSeconds,
         }),
@@ -239,7 +249,7 @@ export function RecordingButton({ appointmentId, patientId, onComplete }: Record
     <div className="flex flex-col items-end gap-1.5">
       <Button
         onClick={() => setConsentOpen(true)}
-        disabled={state === 'uploading'}
+        disabled={disabled || state === 'uploading'}
         className="gap-2 bg-[var(--cyan)] text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
       >
         {state === 'uploading' ? (

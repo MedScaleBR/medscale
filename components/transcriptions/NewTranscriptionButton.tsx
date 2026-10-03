@@ -14,6 +14,10 @@ export function NewTranscriptionButton({ patients }: { patients: Patient[] }) {
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Patient | null>(null)
+  const [withoutRegistration, setWithoutRegistration] = useState(false)
+  const [patientName, setPatientName] = useState('')
+  const [unitName, setUnitName] = useState('')
+  const [busy, setBusy] = useState(false)
 
   const filtered = patients.filter(
     (p) => p.full_name.toLowerCase().includes(search.toLowerCase()) ||
@@ -22,8 +26,12 @@ export function NewTranscriptionButton({ patients }: { patients: Patient[] }) {
   )
 
   const reset = () => {
+    setBusy(false)
     setSearch('')
     setSelected(null)
+    setWithoutRegistration(false)
+    setPatientName('')
+    setUnitName('')
   }
 
   return (
@@ -39,6 +47,7 @@ export function NewTranscriptionButton({ patients }: { patients: Patient[] }) {
       <Dialog
         open={open}
         onOpenChange={(next) => {
+          if (!next && busy) return
           setOpen(next)
           if (!next) reset()
         }}
@@ -48,10 +57,27 @@ export function NewTranscriptionButton({ patients }: { patients: Patient[] }) {
             <DialogTitle>Nova transcrição</DialogTitle>
           </DialogHeader>
 
-          {selected ? (
+          {withoutRegistration ? (
+            <div className="space-y-4">
+              <Button variant="ghost" size="sm" disabled={busy} onClick={() => setWithoutRegistration(false)}>
+                <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Voltar
+              </Button>
+              <p className="text-sm text-gray-500">Informe os dados para transcrever sem cadastrar o paciente.</p>
+              <div className="space-y-1.5">
+                <label htmlFor="transcription-patient-name" className="text-sm font-medium">Nome do paciente</label>
+                <Input id="transcription-patient-name" autoFocus required disabled={busy} maxLength={200} value={patientName} onChange={(e) => setPatientName(e.target.value)} placeholder="Nome completo" />
+              </div>
+              <div className="space-y-1.5">
+                <label htmlFor="transcription-unit-name" className="text-sm font-medium">Unidade</label>
+                <Input id="transcription-unit-name" required disabled={busy} maxLength={200} value={unitName} onChange={(e) => setUnitName(e.target.value)} placeholder="Nome da unidade" />
+              </div>
+              <RecordingButton patientName={patientName.trim()} unitName={unitName.trim()} disabled={!patientName.trim() || !unitName.trim()} onBusyChange={setBusy} onComplete={() => { setOpen(false); reset() }} />
+            </div>
+          ) : selected ? (
             <div className="space-y-4">
               <button
                 type="button"
+                disabled={busy}
                 onClick={() => setSelected(null)}
                 className="flex items-center gap-1 text-xs text-gray-400 hover:text-[var(--cyan-dark)]"
               >
@@ -63,11 +89,14 @@ export function NewTranscriptionButton({ patients }: { patients: Patient[] }) {
                 <p className="text-xs text-gray-400">{formatBrazilianPhone(selected.phone)}</p>
               </div>
               <div className="flex justify-end">
-                <RecordingButton patientId={selected.id} onComplete={() => setOpen(false)} />
+                <RecordingButton patientId={selected.id} onBusyChange={setBusy} onComplete={() => { setOpen(false); reset() }} />
               </div>
             </div>
           ) : (
             <div className="space-y-3">
+              <Button type="button" variant="outline" className="w-full" onClick={() => setWithoutRegistration(true)}>
+                Paciente sem cadastro
+              </Button>
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <Input

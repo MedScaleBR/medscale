@@ -1,13 +1,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { AccountPlan, Database } from '@/types/database'
-
-export interface AdminTaskItem {
-  id: string
-  title: string
-  dueDate: string | null
-  accountId: string | null
-  accountName: string | null
-}
+import type { ProviderGroup } from '@/lib/costs/aggregate'
+import { getCostTotals, type CostPeriodTotals } from '@/lib/admin/cost-alerts'
 
 export interface AdminDashboardStats {
   totalAccounts: number
@@ -16,24 +10,24 @@ export interface AdminDashboardStats {
   byPlan: Record<AccountPlan, number>
   newLast30Days: number
   newLast90Days: number
-  overdueTasks: AdminTaskItem[]
-  upcomingTasks: AdminTaskItem[]
+  /** Custo variável dos últimos 30 dias, total e por grupo de provedor. */
+  cost30d: { total: number; byProvider: Record<ProviderGroup, number> }
 }
 
-export async function getAdminDashboardStats(supabase: SupabaseClient<Database>): Promise<AdminDashboardStats> {
-  const now = new Date()
+// cost30d: a página do dashboard já lê cost_events uma vez (getCostOverview,
+// que também alimenta os alertas da fila) e passa os totais prontos. Sem
+// eles, cai numa leitura só de totais.
+export async function getAdminDashboardStats(
+  supabase: SupabaseClient<Database>,
+  options: { costTotals?: CostPeriodTotals; now?: Date } = {},
+): Promise<AdminDashboardStats> {
+  const now = options.now ?? new Date()
   const last30 = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000)
   const last90 = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000)
-  const today = now.toISOString().slice(0, 10)
 
-  const [accountsRes, tasksRes] = await Promise.all([
+  const [accountsRes, costTotals] = await Promise.all([
     supabase.from('accounts').select('id, plan, is_active, created_at'),
-    supabase
-      .from('account_tasks')
-      .select('id, title, due_date, account_id, accounts(name)')
-      .eq('status', 'pending')
-      .order('due_date', { ascending: true, nullsFirst: false })
-      .limit(20),
+    options.costTotals ?? getCostTotals(supabase, 30, now),
   ])
 
   const accounts = accountsRes.data ?? []
@@ -50,17 +44,6 @@ export async function getAdminDashboardStats(supabase: SupabaseClient<Database>)
     if (createdAt >= last90) newLast90Days += 1
   }
 
-  const tasks: AdminTaskItem[] = (tasksRes.data ?? []).map((t) => ({
-    id: t.id,
-    title: t.title,
-    dueDate: t.due_date,
-    accountId: t.account_id,
-    accountName: t.accounts?.name ?? null,
-  }))
-
-  const overdueTasks = tasks.filter((t) => t.dueDate && t.dueDate < today)
-  const upcomingTasks = tasks.filter((t) => !t.dueDate || t.dueDate >= today)
-
   return {
     totalAccounts: accounts.length,
     activeAccounts,
@@ -68,7 +51,6 @@ export async function getAdminDashboardStats(supabase: SupabaseClient<Database>)
     byPlan,
     newLast30Days,
     newLast90Days,
-    overdueTasks,
-    upcomingTasks,
+    cost30d: { total: costTotals.total, byProvider: costTotals.byGroup },
   }
 }

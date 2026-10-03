@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
 
   const { data: transcription } = await supabase
     .from('transcriptions')
-    .select('transcript_text, retry_count, workspace_id, account_id, recorded_by, patient_id')
+    .select('transcript_text, retry_count, workspace_id, account_id, recorded_by, patient_id, patient_name')
     .eq('id', transcription_id)
     .single()
 
@@ -82,6 +82,7 @@ export async function POST(req: NextRequest) {
         id: transcription_id,
         workspace_id: transcription.workspace_id,
         patient_id: transcription.patient_id,
+        patient_name: transcription.patient_name,
         recorded_by: transcription.recorded_by,
       })
     }

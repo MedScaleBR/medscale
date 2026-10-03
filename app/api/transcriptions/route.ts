@@ -18,7 +18,9 @@ export async function POST(req: NextRequest) {
   const body = await req.json()
   const audioPath = body.audio_path as string | undefined
   const appointmentId = (body.appointment_id as string | null) || null
-  const patientId = body.patient_id as string | undefined
+  const patientId = typeof body.patient_id === 'string' ? body.patient_id.trim() || null : null
+  const patientName = typeof body.patient_name === 'string' ? body.patient_name.trim() : ''
+  const unitName = typeof body.unit_name === 'string' ? body.unit_name.trim() : ''
   const consentConfirmed = body.consent_confirmed === true
   const durationSeconds = Number(body.duration_seconds ?? 0)
 
@@ -27,29 +29,37 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'audio_path fora do workspace atual' }, { status: 403 })
   }
   if (!consentConfirmed) return NextResponse.json({ error: 'Consentimento do paciente é obrigatório' }, { status: 400 })
-  if (!patientId) return NextResponse.json({ error: 'patient_id é obrigatório' }, { status: 400 })
+  if (!patientId && !patientName) return NextResponse.json({ error: 'patient_id é obrigatório' }, { status: 400 })
+
+  if (!patientId && !unitName) {
+    return NextResponse.json({ error: 'Informe a unidade' }, { status: 400 })
+  }
+  if (!patientId && appointmentId) {
+    return NextResponse.json({ error: 'Selecione um paciente cadastrado para vincular uma consulta existente' }, { status: 400 })
+  }
 
   const supabase = await createClient()
-
-  const { data: patient, error: patientError } = await supabase
-    .from('patients')
-    .select('id, full_name, phone')
-    .eq('id', patientId)
-    .eq('account_id', session.accountId)
-    .single()
-  if (patientError || !patient) return NextResponse.json({ error: 'Paciente não encontrado' }, { status: 404 })
-
-  if (appointmentId) {
-    const { data: appointment, error: appointmentError } = await supabase
-      .from('appointments')
-      .select('patient_id, patient_name, patient_phone')
-      .eq('id', appointmentId)
-      .eq('workspace_id', session.workspaceId)
+  if (patientId) {
+    const { data: patient, error: patientError } = await supabase
+      .from('patients')
+      .select('id, full_name, phone')
+      .eq('id', patientId)
+      .eq('account_id', session.accountId)
       .single()
-    if (appointmentError || !appointment) return NextResponse.json({ error: 'Consulta não encontrada' }, { status: 404 })
-    if ((appointment.patient_id && appointment.patient_id !== patientId)
-      || !matchesAppointmentPatient(patient, appointment)) {
-      return NextResponse.json({ error: PATIENT_MISMATCH_MESSAGE }, { status: 409 })
+    if (patientError || !patient) return NextResponse.json({ error: 'Paciente não encontrado' }, { status: 404 })
+
+    if (appointmentId) {
+      const { data: appointment, error: appointmentError } = await supabase
+        .from('appointments')
+        .select('patient_id, patient_name, patient_phone')
+        .eq('id', appointmentId)
+        .eq('workspace_id', session.workspaceId)
+        .single()
+      if (appointmentError || !appointment) return NextResponse.json({ error: 'Consulta não encontrada' }, { status: 404 })
+      if ((appointment.patient_id && appointment.patient_id !== patientId)
+        || !matchesAppointmentPatient(patient, appointment)) {
+        return NextResponse.json({ error: PATIENT_MISMATCH_MESSAGE }, { status: 409 })
+      }
     }
   }
 
@@ -60,6 +70,8 @@ export async function POST(req: NextRequest) {
       account_id: session.accountId,
       appointment_id: appointmentId,
       patient_id: patientId,
+      patient_name: patientId ? null : patientName,
+      unit_name: patientId ? null : unitName,
       recorded_by: session.userId,
       audio_path: audioPath,
       duration_seconds: durationSeconds,

@@ -26,6 +26,42 @@ vi.mock('@/lib/session/api', async () => {
 import { POST as createTranscription } from '@/app/api/transcriptions/route'
 import { POST as uploadUrl } from '@/app/api/transcriptions/upload-url/route'
 
+describe('unregistered patient transcription', () => {
+  beforeEach(() => { g.session = { ...SESSION }; setup() })
+
+  it('stores patient name and unit without a patient record', async () => {
+    const res = await createTranscription(request('https://app.test/api/transcriptions', {
+      ...validBody, appointment_id: null, patient_id: null,
+      patient_name: '  Maria Silva  ', unit_name: '  Unidade Centro  ',
+    }))
+    expect(res.status).toBe(201)
+    expect(g.supabase.callsTo('transcriptions', 'insert')[0].payload).toMatchObject({
+      patient_id: null, patient_name: 'Maria Silva', unit_name: 'Unidade Centro',
+    })
+    expect(g.supabase.callsTo('patients')).toHaveLength(0)
+  })
+
+  it.each([
+    { patient_name: 'Maria', unit_name: '   ' },
+    { patient_name: '   ', unit_name: 'Centro' },
+    { patient_name: 123, unit_name: 'Centro' },
+  ])('rejects incomplete identification: %j', async (identity) => {
+    const res = await createTranscription(request('https://app.test/api/transcriptions', {
+      ...validBody, appointment_id: null, patient_id: null, ...identity,
+    }))
+    expect(res.status).toBe(400)
+    expect(g.supabase.callsTo('transcriptions', 'insert')).toHaveLength(0)
+  })
+
+  it('requires a registered patient when linking an existing appointment', async () => {
+    const res = await createTranscription(request('https://app.test/api/transcriptions', {
+      ...validBody, patient_id: null, patient_name: 'Maria', unit_name: 'Centro',
+    }))
+    expect(res.status).toBe(400)
+    expect(g.supabase.callsTo('transcriptions', 'insert')).toHaveLength(0)
+  })
+})
+
 const SESSION = { userId: 'u1', accountId: 'acc1', workspaceId: 'w1', role: 'owner', modules: ['transcriptions'] }
 
 function setup(config: SupabaseMockConfig = {}) {
