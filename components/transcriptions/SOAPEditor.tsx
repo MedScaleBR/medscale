@@ -6,8 +6,10 @@ import { Textarea } from '@/components/ui/textarea'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Button } from '@/components/ui/button'
-import { Plus, X } from 'lucide-react'
+import { Check, Copy, Plus, X } from 'lucide-react'
+import { toast } from 'sonner'
 import type { SOAPRecord } from '@/lib/transcriptions/types'
+import { formatSOAPAsText } from '@/lib/transcriptions/soap-text'
 
 type SOAPEditorProps = {
   initialValue: SOAPRecord
@@ -78,6 +80,18 @@ function EditableList({
 
 export function SOAPEditor({ initialValue, readOnly = false, onChange }: SOAPEditorProps) {
   const [value, setValue] = useState<SOAPRecord>(initialValue)
+  const [copied, setCopied] = useState(false)
+
+  const copyAll = async () => {
+    try {
+      await navigator.clipboard.writeText(formatSOAPAsText(value))
+      setCopied(true)
+      toast.success('Prontuário copiado')
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      toast.error('Não foi possível copiar o prontuário')
+    }
+  }
 
   const update = (next: SOAPRecord) => {
     setValue(next)
@@ -103,12 +117,18 @@ export function SOAPEditor({ initialValue, readOnly = false, onChange }: SOAPEdi
       )}
 
       <Tabs defaultValue="s">
-        <TabsList className="max-w-full overflow-x-auto">
-          <TabsTrigger value="s">S — Subjetivo</TabsTrigger>
-          <TabsTrigger value="o">O — Objetivo</TabsTrigger>
-          <TabsTrigger value="a">A — Avaliação</TabsTrigger>
-          <TabsTrigger value="p">P — Plano</TabsTrigger>
-        </TabsList>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <TabsList className="max-w-full overflow-x-auto">
+            <TabsTrigger value="s">S — Subjetivo</TabsTrigger>
+            <TabsTrigger value="o">O — Objetivo</TabsTrigger>
+            <TabsTrigger value="a">A — Avaliação</TabsTrigger>
+            <TabsTrigger value="p">P — Plano</TabsTrigger>
+          </TabsList>
+          <Button type="button" variant="outline" size="sm" onClick={copyAll} className="gap-1.5">
+            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
+            {copied ? 'Copiado' : 'Copiar prontuário'}
+          </Button>
+        </div>
 
         <TabsContent value="s" className="space-y-3 pt-3">
           <div>
