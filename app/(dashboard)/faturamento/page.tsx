@@ -4,6 +4,7 @@ import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { GuidesTable } from '@/components/billing/GuidesTable'
+import { AuthorizationsTable } from '@/components/billing/authorizations/AuthorizationsTable'
 import { BatchesTable } from '@/components/billing/BatchesTable'
 import { isAuthorizationType } from '@/lib/billing/authorizations/status'
 
@@ -40,10 +41,6 @@ export default async function FaturamentoPage({
   const newType = nova && isAuthorizationType(nova) && nova !== 'opme_request' ? nova : undefined
   const appointmentId = uuidOrUndefined(single(params.appointment_id))
   const openId = uuidOrUndefined(single(params.autorizacao))
-  // Consumidos pela AuthorizationsTable (Tarefa 16).
-  void newType
-  void appointmentId
-  void openId
 
   const supabase = await createClient()
   const { data: insurers } = await supabase
@@ -78,8 +75,7 @@ export default async function FaturamentoPage({
             <TabsTrigger value="lotes">Lotes</TabsTrigger>
           </TabsList>
           <TabsContent value="autorizacoes" className="pt-4">
-            {/* AuthorizationsTable entra na Tarefa 16 */}
-            {null}
+            <AuthorizationsTable insurers={insurers} initial={{ newType, appointmentId, openId }} />
           </TabsContent>
           <TabsContent value="guias" className="pt-4">
             <GuidesTable insurers={insurers} />
