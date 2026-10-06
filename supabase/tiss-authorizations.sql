@@ -130,10 +130,10 @@ returns trigger language plpgsql security definer set search_path = '' as $$
 declare p public.tiss_authorizations%rowtype;
 begin
   if tg_op = 'UPDATE' then
-    if (new.account_id, new.workspace_id, new.patient_id, new.insurer_id, new.parent_id, new.type,
+    if (new.id, new.account_id, new.workspace_id, new.patient_id, new.insurer_id, new.parent_id, new.type,
         new.provider_guide_number, new.created_at)
        is distinct from
-       (old.account_id, old.workspace_id, old.patient_id, old.insurer_id, old.parent_id, old.type,
+       (old.id, old.account_id, old.workspace_id, old.patient_id, old.insurer_id, old.parent_id, old.type,
         old.provider_guide_number, old.created_at)
        or (new.appointment_id is distinct from old.appointment_id and new.appointment_id is not null)
        or (new.created_by is distinct from old.created_by and new.created_by is not null) then
@@ -259,5 +259,400 @@ grant select on
   public.tiss_authorizations, public.tiss_authorization_items, public.tiss_authorization_events to authenticated;
 grant all on
   public.tiss_authorizations, public.tiss_authorization_items, public.tiss_authorization_events to service_role;
+
+-- ============================================================
+-- 5. RPCs — toda escrita passa por aqui, com o evento na mesma transação
+-- ============================================================
+create or replace function public.tiss_authorization_require_billing(p_account_id uuid)
+returns void language plpgsql stable security definer set search_path = '' as $$
+begin
+  if not exists (select 1 from public.accounts where id = p_account_id and 'billing' = any(modules)) then
+    raise exception 'billing_module_disabled' using errcode = '42501';
+  end if;
+end; $$;
+
+-- Trava a linha (FOR UPDATE). Outra account: not_found (não revela que
+-- existe). Mesma account sem owner/admin: forbidden (P1, como tiss_guides).
+-- O lock de um member é desfeito com o rollback do próprio erro.
+create or replace function public.tiss_authorization_lock(p_id uuid)
+returns public.tiss_authorizations language plpgsql security definer set search_path = '' as $$
+declare a public.tiss_authorizations%rowtype;
+begin
+  if auth.uid() is null then raise exception 'tiss_authorization_forbidden' using errcode = '42501'; end if;
+  select * into a from public.tiss_authorizations
+    where id = p_id and account_id = any(public.my_account_ids())
+    for update;
+  if not found then raise exception 'tiss_authorization_not_found' using errcode = 'P0002'; end if;
+  if not public.is_account_admin(a.account_id) then
+    raise exception 'tiss_authorization_forbidden' using errcode = '42501';
+  end if;
+  perform public.tiss_authorization_require_billing(a.account_id);
+  return a;
+end; $$;
+
+-- Substitui todos os itens. O tipo do item vem do tipo da autorização; os
+-- CHECKs da tabela validam limites do XSD e o trigger força a account.
+create or replace function public.tiss_authorization_write_items(p_authorization_id uuid, p_items jsonb)
+returns void language plpgsql security definer set search_path = '' as $$
+declare v_kind text; v_account uuid;
+begin
+  select case when type = 'opme_request' then 'opme' else 'procedure' end, account_id
+    into v_kind, v_account
+    from public.tiss_authorizations where id = p_authorization_id;
+  delete from public.tiss_authorization_items where authorization_id = p_authorization_id;
+  insert into public.tiss_authorization_items (
+    authorization_id, account_id, position, kind, table_code, code, description, quantity_requested,
+    manufacturer_option, requested_value_cents, anvisa_registration, manufacturer_reference, operating_authorization
+  )
+  select p_authorization_id, v_account, x.ord::int, v_kind,
+         x.item ->> 'table_code',
+         btrim(x.item ->> 'code'),
+         btrim(x.item ->> 'description'),
+         (x.item ->> 'quantity_requested')::int,
+         nullif(x.item ->> 'manufacturer_option', ''),
+         (x.item ->> 'requested_value_cents')::bigint,
+         nullif(btrim(x.item ->> 'anvisa_registration'), ''),
+         nullif(btrim(x.item ->> 'manufacturer_reference'), ''),
+         nullif(btrim(x.item ->> 'operating_authorization'), '')
+  from jsonb_array_elements(p_items) with ordinality as x(item, ord);
+end; $$;
+
+create or replace function public.tiss_authorization_log(p_id uuid, p_event text, p_from text, p_to text, p_data jsonb)
+returns void language sql security definer set search_path = '' as $$
+  insert into public.tiss_authorization_events (authorization_id, account_id, event, from_status, to_status, actor_id, data)
+  select a.id, a.account_id, p_event, p_from, p_to, auth.uid(), coalesce(p_data, '{}'::jsonb)
+  from public.tiss_authorizations a where a.id = p_id;
+$$;
+
+-- Profissionais solicitantes: membros ativos com CRM da account do workspace.
+-- profiles tem RLS "só o próprio"; aqui saem só os campos de identificação do
+-- TISS (R3: nada de telefone/e-mail — são digitados na autorização). Só owner/admin.
+create or replace function public.tiss_authorization_professionals(p_workspace_id uuid)
+returns jsonb language plpgsql stable security definer set search_path = '' as $$
+declare v_account uuid;
+begin
+  select account_id into v_account from public.workspaces
+    where id = p_workspace_id and id = any(public.my_workspace_ids());
+  if not found or not public.is_account_admin(v_account) then
+    raise exception 'tiss_authorization_forbidden' using errcode = '42501';
+  end if;
+  perform public.tiss_authorization_require_billing(v_account);
+  return coalesce((
+    select jsonb_agg(jsonb_build_object(
+      'id', p.id, 'full_name', p.full_name, 'crm', p.crm, 'crm_uf', p.crm_uf, 'cbo_code', p.cbo_code
+    ) order by p.full_name)
+    from public.profiles p
+    join public.memberships m on m.user_id = p.id
+    where m.account_id = v_account and m.status = 'active' and nullif(btrim(p.crm), '') is not null
+  ), '[]'::jsonb);
+end; $$;
+
+-- Cria a solicitação já numerada por next_tiss_number(insurer, 'guide') — o
+-- mesmo contador das guias (D4/P4). payload e missing_fields vêm do servidor
+-- Next (lib/billing/authorizations); aqui só se garante o que não pode ser
+-- forjado: owner/admin, módulo, operadora TISS completa, payload da mesma
+-- operadora, pai do OPME, draft sem itens.
+create or replace function public.create_tiss_authorization(
+  p_workspace_id   uuid,
+  p_patient_id     uuid,
+  p_insurer_id     uuid,
+  p_type           text,
+  p_appointment_id uuid,
+  p_parent_id      uuid,
+  p_payload        jsonb,
+  p_missing_fields text[],
+  p_items          jsonb
+) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  w         public.workspaces%rowtype;
+  i         public.health_insurers%rowtype;
+  v_parent  public.tiss_authorizations%rowtype;
+  v_number  bigint;
+  v_id      uuid;
+  v_missing text[] := coalesce(p_missing_fields, '{}');
+  v_status  text;
+begin
+  if auth.uid() is null then raise exception 'tiss_authorization_forbidden' using errcode = '42501'; end if;
+  select * into w from public.workspaces where id = p_workspace_id and id = any(public.my_workspace_ids());
+  if not found or not public.is_account_admin(w.account_id) then
+    raise exception 'tiss_authorization_forbidden' using errcode = '42501';
+  end if;
+  perform public.tiss_authorization_require_billing(w.account_id);
+
+  if p_type is null or p_type not in ('sp_sadt_request','hospitalization_request','opme_request')
+     or jsonb_typeof(p_payload) is distinct from 'object'
+     or jsonb_typeof(p_items) is distinct from 'array'
+     or p_payload ->> 'type' is distinct from p_type then
+    raise exception 'tiss_authorization_invalid' using errcode = '22023';
+  end if;
+
+  if (p_type = 'opme_request') <> (p_parent_id is not null) then
+    raise exception 'tiss_authorization_parent_invalid' using errcode = '22023';
+  end if;
+  if p_parent_id is not null then
+    -- FOR SHARE: um cancelamento simultâneo do pai espera esta transação.
+    select * into v_parent from public.tiss_authorizations
+      where id = p_parent_id and account_id = w.account_id
+      for share;
+    if not found or v_parent.status = 'cancelled' or v_parent.workspace_id <> w.id then
+      raise exception 'tiss_authorization_parent_invalid' using errcode = '22023';
+    end if;
+  end if;
+
+  -- Trava a linha da operadora (mesmo lock de ensure_tiss_guide_for_appointment)
+  -- e confere a identidade TISS antes de consumir número.
+  select * into i from public.health_insurers
+    where id = p_insurer_id and account_id = w.account_id
+    for update;
+  if not found or i.ans_registry is null or i.provider_code is null then
+    raise exception 'tiss_insurer_incomplete' using errcode = '22023';
+  end if;
+  if p_payload #>> '{insurer,ans_registry}' is distinct from i.ans_registry
+     or p_payload #>> '{insurer,provider_code}' is distinct from i.provider_code then
+    raise exception 'tiss_authorization_payload_mismatch' using errcode = '22023';
+  end if;
+
+  if jsonb_array_length(p_items) = 0 and not ('items' = any(v_missing)) then
+    v_missing := array_append(v_missing, 'items');
+  end if;
+  v_status := case when cardinality(v_missing) = 0 then 'ready' else 'draft' end;
+
+  -- D4/P4: a função existente, sem alteração. Ela repete is_account_admin e o
+  -- módulo; auth.uid()/auth.role() vêm dos GUCs da sessão, que o security
+  -- definer não troca. Se o insert abaixo falhar, o rollback devolve o número.
+  v_number := public.next_tiss_number(i.id, 'guide');
+
+  insert into public.tiss_authorizations (
+    account_id, workspace_id, patient_id, insurer_id, appointment_id, parent_id, type, status,
+    provider_guide_number, payload, missing_fields, created_by, updated_by
+  ) values (
+    w.account_id, w.id, p_patient_id, i.id, p_appointment_id, p_parent_id, p_type, v_status,
+    v_number::text, p_payload, v_missing, auth.uid(), auth.uid()
+  ) returning id into v_id;
+
+  perform public.tiss_authorization_write_items(v_id, p_items);
+  perform public.tiss_authorization_log(v_id, 'created', null, v_status,
+    jsonb_build_object('type', p_type, 'provider_guide_number', v_number::text));
+
+  return jsonb_build_object('id', v_id, 'status', v_status, 'provider_guide_number', v_number::text);
+end; $$;
+
+-- Conteúdo (payload, itens, data da solicitação): só em draft/ready e com o
+-- updated_at que o usuário viu (concorrência otimista). Status recalculado.
+create or replace function public.update_tiss_authorization(
+  p_id                  uuid,
+  p_expected_updated_at timestamptz,
+  p_payload             jsonb,
+  p_missing_fields      text[],
+  p_items               jsonb default null,
+  p_requested_at        date default null,
+  p_event               text default 'updated'
+) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  a         public.tiss_authorizations%rowtype;
+  v_from    text;
+  v_missing text[] := coalesce(p_missing_fields, '{}');
+  v_status  text;
+begin
+  if p_event is null or p_event not in ('updated', 'refreshed')
+     or jsonb_typeof(p_payload) is distinct from 'object'
+     or (p_items is not null and jsonb_typeof(p_items) <> 'array') then
+    raise exception 'tiss_authorization_invalid' using errcode = '22023';
+  end if;
+  a := public.tiss_authorization_lock(p_id);
+  if a.status not in ('draft', 'ready') then
+    raise exception 'tiss_authorization_not_editable' using errcode = 'P0001';
+  end if;
+  if a.updated_at is distinct from p_expected_updated_at then
+    raise exception 'tiss_authorization_changed' using errcode = 'P0001';
+  end if;
+  if p_payload ->> 'type' is distinct from a.type then
+    raise exception 'tiss_authorization_invalid' using errcode = '22023';
+  end if;
+  -- Operadora do payload: a que já estava no snapshot ou a atual ("Recarregar dados").
+  if (p_payload #>> '{insurer,ans_registry}', p_payload #>> '{insurer,provider_code}')
+       is distinct from (a.payload #>> '{insurer,ans_registry}', a.payload #>> '{insurer,provider_code}')
+     and not exists (
+       select 1 from public.health_insurers
+       where id = a.insurer_id
+         and ans_registry = p_payload #>> '{insurer,ans_registry}'
+         and provider_code = p_payload #>> '{insurer,provider_code}'
+     ) then
+    raise exception 'tiss_authorization_payload_mismatch' using errcode = '22023';
+  end if;
+
+  if p_items is not null then
+    perform public.tiss_authorization_write_items(a.id, p_items);
+  end if;
+  if not exists (select 1 from public.tiss_authorization_items where authorization_id = a.id)
+     and not ('items' = any(v_missing)) then
+    v_missing := array_append(v_missing, 'items');
+  end if;
+
+  v_from := a.status;
+  v_status := case when cardinality(v_missing) = 0 then 'ready' else 'draft' end;
+  update public.tiss_authorizations set
+    payload = p_payload,
+    missing_fields = v_missing,
+    status = v_status,
+    requested_at = coalesce(p_requested_at, requested_at),
+    updated_by = auth.uid()
+  where id = a.id
+  returning * into a;
+
+  perform public.tiss_authorization_log(a.id, p_event, v_from, v_status, '{}'::jsonb);
+  if p_items is not null then
+    perform public.tiss_authorization_log(a.id, 'items_changed', null, null,
+      jsonb_build_object('count', jsonb_array_length(p_items)));
+  end if;
+  if v_from = 'draft' and v_status = 'ready' then
+    perform public.tiss_authorization_log(a.id, 'ready', v_from, v_status, '{}'::jsonb);
+  end if;
+  return jsonb_build_object('id', a.id, 'status', a.status, 'updated_at', a.updated_at);
+end; $$;
+
+-- D3: ready → sent; draft|ready|sent|under_review|pending_info → cancelled.
+-- Papel: owner/admin, conferido em tiss_authorization_lock (P1).
+create or replace function public.transition_tiss_authorization(
+  p_id uuid, p_to text, p_expected_updated_at timestamptz
+) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare a public.tiss_authorizations%rowtype; v_from text;
+begin
+  if p_to is null or p_to not in ('sent', 'cancelled') then
+    raise exception 'tiss_authorization_invalid_transition' using errcode = '22023';
+  end if;
+  a := public.tiss_authorization_lock(p_id);
+  if a.updated_at is distinct from p_expected_updated_at then
+    raise exception 'tiss_authorization_changed' using errcode = 'P0001';
+  end if;
+  v_from := a.status;
+  if p_to = 'sent' and v_from <> 'ready' then
+    raise exception 'tiss_authorization_invalid_transition' using errcode = 'P0001';
+  end if;
+  if p_to = 'cancelled' and v_from not in ('draft', 'ready', 'sent', 'under_review', 'pending_info') then
+    raise exception 'tiss_authorization_invalid_transition' using errcode = 'P0001';
+  end if;
+  update public.tiss_authorizations set
+    status = p_to,
+    sent_at = case when p_to = 'sent' then now() else sent_at end,
+    updated_by = auth.uid()
+  where id = a.id
+  returning * into a;
+  perform public.tiss_authorization_log(a.id, p_to, v_from, p_to, '{}'::jsonb);
+  return jsonb_build_object('id', a.id, 'status', a.status, 'updated_at', a.updated_at);
+end; $$;
+
+-- D6: resposta registrada à mão. dm_statusSolicitacao → status (D3).
+-- R1: owner/admin podem registrar de novo sobre authorized/partially_authorized/
+-- denied (correção de digitação); nunca a partir de draft/ready/cancelled.
+create or replace function public.record_tiss_authorization_response(
+  p_id                    uuid,
+  p_expected_updated_at   timestamptz,
+  p_status_code           text,
+  p_operator_guide_number text,
+  p_password              text,
+  p_authorization_date    date,
+  p_password_valid_until  date,
+  p_items                 jsonb default '[]'::jsonb
+) returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  a      public.tiss_authorizations%rowtype;
+  v_from text;
+  v_to   text;
+  v_items jsonb := coalesce(p_items, '[]'::jsonb);
+begin
+  v_to := case p_status_code
+    when '1' then 'authorized'
+    when '2' then 'under_review'
+    when '3' then 'denied'
+    when '4' then 'pending_info'
+    when '5' then 'pending_info'
+    when '6' then 'cancelled'
+    when '7' then 'partially_authorized'
+  end;
+  if v_to is null or jsonb_typeof(v_items) <> 'array' then
+    raise exception 'tiss_authorization_invalid' using errcode = '22023';
+  end if;
+  a := public.tiss_authorization_lock(p_id);
+  if a.updated_at is distinct from p_expected_updated_at then
+    raise exception 'tiss_authorization_changed' using errcode = 'P0001';
+  end if;
+  v_from := a.status;
+  if v_from not in ('sent', 'under_review', 'pending_info', 'authorized', 'partially_authorized', 'denied') then
+    raise exception 'tiss_authorization_invalid_transition' using errcode = 'P0001';
+  end if;
+  if exists (
+    select 1 from jsonb_array_elements(v_items) x
+    where not exists (
+      select 1 from public.tiss_authorization_items it
+      where it.authorization_id = a.id and it.id::text = x ->> 'id'
+    )
+  ) then
+    raise exception 'tiss_authorization_item_not_found' using errcode = '22023';
+  end if;
+
+  update public.tiss_authorization_items it set
+    quantity_authorized    = (x.item ->> 'quantity_authorized')::int,
+    authorized_value_cents = (x.item ->> 'authorized_value_cents')::bigint
+  from jsonb_array_elements(v_items) as x(item)
+  where it.authorization_id = a.id and it.id::text = x.item ->> 'id';
+
+  update public.tiss_authorizations set
+    status                = v_to,
+    response_status_code  = p_status_code,
+    operator_guide_number = nullif(btrim(p_operator_guide_number), ''),
+    password              = nullif(btrim(p_password), ''),
+    authorization_date    = p_authorization_date,
+    password_valid_until  = p_password_valid_until,
+    responded_at          = now(),
+    updated_by            = auth.uid()
+  where id = a.id
+  returning * into a;
+
+  perform public.tiss_authorization_log(a.id, 'response_recorded', v_from, v_to, jsonb_build_object(
+    'status_code', p_status_code,
+    'operator_guide_number', a.operator_guide_number,
+    'password', a.password,
+    'authorization_date', a.authorization_date,
+    'password_valid_until', a.password_valid_until
+  ));
+  return jsonb_build_object('id', a.id, 'status', a.status, 'updated_at', a.updated_at);
+end; $$;
+
+-- O XML não é guardado (D5); o download só deixa rastro do hash gerado.
+create or replace function public.log_tiss_authorization_xml(p_id uuid, p_hash text)
+returns void language plpgsql security definer set search_path = '' as $$
+declare a public.tiss_authorizations%rowtype;
+begin
+  if coalesce(p_hash, '') !~ '^[a-f0-9]{32}$' then
+    raise exception 'tiss_authorization_invalid' using errcode = '22023';
+  end if;
+  a := public.tiss_authorization_lock(p_id);
+  if a.status = 'draft' then
+    raise exception 'tiss_authorization_incomplete' using errcode = 'P0001';
+  end if;
+  perform public.tiss_authorization_log(a.id, 'xml_generated', null, null, jsonb_build_object('hash', p_hash));
+end; $$;
+
+revoke all on function public.tiss_authorization_require_billing(uuid) from public, anon, authenticated;
+revoke all on function public.tiss_authorization_lock(uuid) from public, anon, authenticated;
+revoke all on function public.tiss_authorization_write_items(uuid, jsonb) from public, anon, authenticated;
+revoke all on function public.tiss_authorization_log(uuid, text, text, text, jsonb) from public, anon, authenticated;
+revoke all on function public.enforce_tiss_authorization() from public, anon, authenticated;
+revoke all on function public.enforce_tiss_authorization_item() from public, anon, authenticated;
+revoke all on function public.enforce_tiss_authorization_event() from public, anon, authenticated;
+
+revoke all on function public.tiss_authorization_professionals(uuid) from public, anon;
+grant execute on function public.tiss_authorization_professionals(uuid) to authenticated;
+revoke all on function public.create_tiss_authorization(uuid, uuid, uuid, text, uuid, uuid, jsonb, text[], jsonb) from public, anon;
+grant execute on function public.create_tiss_authorization(uuid, uuid, uuid, text, uuid, uuid, jsonb, text[], jsonb) to authenticated;
+revoke all on function public.update_tiss_authorization(uuid, timestamptz, jsonb, text[], jsonb, date, text) from public, anon;
+grant execute on function public.update_tiss_authorization(uuid, timestamptz, jsonb, text[], jsonb, date, text) to authenticated;
+revoke all on function public.transition_tiss_authorization(uuid, text, timestamptz) from public, anon;
+grant execute on function public.transition_tiss_authorization(uuid, text, timestamptz) to authenticated;
+revoke all on function public.record_tiss_authorization_response(uuid, timestamptz, text, text, text, date, date, jsonb) from public, anon;
+grant execute on function public.record_tiss_authorization_response(uuid, timestamptz, text, text, text, date, date, jsonb) to authenticated;
+revoke all on function public.log_tiss_authorization_xml(uuid, text) from public, anon;
+grant execute on function public.log_tiss_authorization_xml(uuid, text) to authenticated;
 
 -- END TISS AUTHORIZATIONS
