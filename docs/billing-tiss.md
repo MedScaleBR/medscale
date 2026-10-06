@@ -39,3 +39,48 @@ npm run tiss:validate -- caminho/lote-ficticio.xml
 `tests/billing/database.test.ts` executa a migração de produção em PostgreSQL em memória (PGlite), com dados fictícios, papéis e RLS. Confere isolamento, geração por membro, data SP/CID, sequência, idempotência, finalização/envio e recusa de snapshots alterados. PGlite usa uma conexão: a disputa de locks entre conexões independentes deve ser conferida em um Supabase de teste.
 
 Upload/download contra um Storage real e telas com uma account configurada exigem um ambiente de homologação. Nenhuma migração foi aplicada a um Supabase remoto nesta sessão.
+
+## Autorizações (SP/SADT, Internação, OPME)
+
+Permite montar, acompanhar e registrar a resposta de solicitações de SP/SADT, solicitações de internação e anexos de solicitação de OPME (TISS 4.03.00). Não altera guias, lotes, cron nem o XML `ENVIO_LOTE_GUIAS`.
+
+### Instalação
+
+- Execute `supabase/tiss-authorizations.sql` no SQL Editor **depois** de `supabase/billing.sql`. Faça no dev e, separadamente, no prod.
+- O script é idempotente e aditivo: só cria tabelas, índices e funções novas, sem mexer em dados existentes.
+- `supabase/schema.sql` contém o mesmo bloco (entre `BEGIN TISS AUTHORIZATIONS` e `END TISS AUTHORIZATIONS`) para reconstrução de ambientes vazios.
+- Nenhuma migration é aplicada pelo código; a instalação é sempre manual.
+
+### Quem usa
+
+Somente owner/admin da account com o módulo `billing` (menu "Convênios / TISS", aba Autorizações, e o atalho "Solicitar autorização" no agendamento). Member não vê nem acessa: a regra é a mesma de Guias e Lotes (UI, API `adminOnly` e RLS `is_account_admin`).
+
+### Numeração
+
+A autorização usa o mesmo contador de guias da operadora (`next_tiss_number`). A sequência das guias de cobrança passa a ter números usados por autorizações (buracos são aceitos pelo TISS).
+
+### Profissional solicitante
+
+É escolhido entre os profissionais com CRM (a lista traz só nome, CRM, UF e CBO). Telefone e e-mail são digitados na própria autorização (obrigatórios no OPME) e não vêm do perfil.
+
+### Fluxo
+
+1. Criar a autorização (pelo agendamento ou pela aba Autorizações).
+2. Completar as pendências indicadas.
+3. "Baixar XML" (gerado sob demanda, validado contra os XSDs e nunca armazenado).
+4. Enviar pelo portal ou webservice da operadora.
+5. "Marcar como enviada".
+6. Registrar a resposta da operadora. A resposta pode ser corrigida depois de autorizada, parcialmente autorizada ou negada; não é possível registrá-la a partir de rascunho, pronta ou cancelada.
+
+Um paciente com autorização não pode ser excluído: a exclusão responde 409 com aviso.
+
+### Limites conhecidos
+
+- A resposta "6 - Solicitação cancelada" leva a `cancelled`, e `cancelled` não aceita nova resposta.
+- Corrigir a resposta registra um novo evento no histórico; itens não citados mantêm a quantidade e o valor autorizados já gravados. Cancelar a partir de estado final continua proibido.
+- Se há exatamente 1 OPME não cancelado, ele é embutido no XML do pai. Se esse OPME ainda está em rascunho, o XML do pai é recusado (409) até completar ou cancelar o anexo. Marcar o pai como enviado não altera o status do OPME; ele é marcado separadamente.
+- OPME não pode ser criado sob pai cancelado e herda o workspace do pai.
+- A leitura é por account (owner/admin veem as autorizações de todas as unidades, como nas guias); criar e listar profissionais exige o workspace em `my_workspace_ids()`.
+- O histórico mostra o nome do autor só quando ele está na lista de profissionais com CRM; caso contrário aparece "Equipe".
+- `tipoTransacao` é inferido (`SOLICITACAO_PROCEDIMENTOS`, `ENVIO_ANEXO`) e o OPME usa a tabela 19; ambiguidades do XSD estão em `docs/superpowers/specs/2026-10-05-tiss-autorizacoes-xsd.md`.
+- A disputa de locks entre conexões independentes só pode ser conferida em um Supabase de teste (PGlite usa uma conexão).
