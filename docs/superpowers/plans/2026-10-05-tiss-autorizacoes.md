@@ -4,7 +4,7 @@
 
 **Goal:** permitir que a clínica monte, gere o XML, acompanhe e registre a resposta de **Solicitações de SP/SADT**, **Solicitações de Internação** e **Anexos de Solicitação de OPME** (TISS 4.03.00), sem alterar nada do faturamento existente (guias, lotes, cron, XML `ENVIO_LOTE_GUIAS`).
 
-**Architecture:** três tabelas novas (`tiss_authorizations`, `tiss_authorization_items`, `tiss_authorization_events`) em `supabase/tiss-authorizations.sql`, com RLS de leitura por workspace e escrita exclusivamente via RPCs `security definer` que validam membership, módulo, máquina de estados (D3) e gravam evento na mesma transação. O snapshot (`payload`) é montado em TypeScript (`lib/billing/authorizations/*`) a partir de dados lidos com o client do usuário + RPC de profissionais; o XML é gerado sob demanda (`lib/tiss/v4_03_00/*`), validado com `validateAgainstSchemas` e nunca persistido. O `cabecalho` é extraído de `buildBatch` para `envelope.ts`, travado por um golden byte a byte.
+**Architecture:** três tabelas novas (`tiss_authorizations`, `tiss_authorization_items`, `tiss_authorization_events`) em `supabase/tiss-authorizations.sql`, com RLS de leitura só para owner/admin da account (`is_account_admin`, igual a `tiss_guides`) e escrita exclusivamente via RPCs `security definer` que validam `is_account_admin`, módulo, máquina de estados (D3) e gravam evento na mesma transação. O snapshot (`payload`) é montado em TypeScript (`lib/billing/authorizations/*`) a partir de dados lidos com o client do usuário + RPC de profissionais (só id, nome, CRM, UF, CBO); o XML é gerado sob demanda (`lib/tiss/v4_03_00/*`), validado com `validateAgainstSchemas` e nunca persistido. O `cabecalho` é extraído de `buildBatch` para `envelope.ts`, travado por um golden byte a byte.
 
 **Tech Stack:** Next.js 16.3.1 (App Router, route handlers), TypeScript estrito, Supabase (Postgres + RLS, PostgREST RPC), Vitest 4, PGlite (Postgres em WASM) para SQL real, xmllint-wasm contra os XSDs oficiais, xmlbuilder2, Tailwind + componentes `components/ui/*`.
 
@@ -15,16 +15,29 @@
 
 **Branch:** `feat/tiss-autorizacoes` a partir de `dev`. Se usar worktree: rodar `npm ci` dentro dele antes de `next build`; `npm test` dentro de worktree pode contar falhas falsas; `npm run lint` estoura memória varrendo o worktree — usar lint por caminho (Tarefa 19).
 
+## Decisões de 2026-10-06 (product owner — prevalecem sobre o design de 2026-10-05)
+
+- **P1 — Só owner/admin.** Criar, editar, recarregar, trocar itens, marcar como enviada, cancelar, registrar resposta e baixar XML: somente `owner`/`admin`. `member` não tem acesso nenhum (nem leitura).
+- **P2 (opção a) — Member não vê nada.** `billing` **continua** em `ADMIN_MIN_MODULES` (`lib/nav/tabs.ts`); só o rótulo vira "Convênios / TISS". `/faturamento` tem abas fixas Autorizações | Guias | Lotes (sem filtro por papel). Todas as rotas `app/api/billing/authorizations/**` usam `requireBilling(req, { adminOnly: true })`, como `/api/billing/guides`. RLS de `select` das tabelas novas = `is_account_admin(account_id)` (igual a `tiss_guides`); os RPCs checam `is_account_admin`.
+- **P3 — Atalho na agenda.** "Solicitar autorização" no `AppointmentModal`, renderizado só para owner/admin.
+- **P4 / D4 — Numeração.** Como só admins criam, `create_tiss_authorization` obtém o número com `next_tiss_number(insurer, 'guide')` (função existente, sem alteração), não com incremento inline.
+- **R1 — Correção de resposta.** owner/admin podem registrar de novo a resposta da operadora com o status já final (`authorized`, `partially_authorized`, `denied`); nunca a partir de `draft`, `ready` ou `cancelled`.
+- **R2 — Paciente com autorização não é excluído.** `DELETE /api/patients/[id]` traduz a violação da FK de `tiss_authorizations` em 409 "Este paciente tem autorizações TISS e não pode ser excluído." (Tarefa 12).
+- **R3 — Profissionais sem contato.** `tiss_authorization_professionals` devolve só id, nome, CRM, UF e CBO. Telefone/e-mail do solicitante são digitados na autorização (formulário OPME) e nunca vêm de `profiles`. O fixture PGlite não ganha colunas.
+- **R4 — Sem ressalva de `module_overrides`.** Irrelevante: member não tem o menu.
+
+Consequências que simplificam o plano: as distinções "member cancela só até ready" e "código 6 só owner/admin" desaparecem (todo escritor é admin); `canCancel`/`canRecordResponse` não recebem papel; `lib/billing/tabs.ts` não existe; os componentes de UI não recebem `role`.
+
 ---
 
 ## Restrições globais
 
-1. **Não destrutivo.** Há usuários reais em produção. SQL só aditivo: `create table if not exists`, `create index if not exists`, `create or replace function` de funções **novas**, `drop policy/trigger if exists` + `create` **apenas em tabelas novas**. Nenhum `drop`/`alter` em `tiss_guides`, `tiss_batches`, `appointments`, `profiles`, `health_insurers` nem nas funções de faturamento (`next_tiss_number`, `ensure_tiss_guide_for_appointment`, `finalize_tiss_batch`, `mark_tiss_batch_sent`, `tiss_professional_for_appointment`). A única escrita em tabela existente é o `update health_insurers set next_guide_number = next_guide_number + 1` dentro do RPC de criação (mesmo contador, D4).
+1. **Não destrutivo.** Há usuários reais em produção. SQL só aditivo: `create table if not exists`, `create index if not exists`, `create or replace function` de funções **novas**, `drop policy/trigger if exists` + `create` **apenas em tabelas novas**. Nenhum `drop`/`alter` em `tiss_guides`, `tiss_batches`, `appointments`, `profiles`, `health_insurers` nem nas funções de faturamento (`next_tiss_number`, `ensure_tiss_guide_for_appointment`, `finalize_tiss_batch`, `mark_tiss_batch_sent`, `tiss_professional_for_appointment`). O SQL novo não escreve em tabela existente: o número vem de `public.next_tiss_number(insurer, 'guide')` (função existente, chamada sem alteração), que incrementa `health_insurers.next_guide_number` (mesmo contador das guias, D4).
 2. **Nenhuma migration é aplicada** em Supabase algum pelo agente (nem dev, nem prod, nem via MCP). O usuário roda `supabase/tiss-authorizations.sql` no SQL Editor **depois** de `supabase/billing.sql`.
-3. **Faturamento intocado.** `buildBatch` produz o mesmo XML byte a byte (golden da Tarefa 1 deve continuar verde em todas as tarefas seguintes). `createBatchesForInsurer`, `chunkGuides`, cron, rotas `/api/billing/guides|batches` e `GuidesTable/GuideEditSheet/BatchesTable` não mudam de comportamento. Guias/Lotes e suas APIs continuam admin-only.
+3. **Faturamento intocado.** `buildBatch` produz o mesmo XML byte a byte (golden da Tarefa 1 deve continuar verde em todas as tarefas seguintes). `createBatchesForInsurer`, `chunkGuides`, cron, rotas `/api/billing/guides|batches` e `GuidesTable/GuideEditSheet/BatchesTable` não mudam de comportamento. Guias/Lotes e suas APIs continuam admin-only — e as autorizações também (P1/P2).
 4. **Bloco "BILLING AUTHENTICATED OPERATIONS" não é tocado** em `billing.sql`, `billing-authenticated.sql` nem `schema.sql`. O teste `schema.sql.endsWith(billing-authenticated.sql)` (tests/billing/database.test.ts) obriga a inserir o bloco novo em `schema.sql` **antes** do comentário "Ajuste incremental para instalações que já executaram billing.sql." — nunca no fim do arquivo.
-5. **Espelhamento:** o conteúdo entre `-- BEGIN TISS AUTHORIZATIONS` e `-- END TISS AUTHORIZATIONS` de `supabase/tiss-authorizations.sql` aparece idêntico em `supabase/schema.sql` (teste na Tarefa 4). Tipos manuais em `types/database.ts`. Fixture PGlite `tests/billing/fixtures/database.sql` ganha só as colunas `profiles.phone`/`profiles.email` (aditivo).
-6. **RLS em toda tabela nova** (`enable row level security` + policy de `select` por `my_workspace_ids()`/`my_account_ids()`); `insert/update/delete/truncate` revogados de `authenticated` e `anon` (o `alter default privileges` do schema.sql dá ALL a `authenticated` em tabelas novas — o `revoke` explícito é obrigatório). Funções internas revogadas de `public, anon, authenticated`.
+5. **Espelhamento:** o conteúdo entre `-- BEGIN TISS AUTHORIZATIONS` e `-- END TISS AUTHORIZATIONS` de `supabase/tiss-authorizations.sql` aparece idêntico em `supabase/schema.sql` (teste na Tarefa 4). Tipos manuais em `types/database.ts`. Fixture PGlite `tests/billing/fixtures/database.sql` **não muda** (R3: nenhum RPC novo lê `profiles.phone/email`).
+6. **RLS em toda tabela nova** (`enable row level security` + policy de `select` por `is_account_admin(account_id)`, como `tiss_guides`; member não lê nada); `insert/update/delete/truncate` revogados de `authenticated` e `anon` (o `alter default privileges` do schema.sql dá ALL a `authenticated` em tabelas novas — o `revoke` explícito é obrigatório). Funções internas revogadas de `public, anon, authenticated`.
 7. **TypeScript sem `any`** (nem `as any`). Casts só `as unknown as T` em fronteiras do Supabase, como o código atual faz com `GUIDE_COLUMNS`.
 8. **Sem PHI em logs/analytics/Sentry.** Erros de RPC viram mensagens fixas; `console.error`/Sentry só com IDs. XML nunca contém nome do paciente (não existe elemento para isso na 4.03.00).
 9. **Next.js 16:** antes de mexer em route handlers, `page.tsx` com `searchParams` ou `next.config.ts`, ler `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/route.md`, `page.md` e a doc de `outputFileTracingIncludes` em `node_modules/next/dist/docs/01-app/03-api-reference/05-config/`.
@@ -34,11 +47,12 @@
 
 | # | Modo de falha provável | Onde é testado |
 |---|---|---|
-| 1 | **OPME apontando para pai indevido**: pai de outra account/paciente/operadora, pai que é outro OPME, pai cancelado, pai de workspace que o usuário não enxerga, SP/SADT com `parent_id`, OPME sem `parent_id`. | Tarefa 2 (trigger + CHECK, insert direto como superuser) e Tarefa 3 (RPC `create_tiss_authorization` como member). |
+| 1 | **OPME apontando para pai indevido**: pai de outra account/paciente/operadora, pai que é outro OPME, pai cancelado, pai de outro workspace, SP/SADT com `parent_id`, OPME sem `parent_id`. | Tarefa 2 (trigger + CHECK, insert direto como superuser) e Tarefa 3 (RPC `create_tiss_authorization` como owner). |
 | 2 | **Autorização vazando para o faturamento**: linha entrando em `createBatchesForInsurer`, contador `next_guide_number` gerando número repetido (`UNIQUE(insurer_id, provider_guide_number)` em `tiss_guides`), `ensure_tiss_guide_for_appointment` quebrando para agendamento que já tem autorização, XML de lote mudando. | Tarefa 1 (golden), Tarefa 3 (PGlite: autorização + guia na mesma operadora, consulta do lote só vê guias), Tarefa 8 (golden após extrair `cabecalho`), Tarefa 12 (rota não toca `tiss_guides`). |
 | 3 | **Texto acima do `maxLength` do XSD / opcional vazio emitido como `<x></x>` / identificador truncado**: observação de 1001 caracteres, indicação clínica só com espaços, carteirinha de 21 dígitos cortada para 20 (vira outro beneficiário), CID com ponto. | Tarefa 7 (validação rejeita acima do limite), Tarefas 9 e 10 (gerador corta texto livre, omite opcional vazio, nunca corta identificador — XSD reprova). |
 | 4 | **Caracteres especiais e hash ISO-8859-1**: `&`, `<`, acentos, emoji, "Erdős", quebra de linha em justificativa; hash do epílogo divergente do arquivo. | Tarefas 9 e 10 (`hashFromFile` recalculado do arquivo, `&amp;`, descarte de fora do Latin-1). |
-| 5 | **Corrida de status / edição depois de enviado**: dois usuários editando (`updated_at` defasado), editar/recarregar após `sent`, membro cancelando após envio, membro registrando resposta "6 - cancelada", `updated_at` perdendo microssegundos ao passar por `new Date()` no client. | Tarefa 3 (PGlite: `tiss_authorization_changed`, `not_editable`, `forbidden`), Tarefas 13–14 (rotas repassam `expected_updated_at` como string, 409/403 sem chamar RPC). |
+| 5 | **Corrida de status / edição depois de enviado**: dois usuários editando (`updated_at` defasado), editar/recarregar após `sent`, cancelar estado final, resposta registrada antes do envio ou sobre `cancelled` (R1 só reabre os finais), `updated_at` perdendo microssegundos ao passar por `new Date()` no client. | Tarefa 3 (PGlite: `tiss_authorization_changed`, `not_editable`, `invalid_transition`), Tarefas 13–14 (rotas repassam `expected_updated_at` como string, 409 sem chamar RPC). |
+| 6 | **Member enxergando ou escrevendo autorização** (P1/P2): RLS de leitura aberta ao workspace, RPC sem `is_account_admin`, rota com `adminOnly: false`, menu liberado para member, atalho da agenda visível para member, RPC de profissionais vazando telefone/e-mail (R3). | Tarefa 2 (member lê zero linhas), Tarefa 3 (member → `tiss_authorization_forbidden` em criar, operar e listar profissionais), Tarefa 12 (member → 403 sem consultar nada), Tarefa 15 (`isModuleVisible('billing', …, 'member') === false`), Tarefa 18. |
 
 ## Mapa de arquivos
 
@@ -48,7 +62,6 @@
 | `tests/tiss/golden.test.ts` + `tests/tiss/golden/*.xml` | criar | Golden byte a byte de `buildBatch` (consulta e SP/SADT). |
 | `supabase/tiss-authorizations.sql` | criar | Migração idempotente: tabelas, CHECKs, triggers, RLS, grants, RPCs. |
 | `supabase/schema.sql` | modificar | Reset (drops das tabelas/funções novas) + bloco espelhado antes do bloco authenticated. |
-| `tests/billing/fixtures/database.sql` | modificar | `profiles.phone`, `profiles.email`. |
 | `tests/billing/authorizations-database.test.ts` | criar | PGlite: RLS, triggers, RPCs, máquina de estados, faturamento intacto, espelho do schema. |
 | `types/database.ts` | modificar | Tipos `TissAuthorization*`, 3 tabelas, 7 funções RPC. |
 | `lib/billing/authorizations/domains.ts` | criar | Enumerações `dm_*` do XSD (código → rótulo) e guarda `isCode`. |
@@ -61,7 +74,6 @@
 | `lib/billing/authorizations/sources.ts` | criar | Carga (client do usuário + RPC) das fontes do snapshot e do contexto de criação. |
 | `lib/billing/authorizations/edit.ts` | criar | Ponte tipada payload "qualquer tipo" ↔ funções genéricas (inicial, refresh, patch). |
 | `lib/billing/authorizations/detail.ts` | criar | Detalhe (linha + itens + pai + filhos OPME) com o client do usuário. |
-| `lib/billing/tabs.ts` | criar | Abas de `/faturamento` por papel. |
 | `lib/billing/authorizations/rpc-errors.ts` | criar | Erro de RPC → `NextResponse` com mensagem fixa. |
 | `lib/billing/authorizations/xml.ts` | criar | Monta as fontes do XML a partir das linhas, escolhe o OPME embutido, valida, registra evento. |
 | `lib/tiss/v4_03_00/envelope.ts` | criar | `cabecalho()` parametrizado e `mensagemTISS()` (hash + serialização). |
@@ -76,7 +88,9 @@
 | `tests/tiss/authorization-xml.test.ts` | criar | XSD real para os três tipos, encoding, limites, itens múltiplos, OPME embutido. |
 | `tests/billing/authorizations-domain.test.ts` | criar | Status, payload, missing, validação. |
 | `tests/billing/authorizations-server.test.ts` | criar | Montagem do XML (OPME embutido), erros de RPC, edição tipada, contexto de criação. |
-| `tests/billing/authorizations-api.test.ts` | criar | Rotas com mock do Supabase, permissões, filtros, XML. |
+| `tests/billing/authorizations-api.test.ts` | criar | Rotas com mock do Supabase, member → 403, filtros, XML. |
+| `app/api/patients/[id]/route.ts` | modificar | `DELETE`: FK de `tiss_authorizations` → 409 com mensagem em português (R2). |
+| `tests/billing/patient-delete.test.ts` | criar | `DELETE /api/patients/[id]`: 409 para paciente com autorização; outros erros inalterados. |
 | `tests/tiss/envelope.test.ts` | criar | `cabecalho`/`mensagemTISS` parametrizados. |
 | `app/api/billing/authorizations/route.ts` | criar | GET lista com filtros, POST cria. |
 | `app/api/billing/authorizations/professionals/route.ts` | criar | GET profissionais da account (RPC). |
@@ -87,10 +101,10 @@
 | `app/api/billing/authorizations/[id]/events/route.ts` | criar | GET histórico. |
 | `app/api/billing/authorizations/[id]/xml/route.ts` | criar | GET download do XML gerado sob demanda. |
 | `next.config.ts` | modificar | XSDs no trace da rota de XML. |
-| `lib/nav/tabs.ts`, `tests/nav/tabs.test.ts` | modificar | Rótulo "Convênios / TISS"; `billing` sai de `ADMIN_MIN_MODULES`. |
-| `app/(dashboard)/faturamento/page.tsx` | modificar | Member entra; abas Autorizações (todos) / Guias / Lotes (owner/admin). |
+| `lib/nav/tabs.ts`, `tests/nav/tabs.test.ts` | modificar | Só o rótulo "Convênios / TISS"; `billing` **continua** em `ADMIN_MIN_MODULES` (P2). |
+| `app/(dashboard)/faturamento/page.tsx` | modificar | Continua owner/admin-only; abas fixas Autorizações / Guias / Lotes. |
 | `components/billing/authorizations/*.tsx` | criar | Tabela, diálogo de criação, sheet de edição, editor de itens, resposta, histórico, badges. |
-| `components/agenda/AppointmentModal.tsx` | modificar | Atalho "Solicitar autorização" na seção de convênio. |
+| `components/agenda/AppointmentModal.tsx` | modificar | Atalho "Solicitar autorização" na seção de convênio, só para owner/admin (P3). |
 | `docs/billing-tiss.md` | modificar | Instalação (`tiss-authorizations.sql`) e uso. |
 
 ---
@@ -168,23 +182,17 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 **Modelo sugerido:** opus
 
-**Files:** criar `supabase/tiss-authorizations.sql`, `tests/billing/authorizations-database.test.ts`; modificar `tests/billing/fixtures/database.sql`.
+**Files:** criar `supabase/tiss-authorizations.sql`, `tests/billing/authorizations-database.test.ts`. (`tests/billing/fixtures/database.sql` não muda — R3.)
 
 **Interfaces:**
 - Consumes (já existentes): `public.accounts(modules)`, `public.workspaces`, `public.patients`, `public.health_insurers`, `public.appointments`, `public.profiles`, `public.my_workspace_ids()`, `public.my_account_ids()`, `public.is_account_admin(uuid)`, `public.handle_updated_at()`.
 - Produces (SQL):
   - tabelas `public.tiss_authorizations`, `public.tiss_authorization_items`, `public.tiss_authorization_events`;
   - triggers `enforce_tiss_authorization()`, `enforce_tiss_authorization_item()`, `enforce_tiss_authorization_event()`;
-  - policies de leitura; grants.
+  - policies de leitura só para owner/admin (`is_account_admin(account_id)`, como `tiss_guides`); grants.
   - Chaves de erro (mensagem exata do `raise`): `tiss_authorization_account_mismatch`, `tiss_authorization_appointment_mismatch`, `tiss_authorization_parent_invalid`, `tiss_authorization_immutable`, `tiss_authorization_item_kind`, `tiss_authorization_events_append_only`.
 
-- [ ] **2.1 Fixture aditiva.** Em `tests/billing/fixtures/database.sql`, trocar a linha da tabela `profiles` por:
-
-```sql
-create table public.profiles (id uuid primary key references auth.users, full_name text not null, crm text, phone text, email text);
-```
-
-Rodar `npx vitest run tests/billing/database.test.ts` → continua verde (colunas extras não afetam os inserts existentes).
+- [ ] **2.1 Fixture: nada a fazer** (removido em 2026-10-06, R3). O RPC de profissionais não lê `profiles.phone/email`; `crm_uf`/`cbo_code` já são criados por `supabase/billing.sql`. Só confirmar a linha de base: `npx vitest run tests/billing/database.test.ts` → verde.
 
 - [ ] **2.2 Teste que falha.** Criar `tests/billing/authorizations-database.test.ts`:
 
@@ -218,6 +226,7 @@ function payload(type: string) {
     type,
     insurer: { ans_registry: '999999', provider_code: 'PREST0001', tiss_version: '4.03.00' },
     provider: { cnes: '1234567', cnpj: '12345678000199', legal_name: 'Clínica Fictícia' },
+    // phone/email: digitados na autorização (R3), nunca lidos de profiles.
     professional: { id: ids.doctor, name: 'Dra. Fictícia', crm: '123456', crm_uf: 'SP', cbo_code: '225125', phone: '11999990000', email: null },
     beneficiary: { patient_insurance_id: ids.insurance, card_number: 'FICT-CARD-001', newborn: false },
     request: {},
@@ -260,11 +269,11 @@ beforeEach(async () => {
       ('${ids.workspace}', '${ids.account}', '1234567', '12345678000199', 'Clínica Fictícia'),
       ('${ids.workspace2}', '${ids.account}', '7654321', null, 'Unidade Dois'),
       ('${ids.otherWorkspace}', '${ids.otherAccount}', '1111111', null, 'Outra Clínica');
-    insert into public.profiles (id, full_name, crm, crm_uf, cbo_code, phone, email) values
-      ('${ids.doctor}', 'Dra. Fictícia', '123456/SP', 'SP', '225125', '11999990000', 'dra@exemplo.test'),
-      ('${ids.member}', 'Recepção Fictícia', null, null, null, '11888880000', null),
-      ('${ids.owner}', 'Gestão Fictícia', null, null, null, null, null),
-      ('${ids.outsider}', 'Dr. De Fora', '999999', 'RJ', '225125', null, null);
+    insert into public.profiles (id, full_name, crm, crm_uf, cbo_code) values
+      ('${ids.doctor}', 'Dra. Fictícia', '123456/SP', 'SP', '225125'),
+      ('${ids.member}', 'Recepção Fictícia', null, null, null),
+      ('${ids.owner}', 'Gestão Fictícia', null, null, null),
+      ('${ids.outsider}', 'Dr. De Fora', '999999', 'RJ', '225125');
     insert into public.memberships (user_id, account_id, role) values
       ('${ids.doctor}', '${ids.account}', 'member'), ('${ids.member}', '${ids.account}', 'member'),
       ('${ids.owner}', '${ids.account}', 'owner'), ('${ids.outsider}', '${ids.otherAccount}', 'owner');
@@ -290,18 +299,29 @@ describe('tiss-authorizations.sql — estrutura, RLS e integridade', () => {
     await expect(db.exec(migration)).resolves.toBeDefined()
   })
 
-  it('membro lê só autorizações dos próprios workspaces e da própria account', async () => {
+  it('só owner/admin da própria account leem (P1/P2: member não lê nada, como tiss_guides)', async () => {
     await insertRaw({ id: id(100), type: 'sp_sadt_request', number: '1' })
     await insertRaw({ id: id(101), type: 'sp_sadt_request', number: '1', account: ids.otherAccount,
       workspace: ids.otherWorkspace, patient: ids.otherPatient, insurer: ids.otherInsurer })
-    await asUser(ids.member)
+    await asSuperuser()
+    await db.query(`insert into public.tiss_authorization_items (authorization_id, account_id, position, kind, table_code, code, description, quantity_requested)
+      values ($1, $2, 1, 'procedure', '22', '40301010', 'Hemograma', 1)`, [id(100), ids.account])
+    await db.query(`insert into public.tiss_authorization_events (authorization_id, account_id, event) values ($1, $2, 'created')`, [id(100), ids.account])
+    await asUser(ids.owner)
     expect((await db.query<{ id: string }>('select id from public.tiss_authorizations')).rows.map((r) => r.id)).toEqual([id(100)])
     await asUser(ids.outsider)
     expect((await db.query<{ id: string }>('select id from public.tiss_authorizations')).rows.map((r) => r.id)).toEqual([id(101)])
+    for (const user of [ids.member, ids.doctor]) {
+      await asUser(user)
+      expect((await db.query('select id from public.tiss_authorizations')).rows).toEqual([])
+      expect((await db.query('select id from public.tiss_authorization_items')).rows).toEqual([])
+      expect((await db.query('select id from public.tiss_authorization_events')).rows).toEqual([])
+    }
+    // Promovido a admin, passa a ler (a policy segue o papel, não uma lista fixa).
     await asSuperuser()
-    await db.exec(`update public.memberships set workspace_ids = '{}' where user_id = '${ids.member}'`)
+    await db.exec(`update public.memberships set role = 'admin' where user_id = '${ids.member}'`)
     await asUser(ids.member)
-    expect((await db.query('select id from public.tiss_authorizations')).rows).toEqual([])
+    expect((await db.query<{ id: string }>('select id from public.tiss_authorizations')).rows.map((r) => r.id)).toEqual([id(100)])
   })
 
   it('ninguém escreve direto nas tabelas (só via RPC)', async () => {
@@ -398,9 +418,9 @@ describe('tiss-authorizations.sql — estrutura, RLS e integridade', () => {
 -- supabase/schema.sql inteiro: aquele arquivo é "drop and recreate".
 -- Idempotente e aditiva: cria só tabelas, funções, triggers e policies novas.
 -- Não altera tiss_guides, tiss_batches, appointments, profiles nem as funções
--- do faturamento. A única escrita em tabela existente é o incremento de
--- health_insurers.next_guide_number dentro de create_tiss_authorization (o
--- mesmo contador das guias, com o mesmo lock de linha).
+-- do faturamento. O número da solicitação vem de next_tiss_number(insurer,
+-- 'guide') — a função existente, chamada sem alteração (mesmo contador das
+-- guias). Acesso: só owner/admin (is_account_admin), como guias e lotes.
 --
 -- O bloco entre BEGIN/END abaixo está idêntico em supabase/schema.sql
 -- (tests/billing/authorizations-database.test.ts confere).
@@ -621,35 +641,25 @@ create trigger trg_tiss_authorization_events_enforce
   for each row execute procedure public.enforce_tiss_authorization_event();
 
 -- ============================================================
--- 3. RLS — leitura por membro do workspace; escrita só pelos RPCs
+-- 3. RLS — leitura só owner/admin (mesma regra de tiss_guides/tiss_batches);
+-- member não lê nada. Escrita só pelos RPCs (não há policy de escrita).
 -- ============================================================
 alter table public.tiss_authorizations      enable row level security;
 alter table public.tiss_authorization_items  enable row level security;
 alter table public.tiss_authorization_events enable row level security;
 
-drop policy if exists "tiss_authorizations: workspace members read" on public.tiss_authorizations;
-create policy "tiss_authorizations: workspace members read" on public.tiss_authorizations
-  for select using (
-    workspace_id = any(public.my_workspace_ids()) and account_id = any(public.my_account_ids())
-  );
+drop policy if exists "tiss_authorizations: admin read" on public.tiss_authorizations;
+create policy "tiss_authorizations: admin read" on public.tiss_authorizations
+  for select using (public.is_account_admin(account_id));
 
-drop policy if exists "tiss_authorization_items: workspace members read" on public.tiss_authorization_items;
-create policy "tiss_authorization_items: workspace members read" on public.tiss_authorization_items
-  for select using (
-    account_id = any(public.my_account_ids()) and exists (
-      select 1 from public.tiss_authorizations a
-      where a.id = tiss_authorization_items.authorization_id and a.workspace_id = any(public.my_workspace_ids())
-    )
-  );
+-- account_id dos itens/eventos é forçado pelo trigger para o da autorização.
+drop policy if exists "tiss_authorization_items: admin read" on public.tiss_authorization_items;
+create policy "tiss_authorization_items: admin read" on public.tiss_authorization_items
+  for select using (public.is_account_admin(account_id));
 
-drop policy if exists "tiss_authorization_events: workspace members read" on public.tiss_authorization_events;
-create policy "tiss_authorization_events: workspace members read" on public.tiss_authorization_events
-  for select using (
-    account_id = any(public.my_account_ids()) and exists (
-      select 1 from public.tiss_authorizations a
-      where a.id = tiss_authorization_events.authorization_id and a.workspace_id = any(public.my_workspace_ids())
-    )
-  );
+drop policy if exists "tiss_authorization_events: admin read" on public.tiss_authorization_events;
+create policy "tiss_authorization_events: admin read" on public.tiss_authorization_events
+  for select using (public.is_account_admin(account_id));
 
 -- ============================================================
 -- 4. GRANTS — o schema.sql dá ALL em tabelas novas a authenticated por
@@ -670,8 +680,8 @@ grant all on
 - [ ] **2.6 Commit:**
 
 ```bash
-git add supabase/tiss-authorizations.sql tests/billing/authorizations-database.test.ts tests/billing/fixtures/database.sql
-git commit -m "feat(tiss): tabelas de autorizações com RLS, integridade de OPME e eventos append-only
+git add supabase/tiss-authorizations.sql tests/billing/authorizations-database.test.ts
+git commit -m "feat(tiss): tabelas de autorizações com RLS admin-only, integridade de OPME e eventos append-only
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -687,11 +697,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Interfaces (SQL, todas `security definer set search_path = ''`):**
 - Internas (revogadas de `public, anon, authenticated`):
   - `tiss_authorization_require_billing(p_account_id uuid) returns void`
-  - `tiss_authorization_lock(p_id uuid) returns public.tiss_authorizations` — `select … for update` restrito a `my_workspace_ids()` + módulo.
+  - `tiss_authorization_lock(p_id uuid) returns public.tiss_authorizations` — `select … for update` restrito à própria account (`my_account_ids()`, senão `not_found`) + `is_account_admin` (senão `forbidden`) + módulo.
   - `tiss_authorization_write_items(p_authorization_id uuid, p_items jsonb) returns void`
   - `tiss_authorization_log(p_id uuid, p_event text, p_from text, p_to text, p_data jsonb) returns void`
 - Públicas (`grant execute … to authenticated`):
-  - `tiss_authorization_professionals(p_workspace_id uuid) returns jsonb` — `[{id, full_name, crm, crm_uf, cbo_code, phone, email}]` dos membros ativos com CRM.
+  - `tiss_authorization_professionals(p_workspace_id uuid) returns jsonb` — `[{id, full_name, crm, crm_uf, cbo_code}]` dos membros ativos com CRM (R3: sem telefone/e-mail); só owner/admin.
   - `create_tiss_authorization(p_workspace_id uuid, p_patient_id uuid, p_insurer_id uuid, p_type text, p_appointment_id uuid, p_parent_id uuid, p_payload jsonb, p_missing_fields text[], p_items jsonb) returns jsonb` → `{id, status, provider_guide_number}`.
   - `update_tiss_authorization(p_id uuid, p_expected_updated_at timestamptz, p_payload jsonb, p_missing_fields text[], p_items jsonb default null, p_requested_at date default null, p_event text default 'updated') returns jsonb` → `{id, status, updated_at}`.
   - `transition_tiss_authorization(p_id uuid, p_to text, p_expected_updated_at timestamptz) returns jsonb` → `{id, status, updated_at}` (`p_to` ∈ `sent`, `cancelled`).
@@ -702,10 +712,11 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 Regras fixadas (do design, com os pontos ambíguos resolvidos e listados no fim do plano):
 - `draft`/`ready` = `cardinality(missing_fields) > 0` / `= 0`; o SQL acrescenta `'items'` quando não há item (o cliente não consegue marcar `ready` sem itens).
 - Conteúdo (payload, itens, `requested_at`) só em `draft`/`ready`, com `p_expected_updated_at` igual ao `updated_at` atual.
-- `sent` só de `ready`. `cancelled` de `draft|ready` (qualquer membro) ou de `sent|under_review|pending_info` (só `is_account_admin`).
-- Resposta só de `sent|under_review|pending_info`; código → status: 1 authorized, 2 under_review, 3 denied, 4/5 pending_info, 6 cancelled (exige admin, como o cancelamento), 7 partially_authorized.
-- Numeração: mesmo `next_guide_number` da operadora, com `select … for update` na linha (mesmo lock do `ensure_tiss_guide_for_appointment`). `next_tiss_number` não é chamado porque exige admin (ver "Pontos do design").
-- OPME: pai visível (mesmo workspace do usuário), não cancelado, travado `for share` (cancelamento concorrente do pai espera); OPME herda o workspace do pai.
+- Toda RPC pública exige `is_account_admin` da account (P1): member recebe `tiss_authorization_forbidden`; usuário de outra account recebe `tiss_authorization_not_found` (não revela existência).
+- `sent` só de `ready`. `cancelled` de `draft|ready|sent|under_review|pending_info` (todo escritor é admin; não há mais regra por papel).
+- Resposta de `sent|under_review|pending_info` e, por R1, de novo em `authorized|partially_authorized|denied` (correção); nunca de `draft|ready|cancelled`. Código → status: 1 authorized, 2 under_review, 3 denied, 4/5 pending_info, 6 cancelled, 7 partially_authorized.
+- Numeração (D4/P4): `v_number := public.next_tiss_number(i.id, 'guide')`, depois do `select … for update` na linha da operadora. Funciona de dentro do RPC: `auth.uid()`/`auth.role()` leem os GUCs `request.jwt.claim.*` da sessão (o `security definer` não os altera), então o `is_account_admin` interno vê o mesmo usuário; o `execute` é checado contra o dono da função (que é o dono de `next_tiss_number`). A função continua sem alteração.
+- OPME: pai da mesma account e do mesmo workspace pedido, não cancelado, travado `for share` (cancelamento concorrente do pai espera); OPME herda o workspace do pai.
 
 - [ ] **3.1 Testes que falham.** Acrescentar ao fim de `tests/billing/authorizations-database.test.ts`:
 
@@ -729,8 +740,8 @@ async function create(o: Partial<{ type: string; parent: string | null; workspac
   return r.rows[0].r
 }
 
-// Lido com o papel atual (a RLS deixa o membro ler). Sem acesso, um valor
-// qualquer — o RPC é que precisa recusar.
+// Lido com o papel atual (a RLS deixa owner/admin ler). Para member/outsider
+// a RLS esconde a linha e sai um valor qualquer — o RPC é que precisa recusar.
 async function updatedAt(authorizationId: string): Promise<string> {
   const r = await db.query<{ t: string }>('select updated_at::text as t from public.tiss_authorizations where id = $1', [authorizationId])
   return r.rows[0]?.t ?? '2000-01-01T00:00:00Z'
@@ -749,19 +760,34 @@ const events = async (aid: string) => {
     'select event, from_status, to_status from public.tiss_authorization_events where authorization_id = $1 order by id', [aid])).rows
 }
 
+const nextGuideNumber = async () => {
+  await asSuperuser()
+  return (await db.query<{ n: string }>('select next_guide_number::text as n from public.health_insurers where id = $1', [ids.insurer])).rows[0].n
+}
+
 describe('RPCs de autorização — criação e numeração', () => {
-  it('member cria com o contador de guias da operadora, sem receber payload', async () => {
-    await asUser(ids.member)
+  it('owner cria com next_tiss_number (contador de guias da operadora), sem receber payload', async () => {
+    await asUser(ids.owner)
     const a = await create()
     const b = await create({ type: 'hospitalization_request' })
     expect(a).toEqual({ id: expect.any(String), status: 'ready', provider_guide_number: '1' })
     expect(b.provider_guide_number).toBe('2')
     expect(JSON.stringify(a)).not.toMatch(/FICT-CARD|payload/)
     expect(await events(a.id)).toEqual([{ event: 'created', from_status: null, to_status: 'ready' }])
+    expect(await nextGuideNumber()).toBe('3')
+  })
+
+  it('member (inclusive o médico) não cria nem lista profissionais, e o contador não anda (P1)', async () => {
+    for (const user of [ids.member, ids.doctor]) {
+      await asUser(user)
+      await expect(create()).rejects.toThrow('tiss_authorization_forbidden')
+      await expect(db.query('select public.tiss_authorization_professionals($1::uuid)', [ids.workspace])).rejects.toThrow('tiss_authorization_forbidden')
+    }
+    expect(await nextGuideNumber()).toBe('1')
   })
 
   it('sem itens vira draft com "items" em missing_fields, mesmo que o cliente mande vazio', async () => {
-    await asUser(ids.member)
+    await asUser(ids.owner)
     const a = await create({ items: [], missing: [] })
     expect(a.status).toBe('draft')
     await asSuperuser()
@@ -769,23 +795,25 @@ describe('RPCs de autorização — criação e numeração', () => {
   })
 
   it('recusa workspace alheio, módulo desligado, operadora sem ANS e payload de outra operadora', async () => {
-    await asUser(ids.member)
+    await asUser(ids.owner)
     await expect(create({ workspace: ids.otherWorkspace })).rejects.toThrow('tiss_authorization_forbidden')
     await expect(create({ patient: ids.otherPatient })).rejects.toThrow('tiss_authorization_account_mismatch')
     await expect(create({ payload: { ...payload('sp_sadt_request'), insurer: { ans_registry: '888888', provider_code: 'X', tiss_version: '4.03.00' } } }))
       .rejects.toThrow('tiss_authorization_payload_mismatch')
     await asSuperuser()
     await db.exec(`update public.health_insurers set ans_registry = null where id = '${ids.insurer}'`)
-    await asUser(ids.member)
+    await asUser(ids.owner)
     await expect(create()).rejects.toThrow('tiss_insurer_incomplete')
     await asSuperuser()
     await db.exec(`update public.health_insurers set ans_registry = '999999'; update public.accounts set modules = '{}'`)
-    await asUser(ids.member)
+    await asUser(ids.owner)
     await expect(create()).rejects.toThrow('billing_module_disabled')
+    // Nenhuma tentativa recusada consumiu número.
+    expect(await nextGuideNumber()).toBe('1')
   })
 
-  it('OPME: pai visível, não cancelado, mesmo workspace; herda paciente e operadora', async () => {
-    await asUser(ids.member)
+  it('OPME: pai da mesma account e workspace, não cancelado; herda paciente e operadora', async () => {
+    await asUser(ids.owner)
     const parent = await create()
     const opme = await create({ type: 'opme_request', parent: parent.id })
     expect(opme.status).toBe('ready')
@@ -797,19 +825,21 @@ describe('RPCs de autorização — criação e numeração', () => {
     await expect(create({ type: 'opme_request', parent: parent.id })).rejects.toThrow('tiss_authorization_parent_invalid')
   })
 
-  it('lista só profissionais com CRM da própria account', async () => {
-    await asUser(ids.member)
-    const r = await db.query<{ r: Array<{ id: string; crm: string; phone: string }> }>(
+  it('lista só profissionais com CRM da própria account, só com id, nome, CRM, UF e CBO (R3)', async () => {
+    await asUser(ids.owner)
+    const r = await db.query<{ r: Array<Record<string, unknown>> }>(
       'select public.tiss_authorization_professionals($1::uuid) as r', [ids.workspace])
-    expect(r.rows[0].r.map((p) => p.id)).toEqual([ids.doctor])
-    expect(r.rows[0].r[0]).toMatchObject({ crm: '123456/SP', crm_uf: 'SP', cbo_code: '225125', phone: '11999990000' })
+    // toEqual exato: telefone/e-mail nunca saem daqui.
+    expect(r.rows[0].r).toEqual([
+      { id: ids.doctor, full_name: 'Dra. Fictícia', crm: '123456/SP', crm_uf: 'SP', cbo_code: '225125' },
+    ])
     await expect(db.query('select public.tiss_authorization_professionals($1::uuid)', [ids.otherWorkspace])).rejects.toThrow('tiss_authorization_forbidden')
   })
 })
 
 describe('RPCs de autorização — edição e máquina de estados', () => {
   it('edição exige updated_at atual e só vale em draft/ready; draft→ready gera evento', async () => {
-    await asUser(ids.member)
+    await asUser(ids.owner)
     const a = await create({ missing: ['beneficiary.card_number'] })
     const stale = await updatedAt(a.id)
     const ok = await db.query<{ r: { status: string } }>(
@@ -821,21 +851,25 @@ describe('RPCs de autorização — edição e máquina de estados', () => {
     expect((await events(a.id)).map((e) => e.event)).toEqual(['created', 'updated', 'items_changed', 'ready'])
     await asSuperuser()
     expect((await db.query<{ n: number }>('select count(*)::int as n from public.tiss_authorization_items')).rows[0].n).toBe(2)
-    await asUser(ids.member)
+    await asUser(ids.owner)
     await transition(a.id, 'sent')
     await expect(db.query(`select public.update_tiss_authorization($1::uuid, $2::timestamptz, $3::jsonb, '{}'::text[])`,
       [a.id, await updatedAt(a.id), JSON.stringify(payload('sp_sadt_request'))])).rejects.toThrow('tiss_authorization_not_editable')
   })
 
-  it('sent só a partir de ready; cancelamento após envio é só de owner/admin', async () => {
-    await asUser(ids.member)
+  it('sent só a partir de ready; cancelamento de draft até aguardando resposta; member nunca opera', async () => {
+    await asUser(ids.owner)
     const draft = await create({ items: [] })
     await expect(transition(draft.id, 'sent')).rejects.toThrow('tiss_authorization_invalid_transition')
     await transition(draft.id, 'cancelled')
     await expect(transition(draft.id, 'sent')).rejects.toThrow('tiss_authorization_invalid_transition')
     const a = await create()
     await transition(a.id, 'sent')
+    // P1: member da mesma account recebe forbidden em toda RPC de escrita.
+    await asUser(ids.member)
     await expect(transition(a.id, 'cancelled')).rejects.toThrow('tiss_authorization_forbidden')
+    await expect(respond(a.id, '1')).rejects.toThrow('tiss_authorization_forbidden')
+    await expect(db.query('select public.log_tiss_authorization_xml($1::uuid, $2)', [a.id, 'a'.repeat(32)])).rejects.toThrow('tiss_authorization_forbidden')
     await asUser(ids.owner)
     await transition(a.id, 'cancelled')
     expect((await events(a.id)).map((e) => [e.event, e.from_status, e.to_status])).toEqual([
@@ -847,13 +881,9 @@ describe('RPCs de autorização — edição e máquina de estados', () => {
     ['1', 'authorized'], ['2', 'under_review'], ['3', 'denied'], ['4', 'pending_info'],
     ['5', 'pending_info'], ['6', 'cancelled'], ['7', 'partially_authorized'],
   ])('resposta %s → %s', async (code, status) => {
-    await asUser(ids.member)
+    await asUser(ids.owner)
     const a = await create()
     await transition(a.id, 'sent')
-    if (code === '6') {
-      await expect(respond(a.id, code)).rejects.toThrow('tiss_authorization_forbidden')
-      await asUser(ids.owner)
-    }
     const r = await respond(a.id, code)
     expect((r.rows[0] as { r: { status: string } }).r.status).toBe(status)
     await asSuperuser()
@@ -862,26 +892,46 @@ describe('RPCs de autorização — edição e máquina de estados', () => {
     expect(row).toEqual({ operator_guide_number: 'OP-123', password: 'SENHA9', response_status_code: code })
   })
 
-  it('resposta grava quantidade/valor autorizado só de itens da própria autorização e respeita estados terminais', async () => {
-    await asUser(ids.member)
+  it('resposta grava quantidade/valor autorizado só de itens da própria autorização; correção em estado final (R1)', async () => {
+    await asUser(ids.owner)
     const parent = await create()
     const opme = await create({ type: 'opme_request', parent: parent.id })
     await transition(opme.id, 'sent')
     await asSuperuser()
     const item = (await db.query<{ id: string }>('select id from public.tiss_authorization_items where authorization_id = $1', [opme.id])).rows[0]
     const foreign = (await db.query<{ id: string }>('select id from public.tiss_authorization_items where authorization_id = $1', [parent.id])).rows[0]
-    await asUser(ids.member)
+    await asUser(ids.owner)
     await expect(respond(opme.id, '7', [{ id: foreign.id, quantity_authorized: 1 }])).rejects.toThrow('tiss_authorization_item_not_found')
     await respond(opme.id, '2')
     await respond(opme.id, '7', [{ id: item.id, quantity_authorized: 1, authorized_value_cents: 120000 }])
-    await expect(respond(opme.id, '1')).rejects.toThrow('tiss_authorization_invalid_transition')
+    // R1: a resposta de um estado final pode ser registrada de novo (correção).
+    const fixed = await respond(opme.id, '1')
+    expect((fixed.rows[0] as { r: { status: string } }).r.status).toBe('authorized')
+    // Estado final continua sem cancelamento.
+    await expect(transition(opme.id, 'cancelled')).rejects.toThrow('tiss_authorization_invalid_transition')
+    expect((await events(opme.id)).filter((e) => e.event === 'response_recorded').map((e) => [e.from_status, e.to_status])).toEqual([
+      ['sent', 'under_review'], ['under_review', 'partially_authorized'], ['partially_authorized', 'authorized'],
+    ])
     await asSuperuser()
+    // Itens não citados na correção mantêm o que foi gravado antes.
     expect((await db.query('select quantity_authorized, authorized_value_cents from public.tiss_authorization_items where id = $1', [item.id])).rows)
       .toEqual([{ quantity_authorized: 1, authorized_value_cents: 120000 }])
   })
 
+  it('resposta nunca a partir de draft, ready ou cancelled (R1 só reabre os finais)', async () => {
+    await asUser(ids.owner)
+    const draft = await create({ items: [] })
+    await expect(respond(draft.id, '1')).rejects.toThrow('tiss_authorization_invalid_transition')
+    const ready = await create()
+    await expect(respond(ready.id, '1')).rejects.toThrow('tiss_authorization_invalid_transition')
+    const viaOperator = await create()
+    await transition(viaOperator.id, 'sent')
+    await respond(viaOperator.id, '6')
+    await expect(respond(viaOperator.id, '1')).rejects.toThrow('tiss_authorization_invalid_transition')
+  })
+
   it('registro de XML gerado: só fora de draft e com hash MD5', async () => {
-    await asUser(ids.member)
+    await asUser(ids.owner)
     const draft = await create({ items: [] })
     await expect(db.query('select public.log_tiss_authorization_xml($1::uuid, $2)', [draft.id, 'a'.repeat(32)])).rejects.toThrow('tiss_authorization_incomplete')
     const a = await create()
@@ -890,8 +940,8 @@ describe('RPCs de autorização — edição e máquina de estados', () => {
     expect((await events(a.id)).map((e) => e.event)).toEqual(['created', 'xml_generated'])
   })
 
-  it('usuário de outra account não opera a autorização nem pelo RPC', async () => {
-    await asUser(ids.member)
+  it('usuário de outra account (mesmo sendo owner lá) não opera a autorização nem pelo RPC', async () => {
+    await asUser(ids.owner)
     const a = await create()
     await asUser(ids.outsider)
     await expect(transition(a.id, 'cancelled')).rejects.toThrow('tiss_authorization_not_found')
@@ -900,10 +950,11 @@ describe('RPCs de autorização — edição e máquina de estados', () => {
 
 describe('faturamento intacto', () => {
   it('autorização e guia compartilham o contador sem colidir; o lote só enxerga guias', async () => {
-    await asUser(ids.member)
+    await asUser(ids.owner)
     await create({ appointment: ids.appointment })
     await asSuperuser()
     await db.exec(`update public.appointments set status = 'realizado' where id = '${ids.appointment}'`)
+    // A geração da guia continua aberta a member (regra existente, inalterada).
     await asUser(ids.member)
     const guide = await db.query<{ r: { status: string } }>('select public.ensure_tiss_guide_for_appointment($1::uuid) as r', [ids.appointment])
     expect(guide.rows[0].r.status).toBe('created')
@@ -937,16 +988,21 @@ begin
   end if;
 end; $$;
 
--- Trava a linha (FOR UPDATE) se o usuário enxerga o workspace dela.
+-- Trava a linha (FOR UPDATE). Outra account: not_found (não revela que
+-- existe). Mesma account sem owner/admin: forbidden (P1, como tiss_guides).
+-- O lock de um member é desfeito com o rollback do próprio erro.
 create or replace function public.tiss_authorization_lock(p_id uuid)
 returns public.tiss_authorizations language plpgsql security definer set search_path = '' as $$
 declare a public.tiss_authorizations%rowtype;
 begin
   if auth.uid() is null then raise exception 'tiss_authorization_forbidden' using errcode = '42501'; end if;
   select * into a from public.tiss_authorizations
-    where id = p_id and workspace_id = any(public.my_workspace_ids())
+    where id = p_id and account_id = any(public.my_account_ids())
     for update;
   if not found then raise exception 'tiss_authorization_not_found' using errcode = 'P0002'; end if;
+  if not public.is_account_admin(a.account_id) then
+    raise exception 'tiss_authorization_forbidden' using errcode = '42501';
+  end if;
   perform public.tiss_authorization_require_billing(a.account_id);
   return a;
 end; $$;
@@ -986,19 +1042,21 @@ returns void language sql security definer set search_path = '' as $$
 $$;
 
 -- Profissionais solicitantes: membros ativos com CRM da account do workspace.
--- profiles tem RLS "só o próprio"; aqui saem só os campos do TISS.
+-- profiles tem RLS "só o próprio"; aqui saem só os campos de identificação do
+-- TISS (R3: nada de telefone/e-mail — são digitados na autorização). Só owner/admin.
 create or replace function public.tiss_authorization_professionals(p_workspace_id uuid)
 returns jsonb language plpgsql stable security definer set search_path = '' as $$
 declare v_account uuid;
 begin
   select account_id into v_account from public.workspaces
     where id = p_workspace_id and id = any(public.my_workspace_ids());
-  if not found then raise exception 'tiss_authorization_forbidden' using errcode = '42501'; end if;
+  if not found or not public.is_account_admin(v_account) then
+    raise exception 'tiss_authorization_forbidden' using errcode = '42501';
+  end if;
   perform public.tiss_authorization_require_billing(v_account);
   return coalesce((
     select jsonb_agg(jsonb_build_object(
-      'id', p.id, 'full_name', p.full_name, 'crm', p.crm, 'crm_uf', p.crm_uf,
-      'cbo_code', p.cbo_code, 'phone', p.phone, 'email', p.email
+      'id', p.id, 'full_name', p.full_name, 'crm', p.crm, 'crm_uf', p.crm_uf, 'cbo_code', p.cbo_code
     ) order by p.full_name)
     from public.profiles p
     join public.memberships m on m.user_id = p.id
@@ -1006,10 +1064,11 @@ begin
   ), '[]'::jsonb);
 end; $$;
 
--- Cria a solicitação já numerada (mesmo contador e lock das guias — D4).
--- payload e missing_fields vêm do servidor Next (lib/billing/authorizations);
--- aqui só se garante o que não pode ser forjado: acesso, módulo, operadora
--- TISS completa, payload da mesma operadora, pai do OPME, draft sem itens.
+-- Cria a solicitação já numerada por next_tiss_number(insurer, 'guide') — o
+-- mesmo contador das guias (D4/P4). payload e missing_fields vêm do servidor
+-- Next (lib/billing/authorizations); aqui só se garante o que não pode ser
+-- forjado: owner/admin, módulo, operadora TISS completa, payload da mesma
+-- operadora, pai do OPME, draft sem itens.
 create or replace function public.create_tiss_authorization(
   p_workspace_id   uuid,
   p_patient_id     uuid,
@@ -1032,7 +1091,9 @@ declare
 begin
   if auth.uid() is null then raise exception 'tiss_authorization_forbidden' using errcode = '42501'; end if;
   select * into w from public.workspaces where id = p_workspace_id and id = any(public.my_workspace_ids());
-  if not found then raise exception 'tiss_authorization_forbidden' using errcode = '42501'; end if;
+  if not found or not public.is_account_admin(w.account_id) then
+    raise exception 'tiss_authorization_forbidden' using errcode = '42501';
+  end if;
   perform public.tiss_authorization_require_billing(w.account_id);
 
   if p_type is null or p_type not in ('sp_sadt_request','hospitalization_request','opme_request')
@@ -1048,14 +1109,15 @@ begin
   if p_parent_id is not null then
     -- FOR SHARE: um cancelamento simultâneo do pai espera esta transação.
     select * into v_parent from public.tiss_authorizations
-      where id = p_parent_id and workspace_id = any(public.my_workspace_ids())
+      where id = p_parent_id and account_id = w.account_id
       for share;
     if not found or v_parent.status = 'cancelled' or v_parent.workspace_id <> w.id then
       raise exception 'tiss_authorization_parent_invalid' using errcode = '22023';
     end if;
   end if;
 
-  -- Mesmo lock de linha que numera as guias (ensure_tiss_guide_for_appointment).
+  -- Trava a linha da operadora (mesmo lock de ensure_tiss_guide_for_appointment)
+  -- e confere a identidade TISS antes de consumir número.
   select * into i from public.health_insurers
     where id = p_insurer_id and account_id = w.account_id
     for update;
@@ -1072,8 +1134,10 @@ begin
   end if;
   v_status := case when cardinality(v_missing) = 0 then 'ready' else 'draft' end;
 
-  update public.health_insurers set next_guide_number = next_guide_number + 1
-    where id = i.id returning next_guide_number - 1 into v_number;
+  -- D4/P4: a função existente, sem alteração. Ela repete is_account_admin e o
+  -- módulo; auth.uid()/auth.role() vêm dos GUCs da sessão, que o security
+  -- definer não troca. Se o insert abaixo falhar, o rollback devolve o número.
+  v_number := public.next_tiss_number(i.id, 'guide');
 
   insert into public.tiss_authorizations (
     account_id, workspace_id, patient_id, insurer_id, appointment_id, parent_id, type, status,
@@ -1164,8 +1228,8 @@ begin
   return jsonb_build_object('id', a.id, 'status', a.status, 'updated_at', a.updated_at);
 end; $$;
 
--- D3: ready → sent; draft|ready → cancelled (qualquer membro);
--- sent|under_review|pending_info → cancelled (só owner/admin).
+-- D3: ready → sent; draft|ready|sent|under_review|pending_info → cancelled.
+-- Papel: owner/admin, conferido em tiss_authorization_lock (P1).
 create or replace function public.transition_tiss_authorization(
   p_id uuid, p_to text, p_expected_updated_at timestamptz
 ) returns jsonb language plpgsql security definer set search_path = '' as $$
@@ -1182,13 +1246,8 @@ begin
   if p_to = 'sent' and v_from <> 'ready' then
     raise exception 'tiss_authorization_invalid_transition' using errcode = 'P0001';
   end if;
-  if p_to = 'cancelled' then
-    if v_from not in ('draft', 'ready', 'sent', 'under_review', 'pending_info') then
-      raise exception 'tiss_authorization_invalid_transition' using errcode = 'P0001';
-    end if;
-    if v_from not in ('draft', 'ready') and not public.is_account_admin(a.account_id) then
-      raise exception 'tiss_authorization_forbidden' using errcode = '42501';
-    end if;
+  if p_to = 'cancelled' and v_from not in ('draft', 'ready', 'sent', 'under_review', 'pending_info') then
+    raise exception 'tiss_authorization_invalid_transition' using errcode = 'P0001';
   end if;
   update public.tiss_authorizations set
     status = p_to,
@@ -1201,6 +1260,8 @@ begin
 end; $$;
 
 -- D6: resposta registrada à mão. dm_statusSolicitacao → status (D3).
+-- R1: owner/admin podem registrar de novo sobre authorized/partially_authorized/
+-- denied (correção de digitação); nunca a partir de draft/ready/cancelled.
 create or replace function public.record_tiss_authorization_response(
   p_id                    uuid,
   p_expected_updated_at   timestamptz,
@@ -1234,12 +1295,8 @@ begin
     raise exception 'tiss_authorization_changed' using errcode = 'P0001';
   end if;
   v_from := a.status;
-  if v_from not in ('sent', 'under_review', 'pending_info') then
+  if v_from not in ('sent', 'under_review', 'pending_info', 'authorized', 'partially_authorized', 'denied') then
     raise exception 'tiss_authorization_invalid_transition' using errcode = 'P0001';
-  end if;
-  -- Cancelamento informado pela operadora tem o mesmo peso do cancelamento manual.
-  if v_to = 'cancelled' and not public.is_account_admin(a.account_id) then
-    raise exception 'tiss_authorization_forbidden' using errcode = '42501';
   end if;
   if exists (
     select 1 from jsonb_array_elements(v_items) x
@@ -1317,14 +1374,14 @@ grant execute on function public.log_tiss_authorization_xml(uuid, text) to authe
 ```
 
 - [ ] **3.4 Rodar e ver passar:** `npx vitest run tests/billing/authorizations-database.test.ts tests/billing/database.test.ts`. Pontos de atenção se algo falhar:
-  - `tiss_authorization_lock` retorna o rowtype: em PGlite/PG 16+ `a := public.tiss_authorization_lock(p_id)` funciona; não trocar por `select * into` sem o filtro de workspace.
-  - O `for update` em `health_insurers` + o `update … set next_guide_number` reproduzem a numeração do `ensure_tiss_guide_for_appointment`; o teste "faturamento intacto" precisa dar `['1','2']`.
+  - `tiss_authorization_lock` retorna o rowtype: em PGlite/PG 16+ `a := public.tiss_authorization_lock(p_id)` funciona; não trocar por `select * into` sem o filtro de account e o `is_account_admin`.
+  - `next_tiss_number` chamado de dentro do RPC: no fixture, `auth.uid()`/`auth.role()` leem `request.jwt.claim.*` (definidos por `asUser`), então o `is_account_admin` interno enxerga o owner. Se aparecer `billing_forbidden`, conferir se o teste está como owner e se `auth.role()` não é nulo; **não** trocar por incremento inline sem registrar o motivo em "Pontos do design". O teste "faturamento intacto" precisa dar `['1','2']`.
   - O teste de idempotência da Tarefa 2 continua passando com as funções (`create or replace`).
 - [ ] **3.5 Commit:**
 
 ```bash
 git add supabase/tiss-authorizations.sql tests/billing/authorizations-database.test.ts
-git commit -m "feat(tiss): RPCs de autorização com máquina de estados, numeração compartilhada e eventos
+git commit -m "feat(tiss): RPCs de autorização admin-only com máquina de estados, numeração via next_tiss_number e eventos
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -1516,9 +1573,9 @@ export type TissAuthorizationEventType =
 ```ts
       tiss_authorization_professionals: {
         Args: { p_workspace_id: string }
+        // R3: sem telefone/e-mail.
         Returns: Array<{
-          id: string; full_name: string; crm: string | null; crm_uf: string | null
-          cbo_code: string | null; phone: string | null; email: string | null
+          id: string; full_name: string; crm: string | null; crm_uf: string | null; cbo_code: string | null
         }>
       }
       create_tiss_authorization: {
@@ -1605,9 +1662,9 @@ export const STATUS_FROM_RESPONSE: Record<StatusSolicitacao, AuthorizationStatus
 export const statusForMissing: (missing: readonly string[]) => 'draft' | 'ready'
 export const isEditable: (status: AuthorizationStatus) => boolean
 export const canMarkSent: (status: AuthorizationStatus) => boolean
-export const isAdminRole: (role: MembershipRole) => boolean
-export function canCancel(status: AuthorizationStatus, role: MembershipRole): boolean
-export function canRecordResponse(status: AuthorizationStatus, code: StatusSolicitacao, role: MembershipRole): boolean
+// Sem parâmetro de papel: só owner/admin chegam aqui (P1; API adminOnly + RLS + RPC).
+export function canCancel(status: AuthorizationStatus): boolean
+export function canRecordResponse(status: AuthorizationStatus): boolean
 ```
 
 `types.ts` e `constants.ts`: ver código abaixo (tipos usados por todas as tarefas seguintes).
@@ -1642,20 +1699,16 @@ describe('máquina de estados (espelha os RPCs)', () => {
     expect(canMarkSent('draft')).toBe(false)
   })
 
-  it('member cancela até ready; depois do envio só owner/admin; terminais nunca', () => {
-    expect(canCancel('draft', 'member')).toBe(true)
-    expect(canCancel('sent', 'member')).toBe(false)
-    expect(canCancel('pending_info', 'admin')).toBe(true)
-    expect(canCancel('authorized', 'owner')).toBe(false)
-    expect(canCancel('cancelled', 'owner')).toBe(false)
+  it('cancela de draft até aguardando resposta; finais e cancelada nunca', () => {
+    for (const s of ['draft', 'ready', 'sent', 'under_review', 'pending_info'] as const) expect(canCancel(s)).toBe(true)
+    for (const s of ['authorized', 'partially_authorized', 'denied', 'cancelled'] as const) expect(canCancel(s)).toBe(false)
   })
 
-  it('resposta só depois do envio; código 6 exige owner/admin', () => {
-    expect(canRecordResponse('ready', '1', 'owner')).toBe(false)
-    expect(canRecordResponse('sent', '1', 'member')).toBe(true)
-    expect(canRecordResponse('under_review', '6', 'member')).toBe(false)
-    expect(canRecordResponse('under_review', '6', 'admin')).toBe(true)
-    expect(canRecordResponse('denied', '1', 'owner')).toBe(false)
+  it('resposta depois do envio e, por R1, de novo em estado final; nunca de draft/ready/cancelled', () => {
+    for (const s of ['sent', 'under_review', 'pending_info', 'authorized', 'partially_authorized', 'denied'] as const) {
+      expect(canRecordResponse(s)).toBe(true)
+    }
+    for (const s of ['draft', 'ready', 'cancelled'] as const) expect(canRecordResponse(s)).toBe(false)
   })
 
   it('draft/ready por missing_fields', () => {
@@ -1764,6 +1817,7 @@ export interface AuthorizationProfessional {
   crm: string | null
   crm_uf: string | null
   cbo_code: string | null
+  // R3: digitados na autorização, nunca lidos de profiles (o RPC não os expõe).
   phone: string | null // só dígitos (telefoneProfissional st_texto11; obrigatório no OPME)
   email: string | null
 }
@@ -2001,13 +2055,13 @@ export const AUTHORIZATION_SUMMARY_COLUMNS = 'id, type, status, provider_guide_n
 - [ ] **6.6 Implementar `lib/billing/authorizations/status.ts`:**
 
 ```ts
-import type { MembershipRole } from '@/types/database'
 import type { StatusSolicitacao } from './domains'
 import type { AuthorizationStatus, AuthorizationType } from './types'
 
 // Espelho em TS das regras dos RPCs (supabase/tiss-authorizations.sql). O
-// banco decide; isto serve para a UI esconder botões e a API responder
-// 403/409 sem ir ao banco.
+// banco decide; isto serve para a UI esconder botões e a API responder 409
+// sem ir ao banco. Não há regra por papel: só owner/admin chegam às rotas
+// (requireBilling adminOnly), à RLS e aos RPCs (P1).
 export const AUTHORIZATION_STATUSES: readonly AuthorizationStatus[] = [
   'draft', 'ready', 'sent', 'under_review', 'pending_info', 'authorized', 'partially_authorized', 'denied', 'cancelled',
 ]
@@ -2030,20 +2084,19 @@ export const STATUS_FROM_RESPONSE: Record<StatusSolicitacao, AuthorizationStatus
 
 const EDITABLE: readonly AuthorizationStatus[] = ['draft', 'ready']
 const AWAITING_RESPONSE: readonly AuthorizationStatus[] = ['sent', 'under_review', 'pending_info']
+// R1: resposta já final pode ser registrada de novo (correção).
+const FINAL_RESPONSE: readonly AuthorizationStatus[] = ['authorized', 'partially_authorized', 'denied']
 
 export const statusForMissing = (missing: readonly string[]): 'draft' | 'ready' => (missing.length === 0 ? 'ready' : 'draft')
 export const isEditable = (status: AuthorizationStatus) => EDITABLE.includes(status)
 export const canMarkSent = (status: AuthorizationStatus) => status === 'ready'
-export const isAdminRole = (role: MembershipRole) => role === 'owner' || role === 'admin'
 
-export function canCancel(status: AuthorizationStatus, role: MembershipRole): boolean {
-  if (EDITABLE.includes(status)) return true
-  return AWAITING_RESPONSE.includes(status) && isAdminRole(role)
+export function canCancel(status: AuthorizationStatus): boolean {
+  return EDITABLE.includes(status) || AWAITING_RESPONSE.includes(status)
 }
 
-export function canRecordResponse(status: AuthorizationStatus, code: StatusSolicitacao, role: MembershipRole): boolean {
-  if (!AWAITING_RESPONSE.includes(status)) return false
-  return code !== '6' || isAdminRole(role)
+export function canRecordResponse(status: AuthorizationStatus): boolean {
+  return AWAITING_RESPONSE.includes(status) || FINAL_RESPONSE.includes(status)
 }
 ```
 
@@ -2071,7 +2124,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ```ts
 // payload.ts
-export interface ProfessionalOption { id: string; full_name: string; crm: string | null; crm_uf: string | null; cbo_code: string | null; phone: string | null; email: string | null }
+export interface ProfessionalOption { id: string; full_name: string; crm: string | null; crm_uf: string | null; cbo_code: string | null } // R3: sem phone/email
 export interface AuthorizationSources {
   insurer: { ans_registry: string; provider_code: string; tiss_version: string }
   workspace: { cnes: string | null; cnpj: string | null; legal_name: string | null }
@@ -2112,7 +2165,7 @@ import {
   normalizeCid10, parseContentPatch, parseCreateBody, parseExpectedUpdatedAt, parseItems, parseRequestPatch, parseResponseBody,
 } from '@/lib/billing/authorizations/validation'
 
-const PROFESSIONAL = { id: 'p1', full_name: 'Dra. Maria', crm: '123456/SP', crm_uf: 'SP', cbo_code: '225125', phone: '(11) 99999-0000', email: 'maria@exemplo.test' }
+const PROFESSIONAL = { id: 'p1', full_name: 'Dra. Maria', crm: '123456/SP', crm_uf: 'SP', cbo_code: '225125' }
 const SOURCES: AuthorizationSources = {
   insurer: { ans_registry: '999999', provider_code: 'PREST0001', tiss_version: '4.03.00' },
   workspace: { cnes: '1234567', cnpj: '11222333000181', legal_name: ' Clínica Fictícia ' },
@@ -2121,15 +2174,17 @@ const SOURCES: AuthorizationSources = {
 }
 
 describe('snapshot da autorização', () => {
-  it('congela operadora, unidade, profissional (telefone só dígitos) e carteirinha', () => {
+  it('congela operadora, unidade, profissional e carteirinha; telefone/e-mail começam vazios (R3)', () => {
     const p = buildAuthorizationPayload('opme_request', SOURCES)
     expect(p).toMatchObject({
       type: 'opme_request',
       provider: { legal_name: 'Clínica Fictícia' },
-      professional: { id: 'p1', name: 'Dra. Maria', phone: '11999990000' },
+      professional: { id: 'p1', name: 'Dra. Maria', crm: '123456/SP', phone: null, email: null },
       beneficiary: { patient_insurance_id: 'pi1', card_number: '00001111', newborn: false },
       request: { technical_justification: null },
     })
+    // Digitado: só dígitos.
+    expect(applyAuthorizationEdits(p, { professional_phone: '(11) 99999-0000' }).professional.phone).toBe('11999990000')
   })
 
   it('"Recarregar dados" troca configurações e preserva o digitado', () => {
@@ -2140,7 +2195,7 @@ describe('snapshot da autorização', () => {
     const fresh = buildAuthorizationPayload('hospitalization_request', {
       ...SOURCES,
       workspace: { ...SOURCES.workspace, legal_name: 'Razão Nova' },
-      professional: { ...PROFESSIONAL, cbo_code: '225120', phone: null },
+      professional: { ...PROFESSIONAL, cbo_code: '225120' },
     })
     const merged = mergeRefreshedAuthorizationPayload(current, fresh)
     expect(merged.provider.legal_name).toBe('Razão Nova')
@@ -2148,6 +2203,12 @@ describe('snapshot da autorização', () => {
     expect(merged.professional.phone).toBe('31988887777')
     expect(merged.beneficiary).toEqual({ patient_insurance_id: 'pi1', card_number: 'DIGITADA', newborn: true })
     expect(merged.request.clinical_indication).toBe('Dor abdominal')
+  })
+
+  it('telefone digitado sobrevive ao mesmo profissional e some ao trocar de profissional', () => {
+    const typed = applyAuthorizationEdits(buildAuthorizationPayload('opme_request', SOURCES), { professional_phone: '31988887777' })
+    expect(applyAuthorizationEdits(typed, { professional: PROFESSIONAL }).professional.phone).toBe('31988887777')
+    expect(applyAuthorizationEdits(typed, { professional: { ...PROFESSIONAL, id: 'p2' } }).professional.phone).toBeNull()
   })
 })
 
@@ -2167,9 +2228,13 @@ describe('campos faltantes', () => {
     ])
   })
 
-  it('OPME exige nome, telefone e justificativa — não CRM', () => {
-    const p = buildAuthorizationPayload('opme_request', { ...SOURCES, professional: { ...PROFESSIONAL, crm: null, phone: '123' } })
+  it('OPME exige nome, telefone digitado válido e justificativa — não CRM', () => {
+    const p = buildAuthorizationPayload('opme_request', { ...SOURCES, professional: { ...PROFESSIONAL, crm: null } })
     expect(computeAuthorizationMissing(p, 1)).toEqual(['professional.phone', 'request.technical_justification'])
+    expect(computeAuthorizationMissing(applyAuthorizationEdits(p, { professional_phone: '123' }), 1))
+      .toEqual(['professional.phone', 'request.technical_justification'])
+    expect(computeAuthorizationMissing(applyAuthorizationEdits(p, { professional_phone: '31988887777' }), 1))
+      .toEqual(['request.technical_justification'])
   })
 })
 
@@ -2256,14 +2321,14 @@ import type {
   AuthorizationPayload, AuthorizationProfessional, AuthorizationType, RequestDataByType,
 } from './types'
 
+// Linha de tiss_authorization_professionals. R3: sem telefone/e-mail — no
+// payload eles são sempre digitados (AuthorizationEdits.professional_phone/email).
 export interface ProfessionalOption {
   id: string
   full_name: string
   crm: string | null
   crm_uf: string | null
   cbo_code: string | null
-  phone: string | null
-  email: string | null
 }
 
 export interface AuthorizationSources {
@@ -2297,6 +2362,7 @@ export function defaultRequestData<T extends AuthorizationType>(type: T): Reques
   return structuredClone(DEFAULT_REQUEST[type])
 }
 
+// Telefone/e-mail começam vazios: não vêm do cadastro (R3).
 export function professionalSnapshot(p: ProfessionalOption | null): AuthorizationProfessional {
   return {
     id: p?.id ?? null,
@@ -2304,8 +2370,8 @@ export function professionalSnapshot(p: ProfessionalOption | null): Authorizatio
     crm: blank(p?.crm),
     crm_uf: blank(p?.crm_uf),
     cbo_code: blank(p?.cbo_code),
-    phone: digits(p?.phone),
-    email: blank(p?.email),
+    phone: null,
+    email: null,
   }
 }
 
@@ -2333,8 +2399,8 @@ export function buildAuthorizationPayload<T extends AuthorizationType>(
 }
 
 // "Recarregar dados": operadora, unidade e cadastro do profissional vêm do
-// fresh; telefone/e-mail, carteirinha digitada, RN e todo o pedido clínico
-// ficam como estavam (mesmo padrão de mergeRefreshedPayload das guias).
+// fresh; telefone/e-mail digitados, carteirinha digitada, RN e todo o pedido
+// clínico ficam como estavam (mesmo padrão de mergeRefreshedPayload das guias).
 export function mergeRefreshedAuthorizationPayload<T extends AuthorizationType>(
   current: AuthorizationPayload<T>,
   fresh: AuthorizationPayload<T>,
@@ -2343,8 +2409,8 @@ export function mergeRefreshedAuthorizationPayload<T extends AuthorizationType>(
     ...fresh,
     professional: {
       ...fresh.professional,
-      phone: current.professional.phone ?? fresh.professional.phone,
-      email: current.professional.email ?? fresh.professional.email,
+      phone: current.professional.phone,
+      email: current.professional.email,
     },
     beneficiary: {
       patient_insurance_id: current.beneficiary.patient_insurance_id ?? fresh.beneficiary.patient_insurance_id,
@@ -2366,6 +2432,9 @@ export interface AuthorizationEdits<T extends AuthorizationType> {
 }
 
 // Ordem: troca de profissional/carteira primeiro; depois os campos digitados.
+// Trocar por OUTRO profissional limpa telefone/e-mail (eram do anterior);
+// reenviar o mesmo id os preserva. Mande professional_phone/email no mesmo
+// PATCH para preenchê-los de novo.
 export function applyAuthorizationEdits<T extends AuthorizationType>(
   payload: AuthorizationPayload<T>,
   edits: AuthorizationEdits<T>,
@@ -2375,7 +2444,13 @@ export function applyAuthorizationEdits<T extends AuthorizationType>(
     professional: { ...payload.professional },
     beneficiary: { ...payload.beneficiary },
   }
-  if (edits.professional !== undefined) next.professional = professionalSnapshot(edits.professional)
+  if (edits.professional !== undefined) {
+    const snapshot = professionalSnapshot(edits.professional)
+    const same = snapshot.id !== null && snapshot.id === payload.professional.id
+    next.professional = same
+      ? { ...snapshot, phone: payload.professional.phone, email: payload.professional.email }
+      : snapshot
+  }
   if (edits.patientInsurance !== undefined) {
     next.beneficiary.patient_insurance_id = edits.patientInsurance?.id ?? null
     next.beneficiary.card_number = blank(edits.patientInsurance?.card_number)
@@ -3031,10 +3106,8 @@ import type { AuthorizationItem, AuthorizationXmlSource } from '@/lib/billing/au
 export const AUTH_SOURCES: AuthorizationSources = {
   insurer: { ans_registry: '999999', provider_code: 'PREST0001', tiss_version: '4.03.00' },
   workspace: { cnes: '1234567', cnpj: '11222333000181', legal_name: 'Clínica Fictícia São João Ltda' },
-  professional: {
-    id: 'p1', full_name: 'Dra. Maria Exemplo', crm: '123456/SP', crm_uf: 'SP', cbo_code: '225125',
-    phone: '(11) 99999-0000', email: 'maria@exemplo.test',
-  },
+  // R3: a lista de profissionais não traz telefone/e-mail.
+  professional: { id: 'p1', full_name: 'Dra. Maria Exemplo', crm: '123456/SP', crm_uf: 'SP', cbo_code: '225125' },
   patientInsurance: { id: 'pi1', card_number: '00001111222233334' },
 }
 
@@ -3076,6 +3149,9 @@ export function fakeHospitalizationRequest(itemCount = 1): AuthorizationXmlSourc
 
 export function fakeOpmeAnnex(itemCount = 1): AuthorizationXmlSource<'opme_request'> {
   const payload = buildAuthorizationPayload('opme_request', AUTH_SOURCES)
+  // Digitados no formulário OPME (R3).
+  payload.professional.phone = '11999990000'
+  payload.professional.email = 'maria@exemplo.test'
   payload.request.technical_justification = 'Fratura de tíbia com indicação de fixação interna.'
   return { type: 'opme_request', providerGuideNumber: '43', requestedAt: '2026-10-05', payload, items: range(itemCount).map((n) => opmeItem(n)) }
 }
@@ -3875,6 +3951,7 @@ describe('erros de RPC', () => {
   it('mapeia pelas chaves exatas e não vaza mensagens desconhecidas', async () => {
     expect(authorizationRpcError({ message: 'tiss_authorization_changed' }).status).toBe(409)
     expect(authorizationRpcError({ message: 'tiss_authorization_forbidden', code: '42501' }).status).toBe(403)
+    expect(authorizationRpcError({ message: 'billing_forbidden', code: '42501' }).status).toBe(403)
     expect(authorizationRpcError({ message: 'tiss_authorization_invalid_transition' }).status).toBe(409)
     const unknown = authorizationRpcError({ message: 'duplicate key value violates ... FICT-CARD' })
     expect(unknown.status).toBe(500)
@@ -3900,7 +3977,7 @@ describe('edição tipada', () => {
 })
 
 describe('contexto de criação', () => {
-  const SESSION = { userId: 'u1', accountId: 'acc1', workspaceId: 'w1', role: 'member' as const, modules: [] }
+  const SESSION = { userId: 'u1', accountId: 'acc1', workspaceId: 'w1', role: 'admin' as const, modules: [] }
 
   it('a partir do agendamento: unidade/paciente/operadora do agendamento e TUSS como primeiro item', async () => {
     const m = createSupabaseMock({
@@ -4031,8 +4108,9 @@ import type { CreateInput } from './validation'
 type BillingClient = SupabaseClient<Database>
 export type Failure = { ok: false; status: 400 | 404; error: string }
 
-// Profissionais com CRM da account (RPC security definer: profiles é
-// privado por RLS). Lança em erro — a rota responde 500 genérico.
+// Profissionais com CRM da account (RPC security definer, só owner/admin:
+// profiles é privado por RLS). Só id, nome, CRM, UF, CBO (R3). Lança em erro
+// — a rota responde 500 genérico.
 export async function loadProfessionals(supabase: BillingClient, workspaceId: string): Promise<ProfessionalOption[]> {
   const { data, error } = await supabase.rpc('tiss_authorization_professionals', { p_workspace_id: workspaceId })
   if (error) throw new Error('billing: não foi possível carregar os profissionais')
@@ -4201,6 +4279,9 @@ import { INCOMPLETE_INSURER_ERROR } from '../insurer'
 // Nunca devolver error.message cru: pode citar valores (carteirinha etc.).
 const RPC_ERRORS: Record<string, { status: number; error: string }> = {
   tiss_authorization_forbidden: { status: 403, error: 'Sem permissão para esta ação.' },
+  // Vem de next_tiss_number (chamado por create_tiss_authorization); defesa —
+  // o RPC já recusou antes quem não é owner/admin.
+  billing_forbidden: { status: 403, error: 'Sem permissão para esta ação.' },
   billing_module_disabled: { status: 403, error: "Módulo 'billing' não está ativo no seu plano" },
   tiss_authorization_not_found: { status: 404, error: 'Autorização não encontrada' },
   tiss_authorization_not_editable: { status: 409, error: 'Autorização já enviada ou cancelada — somente leitura.' },
@@ -4373,18 +4454,19 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ---
 
-## Tarefa 12 — API: listar, criar e profissionais
+## Tarefa 12 — API: listar, criar e profissionais (+ exclusão de paciente com autorização, R2)
 
 **Modelo sugerido:** sonnet
 
-**Files:** criar `app/api/billing/authorizations/route.ts`, `app/api/billing/authorizations/professionals/route.ts`, `tests/billing/authorizations-api.test.ts`.
+**Files:** criar `app/api/billing/authorizations/route.ts`, `app/api/billing/authorizations/professionals/route.ts`, `tests/billing/authorizations-api.test.ts`, `tests/billing/patient-delete.test.ts`; modificar `app/api/patients/[id]/route.ts` (só o `DELETE`).
 
 **Interfaces:**
-- Consumes: `requireBilling(req, { adminOnly: false })`; Tarefas 6, 7, 11.
+- Consumes: `requireBilling(req, { adminOnly: true })` — o mesmo guard de `/api/billing/guides` (P2; member → 403 antes de qualquer consulta); Tarefas 6, 7, 11.
 - Produces (HTTP):
-  - `GET /api/billing/authorizations?status=a,b&type=&insurer_id=&professional_id=&patient_id=&from=&to=&page=` → `200 { authorizations: AuthorizationListRow[]; total: number; page: number; pageSize: 50 }`.
+  - `GET /api/billing/authorizations?status=a,b&type=&insurer_id=&professional_id=&patient_id=&from=&to=&page=` → `200 { authorizations: AuthorizationListRow[]; total: number; page: number; pageSize: 50 }` | 403.
   - `POST /api/billing/authorizations` body `CreateInput` → `201 { id, status, provider_guide_number }` | 400 | 403 | 404 | 409.
-  - `GET /api/billing/authorizations/professionals` → `200 { professionals: ProfessionalOption[] }`.
+  - `GET /api/billing/authorizations/professionals` → `200 { professionals: ProfessionalOption[] }` (sem telefone/e-mail, R3) | 403.
+  - `DELETE /api/patients/[id]` → passa a responder `409 { error: 'Este paciente tem autorizações TISS e não pode ser excluído.' }` quando a FK `tiss_authorizations_patient_id_fkey` impede a exclusão (R2). Demais respostas inalteradas.
 
 Antes de escrever: ler `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/route.md` (assinatura de handlers e `params` como Promise no Next 16).
 
@@ -4419,7 +4501,7 @@ vi.mock('@/lib/session/api', async () => {
 import { GET as list, POST as create } from '@/app/api/billing/authorizations/route'
 import { GET as professionals } from '@/app/api/billing/authorizations/professionals/route'
 
-const MEMBER = { userId: 'u1', accountId: 'acc1', workspaceId: 'w1', role: 'member', modules: ['billing'] }
+const ADMIN = { userId: 'u1', accountId: 'acc1', workspaceId: 'w1', role: 'admin', modules: ['billing'] }
 const AT = '2026-10-05T13:00:00.123456+00:00'
 const APPOINTMENT = '30000000-0000-0000-0000-000000000001'
 
@@ -4432,11 +4514,22 @@ const json = (body: unknown, method = 'POST') => ({ method, headers: { 'content-
 
 describe('GET/POST /api/billing/authorizations', () => {
   beforeEach(() => {
-    g.session = { ...MEMBER }
+    g.session = { ...ADMIN }
     setup()
   })
 
-  it('member lista com filtros, presa à account', async () => {
+  it('member recebe 403 em todas as rotas desta tarefa, sem consultar tabela nem RPC (P1/P2)', async () => {
+    g.session = { ...ADMIN, role: 'member' }
+    const uuid = '40000000-0000-0000-0000-000000000001'
+    expect((await list(req('/api/billing/authorizations'))).status).toBe(403)
+    expect((await create(req('/api/billing/authorizations', json({ type: 'sp_sadt_request', appointment_id: uuid })))).status).toBe(403)
+    expect((await professionals(req('/api/billing/authorizations/professionals'))).status).toBe(403)
+    expect(g.supabase.callsTo('tiss_authorizations')).toHaveLength(0)
+    expect(g.supabase.callsTo('appointments')).toHaveLength(0)
+    expect(g.supabase.rpc).not.toHaveBeenCalled()
+  })
+
+  it('admin lista com filtros, presa à account', async () => {
     setup({ tiss_authorizations: { select: { data: [], count: 0 } } })
     const uuid = '40000000-0000-0000-0000-000000000001'
     const res = await list(req(`/api/billing/authorizations?status=draft,bogus&type=opme_request&insurer_id=${uuid}&patient_id=${uuid}&professional_id=${uuid}&from=2026-10-01&to=2026-10-31`))
@@ -4460,7 +4553,7 @@ describe('GET/POST /api/billing/authorizations', () => {
     expect(g.supabase.callsTo('tiss_authorizations')).toHaveLength(0)
   })
 
-  it('member cria a partir do agendamento: RPC com snapshot, pendências e item TUSS; sem tocar em guias', async () => {
+  it('admin cria a partir do agendamento: RPC com snapshot, pendências e item TUSS; sem tocar em guias', async () => {
     setup({
       appointments: { select: { data: { id: APPOINTMENT, workspace_id: 'w2', patient_id: 'pa1', doctor_id: 'p1', insurer_id: 'in1', patient_insurance_id: 'pi1', insurer_procedure_id: 'pr1' } } },
       insurer_procedures: { select: { data: { tuss_code: '40301630', description: 'Hemograma' } } },
@@ -4512,7 +4605,53 @@ describe('GET/POST /api/billing/authorizations', () => {
 })
 ```
 
-- [ ] **12.2 Rodar e ver falhar:** `npx vitest run tests/billing/authorizations-api.test.ts`.
+Criar `tests/billing/patient-delete.test.ts` (R2):
+
+```ts
+import { describe, it, expect, beforeEach, vi } from 'vitest'
+import { NextRequest } from 'next/server'
+import { createSupabaseMock, type SupabaseMock } from '../helpers/supabase-mock'
+
+const g = vi.hoisted(() => ({ supabase: null as unknown as SupabaseMock }))
+
+vi.mock('@/lib/supabase/server', () => ({ createClient: async () => g.supabase.client }))
+vi.mock('@/lib/session/api', () => ({
+  requireWorkspaceSession: async () => ({ session: { userId: 'u1', accountId: 'acc1', workspaceId: 'w1', role: 'admin', modules: [] } }),
+}))
+
+import { DELETE } from '@/app/api/patients/[id]/route'
+
+const ctx = { params: Promise.resolve({ id: 'pa1' }) }
+const del = () => DELETE(new NextRequest('https://app.test/api/patients/pa1', { method: 'DELETE' }), ctx)
+
+describe('DELETE /api/patients/[id]', () => {
+  beforeEach(() => { g.supabase = createSupabaseMock() })
+
+  it('paciente com autorização TISS → 409 com mensagem em português, sem vazar o erro do banco', async () => {
+    g.supabase = createSupabaseMock({ patients: { delete: { data: null, error: {
+      code: '23503',
+      message: 'update or delete on table "patients" violates foreign key constraint "tiss_authorizations_patient_id_fkey" on table "tiss_authorizations"',
+    } } } })
+    const res = await del()
+    expect(res.status).toBe(409)
+    expect(await res.json()).toEqual({ error: 'Este paciente tem autorizações TISS e não pode ser excluído.' })
+  })
+
+  it('outras FKs (ex.: transcrições) e o caminho feliz não mudam', async () => {
+    g.supabase = createSupabaseMock({ patients: { delete: { data: null, error: {
+      code: '23503', message: 'violates foreign key constraint "transcriptions_patient_id_fkey"',
+    } } } })
+    expect((await del()).status).toBe(500)
+    g.supabase = createSupabaseMock({ patients: { delete: { data: null, error: null } } })
+    const ok = await del()
+    expect(ok.status).toBe(200)
+    expect(await ok.json()).toEqual({ ok: true })
+    expect(g.supabase.callsTo('patients', 'delete')[0].filters).toEqual(expect.arrayContaining([['eq', 'id', 'pa1'], ['eq', 'account_id', 'acc1']]))
+  })
+})
+```
+
+- [ ] **12.2 Rodar e ver falhar:** `npx vitest run tests/billing/authorizations-api.test.ts tests/billing/patient-delete.test.ts`.
 
 - [ ] **12.3 Implementar `app/api/billing/authorizations/route.ts`:**
 
@@ -4531,11 +4670,11 @@ import { parseCreateBody } from '@/lib/billing/authorizations/validation'
 const PAGE_SIZE = 50
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-// Qualquer membro com o módulo billing ativo na account; a RLS restringe aos
-// workspaces do membro. Filtros: ?status=draft,sent &type= &insurer_id=
-// &patient_id= &professional_id= &from=&to= (data da solicitação) &page=
+// Só owner/admin com o módulo billing ativo na account (P1/P2, como guias e
+// lotes); a RLS repete is_account_admin. Filtros: ?status=draft,sent &type=
+// &insurer_id= &patient_id= &professional_id= &from=&to= (data da solicitação) &page=
 export async function GET(req: NextRequest) {
-  const result = await requireBilling(req, { adminOnly: false })
+  const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
   const { session } = result
 
@@ -4576,7 +4715,7 @@ export async function GET(req: NextRequest) {
 // Cria a partir do agendamento, do paciente+operadora ou (OPME) da guia de
 // origem. O snapshot é montado aqui; o RPC numera, valida acesso e grava.
 export async function POST(req: NextRequest) {
-  const result = await requireBilling(req, { adminOnly: false })
+  const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
   const { session } = result
 
@@ -4618,8 +4757,9 @@ import { requireBilling } from '@/lib/billing/access'
 import { loadProfessionals } from '@/lib/billing/authorizations/sources'
 
 // Profissionais com CRM da account, para o seletor "Profissional solicitante".
+// Só owner/admin; sem telefone/e-mail (R3).
 export async function GET(req: NextRequest) {
-  const result = await requireBilling(req, { adminOnly: false })
+  const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
   const { session } = result
   try {
@@ -4631,12 +4771,27 @@ export async function GET(req: NextRequest) {
 }
 ```
 
-- [ ] **12.5 Rodar e ver passar:** `npx vitest run tests/billing/authorizations-api.test.ts tests/billing/api.test.ts` e `npx tsc --noEmit`.
-- [ ] **12.6 Commit:**
+- [ ] **12.5 R2 — `DELETE /api/patients/[id]`.** Em `app/api/patients/[id]/route.ts`, trocar só o tratamento de erro do `DELETE` (GET/PATCH intactos). Casar pelo nome da constraint — `transcriptions.patient_id` também é `on delete restrict` e deve continuar como está:
+
+```ts
+  const { error } = await supabase.from('patients').delete().eq('id', id).eq('account_id', session.accountId)
+  if (error) {
+    // FK NO ACTION de tiss_authorizations.patient_id (supabase/tiss-authorizations.sql):
+    // autorização TISS é registro de auditoria e não some com o paciente.
+    if (error.code === '23503' && error.message?.includes('tiss_authorizations')) {
+      return NextResponse.json({ error: 'Este paciente tem autorizações TISS e não pode ser excluído.' }, { status: 409 })
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
+  return NextResponse.json({ ok: true })
+```
+
+- [ ] **12.6 Rodar e ver passar:** `npx vitest run tests/billing/authorizations-api.test.ts tests/billing/patient-delete.test.ts tests/billing/api.test.ts` e `npx tsc --noEmit`.
+- [ ] **12.7 Commit:**
 
 ```bash
-git add app/api/billing/authorizations tests/billing/authorizations-api.test.ts
-git commit -m "feat(tiss): API de listagem e criação de autorizações
+git add app/api/billing/authorizations "app/api/patients/[id]/route.ts" tests/billing/authorizations-api.test.ts tests/billing/patient-delete.test.ts
+git commit -m "feat(tiss): API admin-only de listagem e criação de autorizações; paciente com autorização não é excluído
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -4656,6 +4811,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 // detail.ts
 export async function loadAuthorizationDetail(supabase: SupabaseClient<Database>, accountId: string, id: string): Promise<AuthorizationDetail | null>
 ```
+  - Todas as rotas desta tarefa usam `requireBilling(req, { adminOnly: true })` (member → 403, coberto na Tarefa 12).
   - `GET /api/billing/authorizations/[id]` → `200 AuthorizationDetail` | 404.
   - `PATCH /api/billing/authorizations/[id]` body `ContentPatch` (`{ expected_updated_at, action?: 'refresh', card_number?, newborn?, patient_insurance_id?, professional_id?, professional_phone?, professional_email?, requested_at?, request? }`) → `200 AuthorizationDetail` | 400 | 404 | 409.
   - `PUT /api/billing/authorizations/[id]/items` body `{ expected_updated_at, items: AuthorizationItemInput[] }` → `200 AuthorizationDetail` | 400 | 404 | 409.
@@ -4689,7 +4845,7 @@ function detailMock(row = authorizationRow(), extra: SupabaseMockConfig = {}) {
 const rpcArgs = (fn: string) => g.supabase.rpc.mock.calls.find(([name]) => name === fn)?.[1]
 
 describe('detalhe, conteúdo e itens', () => {
-  beforeEach(() => { g.session = { ...MEMBER } })
+  beforeEach(() => { g.session = { ...ADMIN } })
 
   it('detalhe traz itens, pai e filhos; 404 fora da account', async () => {
     detailMock()
@@ -4771,8 +4927,8 @@ import type { Database } from '@/types/database'
 import { AUTHORIZATION_COLUMNS, AUTHORIZATION_ITEM_COLUMNS, AUTHORIZATION_SUMMARY_COLUMNS } from './constants'
 import type { AuthorizationDetail, AuthorizationItem, AuthorizationRow, AuthorizationSummary } from './types'
 
-// Leitura com o client do usuário: a RLS garante workspace; o filtro de
-// account repete a regra (padrão das rotas de faturamento).
+// Leitura com o client do usuário: a RLS garante owner/admin da account; o
+// filtro de account repete a regra (padrão das rotas de faturamento).
 export async function loadAuthorizationDetail(
   supabase: SupabaseClient<Database>,
   accountId: string,
@@ -4839,7 +4995,7 @@ type Ctx = { params: Promise<{ id: string }> }
 
 export async function GET(req: NextRequest, { params }: Ctx) {
   const { id } = await params
-  const result = await requireBilling(req, { adminOnly: false })
+  const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
   const supabase = await createClient()
   const found = await loadAuthorizationDetail(supabase, result.session.accountId, id)
@@ -4851,7 +5007,7 @@ export async function GET(req: NextRequest, { params }: Ctx) {
 // { action: 'refresh' } = "Recarregar dados" (configurações novas, pedido preservado).
 export async function PATCH(req: NextRequest, { params }: Ctx) {
   const { id } = await params
-  const result = await requireBilling(req, { adminOnly: false })
+  const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
   const { session } = result
 
@@ -4935,7 +5091,7 @@ import { parseExpectedUpdatedAt, parseItems } from '@/lib/billing/authorizations
 // recalculando as pendências; só em draft/ready.
 export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const result = await requireBilling(req, { adminOnly: false })
+  const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
   const { session } = result
 
@@ -4986,8 +5142,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:** criar `app/api/billing/authorizations/[id]/transitions/route.ts`, `[id]/response/route.ts`, `[id]/events/route.ts`, `[id]/xml/route.ts`; modificar `next.config.ts`, `tests/billing/authorizations-api.test.ts`.
 
 **Interfaces (Produces, HTTP):**
-- `POST …/[id]/transitions` body `{ to: 'sent' | 'cancelled'; expected_updated_at: string }` → `200 AuthorizationDetail` | 400 | 403 (member cancelando após envio) | 404 | 409.
-- `POST …/[id]/response` body `{ expected_updated_at, status_code, operator_guide_number?, password?, authorization_date?, password_valid_until?, items?: [{ id, quantity_authorized?, authorized_value_cents? }] }` → `200 AuthorizationDetail` | 400 | 403 (código 6 por member) | 404 | 409.
+- Todas com `requireBilling(req, { adminOnly: true })`: member → 403 antes de qualquer leitura.
+- `POST …/[id]/transitions` body `{ to: 'sent' | 'cancelled'; expected_updated_at: string }` → `200 AuthorizationDetail` | 400 | 403 (member) | 404 | 409.
+- `POST …/[id]/response` body `{ expected_updated_at, status_code, operator_guide_number?, password?, authorization_date?, password_valid_until?, items?: [{ id, quantity_authorized?, authorized_value_cents? }] }` → `200 AuthorizationDetail` | 400 | 403 (member) | 404 | 409 (antes do envio ou cancelada; R1 aceita estado final).
 - `GET …/[id]/events` → `200 { events: AuthorizationEventRow[] }`.
 - `GET …/[id]/xml` → `200` corpo ISO-8859-1, `Content-Type: application/xml; charset=ISO-8859-1`, `Content-Disposition: attachment; filename="<prefixo>-<número>.xml"`, `Cache-Control: no-store` | 404 | 409 | 422 `{ error, errors }`.
 
@@ -5000,26 +5157,36 @@ import { GET as events } from '@/app/api/billing/authorizations/[id]/events/rout
 import { GET as xml } from '@/app/api/billing/authorizations/[id]/xml/route'
 
 describe('status, resposta, histórico e XML', () => {
-  beforeEach(() => { g.session = { ...MEMBER } })
+  beforeEach(() => { g.session = { ...ADMIN } })
 
-  it('member marca como enviada a partir de ready', async () => {
+  it('admin marca como enviada a partir de ready', async () => {
     detailMock()
     const res = await transition(req('/api/billing/authorizations/a1/transitions', json({ to: 'sent', expected_updated_at: AT })), ctx('a1'))
     expect(res.status).toBe(200)
     expect(rpcArgs('transition_tiss_authorization')).toEqual({ p_id: 'a1', p_to: 'sent', p_expected_updated_at: AT })
   })
 
-  it('member não cancela depois do envio (403 sem RPC); owner cancela; terminal → 409', async () => {
+  it('member não opera status, resposta, histórico nem XML (403 sem leitura nem RPC)', async () => {
     detailMock(authorizationRow({ status: 'sent' }))
+    g.session = { ...ADMIN, role: 'member' }
     expect((await transition(req('/x', json({ to: 'cancelled', expected_updated_at: AT })), ctx('a1'))).status).toBe(403)
-    expect(rpcArgs('transition_tiss_authorization')).toBeUndefined()
-    g.session = { ...MEMBER, role: 'owner' }
+    expect((await respond(req('/x', json({ expected_updated_at: AT, status_code: '1' })), ctx('a1'))).status).toBe(403)
+    expect((await events(req('/x'), ctx('a1'))).status).toBe(403)
+    expect((await xml(req('/x'), ctx('a1'))).status).toBe(403)
+    expect(g.supabase.callsTo('tiss_authorizations')).toHaveLength(0)
+    expect(g.supabase.rpc).not.toHaveBeenCalled()
+  })
+
+  it('owner cancela depois do envio; estado final → 409 sem RPC', async () => {
+    g.session = { ...ADMIN, role: 'owner' }
+    detailMock(authorizationRow({ status: 'sent' }))
     expect((await transition(req('/x', json({ to: 'cancelled', expected_updated_at: AT })), ctx('a1'))).status).toBe(200)
     detailMock(authorizationRow({ status: 'authorized' }))
     expect((await transition(req('/x', json({ to: 'cancelled', expected_updated_at: AT })), ctx('a1'))).status).toBe(409)
+    expect(rpcArgs('transition_tiss_authorization')).toBeUndefined()
   })
 
-  it('resposta: member registra autorização com itens; código 6 só owner/admin; antes do envio → 409', async () => {
+  it('resposta: admin registra com itens; código 6 vale; correção em estado final (R1); antes do envio ou cancelada → 409', async () => {
     detailMock(authorizationRow({ status: 'sent' }))
     const ok = await respond(req('/x', json({ expected_updated_at: AT, status_code: '1', operator_guide_number: 'OP1', password: 'S1',
       authorization_date: '2026-10-06', password_valid_until: '2026-11-05', items: [{ id: 'i1', quantity_authorized: 1 }] })), ctx('a1'))
@@ -5030,10 +5197,14 @@ describe('status, resposta, histórico e XML', () => {
       p_items: [{ id: 'i1', quantity_authorized: 1, authorized_value_cents: null }],
     })
     detailMock(authorizationRow({ status: 'sent' }))
-    expect((await respond(req('/x', json({ expected_updated_at: AT, status_code: '6' })), ctx('a1'))).status).toBe(403)
-    detailMock(authorizationRow({ status: 'ready' }))
-    expect((await respond(req('/x', json({ expected_updated_at: AT, status_code: '1' })), ctx('a1'))).status).toBe(409)
-    expect(rpcArgs('record_tiss_authorization_response')).toBeUndefined()
+    expect((await respond(req('/x', json({ expected_updated_at: AT, status_code: '6' })), ctx('a1'))).status).toBe(200)
+    detailMock(authorizationRow({ status: 'partially_authorized' }))
+    expect((await respond(req('/x', json({ expected_updated_at: AT, status_code: '1' })), ctx('a1'))).status).toBe(200)
+    for (const status of ['ready', 'cancelled']) {
+      detailMock(authorizationRow({ status }))
+      expect((await respond(req('/x', json({ expected_updated_at: AT, status_code: '1' })), ctx('a1'))).status).toBe(409)
+      expect(rpcArgs('record_tiss_authorization_response')).toBeUndefined()
+    }
   })
 
   it('histórico em ordem de gravação, preso à account', async () => {
@@ -5073,11 +5244,11 @@ import { authorizationRpcError } from '@/lib/billing/authorizations/rpc-errors'
 import { canCancel, canMarkSent } from '@/lib/billing/authorizations/status'
 import { parseExpectedUpdatedAt } from '@/lib/billing/authorizations/validation'
 
-// D3: ready → sent (qualquer membro); cancelamento até ready por qualquer
-// membro, depois do envio só owner/admin. O RPC repete tudo.
+// D3: ready → sent; cancelamento de draft até aguardando resposta. Só
+// owner/admin (adminOnly, P1). O RPC repete tudo.
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const result = await requireBilling(req, { adminOnly: false })
+  const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
   const { session } = result
 
@@ -5096,10 +5267,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (to === 'sent' && !canMarkSent(status)) {
     return NextResponse.json({ error: 'Só autorizações prontas podem ser marcadas como enviadas.' }, { status: 409 })
   }
-  if (to === 'cancelled' && !canCancel(status, session.role)) {
-    return canCancel(status, 'owner')
-      ? NextResponse.json({ error: 'Só owner/admin cancelam uma autorização já enviada.' }, { status: 403 })
-      : NextResponse.json({ error: 'Esta autorização não pode mais ser cancelada.' }, { status: 409 })
+  if (to === 'cancelled' && !canCancel(status)) {
+    return NextResponse.json({ error: 'Esta autorização não pode mais ser cancelada.' }, { status: 409 })
   }
 
   const { error } = await supabase.rpc('transition_tiss_authorization', { p_id: id, p_to: to, p_expected_updated_at: at.value })
@@ -5121,9 +5290,10 @@ import { parseResponseBody } from '@/lib/billing/authorizations/validation'
 
 // D6: resposta da operadora digitada (status, número na operadora, senha,
 // datas e quantidades/valores autorizados). Sem parse de XML de resposta.
+// R1: estado final aceita nova resposta (correção). Só owner/admin (P1).
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const result = await requireBilling(req, { adminOnly: false })
+  const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
   const { session } = result
 
@@ -5135,11 +5305,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
   const r = parsed.value
 
-  const { status } = current.authorization
-  if (!canRecordResponse(status, r.status_code, session.role)) {
-    return canRecordResponse(status, r.status_code, 'owner')
-      ? NextResponse.json({ error: 'Só owner/admin registram o cancelamento pela operadora.' }, { status: 403 })
-      : NextResponse.json({ error: 'A resposta só pode ser registrada depois do envio.' }, { status: 409 })
+  if (!canRecordResponse(current.authorization.status)) {
+    return NextResponse.json({ error: 'A resposta só pode ser registrada depois do envio e fora de autorizações canceladas.' }, { status: 409 })
   }
 
   const { error } = await supabase.rpc('record_tiss_authorization_response', {
@@ -5166,7 +5333,7 @@ import { requireBilling } from '@/lib/billing/access'
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const result = await requireBilling(req, { adminOnly: false })
+  const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
 
   const supabase = await createClient()
@@ -5197,7 +5364,7 @@ export const maxDuration = 60
 // evento xml_generated. Erros de validação saem sem valores.
 export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  const result = await requireBilling(req, { adminOnly: false })
+  const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
 
   const supabase = await createClient()
@@ -5232,100 +5399,53 @@ Verificação no build (Tarefa 19): o arquivo `.next/server/app/api/billing/auth
 
 ```bash
 git add app/api/billing/authorizations next.config.ts tests/billing/authorizations-api.test.ts
-git commit -m "feat(tiss): API de envio, cancelamento, resposta, histórico e XML das autorizações
+git commit -m "feat(tiss): API admin-only de envio, cancelamento, resposta, histórico e XML das autorizações
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
 
 ---
 
-## Tarefa 15 — Navegação "Convênios / TISS" e abas de `/faturamento` por papel
+## Tarefa 15 — Navegação "Convênios / TISS" e abas de `/faturamento`
 
 **Modelo sugerido:** sonnet
 
-**Files:** criar `lib/billing/tabs.ts`; modificar `lib/nav/tabs.ts`, `tests/nav/tabs.test.ts`, `app/(dashboard)/faturamento/page.tsx`.
+**Files:** modificar `lib/nav/tabs.ts`, `tests/nav/tabs.test.ts`, `app/(dashboard)/faturamento/page.tsx`. (Não existe `lib/billing/tabs.ts`: sem filtro de abas por papel — P2.)
 
 **Interfaces:**
-- Produces:
+- Produces: `MODULE_ROUTES.billing = { href: '/faturamento', label: 'Convênios / TISS' }`. `ADMIN_MIN_MODULES` **não muda** (`['revenue_cycle', 'billing']`): member continua sem o menu e sem a página (P2, opção a). `OVERRIDABLE_MODULES` não muda.
 
-```ts
-// lib/billing/tabs.ts
-export type BillingTab = 'autorizacoes' | 'guias' | 'lotes'
-export function billingTabsFor(role: MembershipRole): BillingTab[]
-export function resolveBillingTab(requested: string | undefined, role: MembershipRole): BillingTab
-```
-- `MODULE_ROUTES.billing = { href: '/faturamento', label: 'Convênios / TISS' }`; `ADMIN_MIN_MODULES = ['revenue_cycle']`.
-
-Desenho (resolve o conflito "billing está em ADMIN_MIN_MODULES"): o slug `billing` continua sendo o único item de menu, agora visível para `member`; o que é admin-only passa a ser decidido **dentro** da página (abas) e nas APIs/RLS (inalteradas). Guias/Lotes: a página não renderiza as abas para member e as rotas `/api/billing/guides|batches` continuam `adminOnly: true` (403 coberto em `tests/billing/api.test.ts`), e a RLS `is_account_admin` continua valendo. Não se cria slug novo, nem se mexe em `OVERRIDABLE_MODULES`.
+Desenho: só o rótulo muda na navegação. A página continua owner/admin-only (o redirect de `member` existente fica) e ganha a aba Autorizações ao lado de Guias e Lotes — lista fixa, sem decisão por papel. As rotas `/api/billing/authorizations/**` usam `adminOnly: true` (Tarefas 12–14) e a RLS é `is_account_admin` (Tarefa 2), então as três camadas (UI, API, RLS) dizem o mesmo.
 
 Antes de escrever: ler `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/page.md` (seção `searchParams`, que é `Promise` no Next 16).
 
-- [ ] **15.1 Testes que falham.** Em `tests/nav/tabs.test.ts`, trocar o caso `'billing nega member, libera admin/owner'` por:
+- [ ] **15.1 Testes que falham.** Em `tests/nav/tabs.test.ts`, **manter** o caso `'billing nega member, libera admin/owner'` como está (é a prova de P2) e acrescentar ao `describe('MODULE_ROUTES', …)`:
 
 ```ts
-  it('billing (Convênios / TISS) aparece para member, admin e owner — Guias/Lotes são filtrados na página', () => {
-    expect(isModuleVisible('billing', ['billing'], 'member')).toBe(true)
-    expect(isModuleVisible('billing', ['billing'], 'admin')).toBe(true)
-    expect(isModuleVisible('billing', ['billing'], 'owner')).toBe(true)
-    expect(isModuleVisible('billing', ['agenda'], 'owner')).toBe(false)
-  })
-```
-
-e acrescentar ao fim do arquivo:
-
-```ts
-import { billingTabsFor, resolveBillingTab } from '@/lib/billing/tabs'
-
-describe('Convênios / TISS', () => {
-  it('rótulo e título da rota', () => {
+  it('billing se chama "Convênios / TISS" e continua fora do alcance de member', () => {
     expect(MODULE_ROUTES.billing).toEqual({ href: '/faturamento', label: 'Convênios / TISS' })
     expect(moduleTitleFromPath('/faturamento')).toBe('Convênios / TISS')
+    expect(isModuleVisible('billing', ['billing'], 'member')).toBe(false)
   })
-  it('member só vê Autorizações; owner/admin veem as três abas', () => {
-    expect(billingTabsFor('member')).toEqual(['autorizacoes'])
-    expect(billingTabsFor('admin')).toEqual(['autorizacoes', 'guias', 'lotes'])
-    expect(resolveBillingTab('guias', 'member')).toBe('autorizacoes')
-    expect(resolveBillingTab('lotes', 'owner')).toBe('lotes')
-    expect(resolveBillingTab(undefined, 'owner')).toBe('autorizacoes')
-  })
-})
 ```
 
-- [ ] **15.2 Rodar e ver falhar:** `npx vitest run tests/nav/tabs.test.ts`.
+- [ ] **15.2 Rodar e ver falhar:** `npx vitest run tests/nav/tabs.test.ts` (só o rótulo falha).
 - [ ] **15.3 Implementar.**
-  - `lib/nav/tabs.ts`: `billing: { href: '/faturamento', label: 'Convênios / TISS' }`; `export const ADMIN_MIN_MODULES: ModuleSlug[] = ['revenue_cycle']` com o comentário: "'billing' saiu daqui: member vê o menu Convênios / TISS e só a aba Autorizações; Guias e Lotes seguem admin-only na página, na API (requireBilling adminOnly) e na RLS (is_account_admin)."
-  - `lib/billing/tabs.ts`:
-
-```ts
-import type { MembershipRole } from '@/types/database'
-
-export type BillingTab = 'autorizacoes' | 'guias' | 'lotes'
-
-// Autorizações: todo membro da account com o módulo. Guias e lotes: owner/admin
-// (mesma regra das rotas /api/billing/guides|batches e da RLS).
-export function billingTabsFor(role: MembershipRole): BillingTab[] {
-  return role === 'member' ? ['autorizacoes'] : ['autorizacoes', 'guias', 'lotes']
-}
-
-export function resolveBillingTab(requested: string | undefined, role: MembershipRole): BillingTab {
-  const tabs = billingTabsFor(role)
-  return tabs.find((t) => t === requested) ?? 'autorizacoes'
-}
-```
-
+  - `lib/nav/tabs.ts`: `billing: { href: '/faturamento', label: 'Convênios / TISS' }`. Em `ADMIN_MIN_MODULES`, só atualizar o comentário para: "'billing' (Convênios / TISS: autorizações, guias e lotes TISS) também é reforçado na API (requireBilling adminOnly) e na RLS (is_account_admin)." — a lista fica igual.
   - `app/(dashboard)/faturamento/page.tsx`:
     - assinatura `export default async function FaturamentoPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> })`;
-    - redireciona para `/dashboard` só quando `!session.accountModules.includes('billing')` (member agora entra);
-    - título "Convênios / TISS", subtítulo "Autorizações prévias (SP/SADT, internação e OPME) e, para a gestão, guias e lotes XML.";
+    - o redirect existente (`session.role === 'member' || !session.accountModules.includes('billing')` → `/dashboard`) **fica como está**;
+    - título "Convênios / TISS", subtítulo "Autorizações prévias (SP/SADT, internação e OPME), guias TISS das consultas de convênio e lotes XML para as operadoras.";
     - lê `tab`, `nova` (tipo), `appointment_id` e `autorizacao` (id para abrir) dos `searchParams` (só strings; arrays ignorados); `nova` só vale se `isAuthorizationType(nova) && nova !== 'opme_request'` (OPME nasce do pai), os ids só se tiverem formato de UUID;
-    - sem operadoras: owner/admin veem o link para `/configuracoes/convenios` (texto atual); member vê "Peça a um administrador para cadastrar as operadoras.";
-    - `Tabs defaultValue={resolveBillingTab(tab, session.role)}` com `TabsTrigger`/`TabsContent` gerados por `billingTabsFor(session.role)`: `autorizacoes` → `<AuthorizationsTable insurers={insurers} role={session.role} initial={{ newType, appointmentId, openId }} />` (Tarefa 16; até lá, renderizar um placeholder `null` e importar na Tarefa 16), `guias` → `GuidesTable`, `lotes` → `BatchesTable` (sem mudanças).
+    - abas fixas, sem helper novo: `const TABS = ['autorizacoes', 'guias', 'lotes'] as const` no próprio arquivo e `defaultValue={TABS.find((t) => t === tab) ?? 'autorizacoes'}`;
+    - sem operadoras: mantém o texto/link atual para `/configuracoes/convenios`;
+    - `TabsContent`: `autorizacoes` → `<AuthorizationsTable insurers={insurers} initial={{ newType, appointmentId, openId }} />` (Tarefa 16; até lá, renderizar um placeholder `null` e importar na Tarefa 16), `guias` → `GuidesTable`, `lotes` → `BatchesTable` (sem mudanças).
 - [ ] **15.4 Rodar e ver passar:** `npx vitest run tests/nav/tabs.test.ts` e `npx tsc --noEmit`.
 - [ ] **15.5 Commit:**
 
 ```bash
-git add lib/nav/tabs.ts lib/billing/tabs.ts tests/nav/tabs.test.ts "app/(dashboard)/faturamento/page.tsx"
-git commit -m "feat(tiss): menu Convênios / TISS para membros com abas por papel
+git add lib/nav/tabs.ts tests/nav/tabs.test.ts "app/(dashboard)/faturamento/page.tsx"
+git commit -m "feat(tiss): menu Convênios / TISS com aba de autorizações (owner/admin)
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -5347,9 +5467,9 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 export const AUTHORIZATION_STATUS_BADGE: Record<AuthorizationStatus, string>
 export function AuthorizationStatusBadge(props: { status: AuthorizationStatus; missing?: number }): JSX.Element
 // AuthorizationsTable.tsx
+// Sem prop de papel: só owner/admin chegam à página (P2).
 export function AuthorizationsTable(props: {
   insurers: InsurerOption[]
-  role: MembershipRole
   initial?: { newType?: AuthorizationType; appointmentId?: string; openId?: string }
 }): JSX.Element
 // NewAuthorizationDialog.tsx
@@ -5394,7 +5514,6 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```tsx
 export function AuthorizationEditSheet(props: {
   authorizationId: string | null
-  role: MembershipRole
   insurers: InsurerOption[]
   onOpenChange: (open: boolean) => void
   onChanged: () => void                 // tabela recarrega
@@ -5409,7 +5528,7 @@ export function AuthorizationItemsEditor(props: {
   onSave: (items: AuthorizationItemInput[]) => Promise<void>
 }): JSX.Element
 export function AuthorizationResponseForm(props: {
-  detail: AuthorizationDetail; role: MembershipRole
+  detail: AuthorizationDetail
   onSubmit: (body: Omit<ResponseInput, 'expected_updated_at'>) => Promise<void>
 }): JSX.Element
 export function AuthorizationTimeline(props: { authorizationId: string; professionals: ProfessionalOption[]; refreshKey: number }): JSX.Element
@@ -5420,11 +5539,11 @@ Regras de comportamento:
 - [ ] **17.1 Carga e concorrência.** O sheet faz `GET /api/billing/authorizations/{id}` ao abrir e após cada ação; toda mutação envia `expected_updated_at: detail.authorization.updated_at` **exatamente como veio** (string; nunca `new Date(...)`). Resposta 409 com a mensagem de conflito → mostra o erro e recarrega o detalhe.
 - [ ] **17.2 Cabeçalho.** Tipo, "Nº {provider_guide_number}", badge, paciente, operadora, data da solicitação (editável em draft/ready via `requested_at`). Se `parent`: link "Guia de origem nº X" (`onOpenAuthorization`). Se SP/SADT/Internação: lista `children` (OPME) com badge e link; botão **"Adicionar OPME"** quando o pai não está `cancelled` → `POST { type: 'opme_request', parent_id }` → `onOpenAuthorization(novoId)`. Aviso informativo quando há 2+ OPME ativos: "Com mais de um anexo, nenhum vai embutido; envie cada OPME pelo próprio XML."
 - [ ] **17.3 Pendências.** Lista `missing_fields` com `AUTHORIZATION_MISSING_LABELS`; campos de `AUTHORIZATION_SETTINGS_FIELDS` com link para `/configuracoes` (perfil/unidade) e o botão **"Recarregar dados"** (`PATCH { action: 'refresh' }`), só em draft/ready. Campo com pendência fica destacado como no `GuideEditSheet` (`border-amber-400 bg-amber-50`).
-- [ ] **17.4 Beneficiário e profissional.** Carteirinha: seletor das carteirinhas do paciente na operadora (`patient_insurance_id`) ou digitação (`card_number`, até 20); "Atendimento a RN" (switch). Profissional: seletor de `/professionals` (`professional_id`), telefone (obrigatório no OPME; máscara livre, o servidor guarda só dígitos) e e-mail (até 60).
+- [ ] **17.4 Beneficiário e profissional.** Carteirinha: seletor das carteirinhas do paciente na operadora (`patient_insurance_id`) ou digitação (`card_number`, até 20); "Atendimento a RN" (switch). Profissional: seletor de `/professionals` (`professional_id`; a lista traz só nome, CRM/UF e CBO — R3). Telefone e e-mail do solicitante são **digitados aqui** (nunca pré-preenchidos do cadastro): telefone obrigatório no OPME (máscara livre, o servidor guarda só dígitos), e-mail até 60. Trocar de profissional limpa os dois (o formulário avisa e permite redigitar no mesmo "Salvar").
 - [ ] **17.5 Pedido por tipo (`AuthorizationRequestFields`).** Selects alimentados pelos objetos de `domains.ts` (rótulo visível, código enviado). Textareas com contador e `maxLength` igual ao XSD: indicação clínica 500, observação 500 (SP/SADT, OPME) / 1000 (Internação), justificativa 1000, especificação 500. SP/SADT: caráter, indicação clínica, cobertura especial, guia principal, executante (opcional: código na operadora + CNES), etapa e "ausência do código de validação"/"código de validação" num bloco "Avançado" recolhido. Internação: hospital (código na operadora, nome, data sugerida), caráter, tipo, regime, diárias (1–99), previsão de OPME/quimio, indicação clínica, até 4 CIDs (aceita "K35.9"; o servidor normaliza), indicação de acidente, observação, bloco "Avançado". OPME: justificativa, especificação, observação. "Salvar" envia só o que mudou em `request` + campos do bloco 17.4 num único `PATCH`.
 - [ ] **17.6 Itens (`AuthorizationItemsEditor`).** Linhas com tabela (`TABELA`), código, descrição, quantidade; para SP/SADT/Internação, "Adicionar do catálogo" lista os procedimentos TUSS da operadora (`/api/billing/insurers/{insurerId}/procedures`) e preenche tabela 22, código e descrição; OPME tem ainda opção de fabricante (1/2/3), valor unitário (`parseCents`/`centsToInput`), ANVISA (15), referência do fabricante (60) e AFE (30); tabela padrão 19 para OPME. Remover/reordenar linhas localmente; "Salvar itens" → `PUT …/items` com a lista inteira. Em leitura (não editável), mostra também quantidade/valor autorizados.
-- [ ] **17.7 Ações.** "Baixar XML" (visível fora de draft): `fetch` do `GET …/xml`; se `ok`, cria `Blob`, lê o nome do `Content-Disposition` e dispara download; se 409/422, mostra `error` e a lista `errors` (já sem valores). "Marcar como enviada" (`canMarkSent`) e "Cancelar" (`canCancel(status, role)`) com `confirm()`; ambos `POST …/transitions`. Botões escondidos quando a regra do `status.ts` não permite.
-- [ ] **17.8 Resposta (`AuthorizationResponseForm`).** Visível quando `status ∈ sent | under_review | pending_info` (formulário) e, em leitura, para qualquer status com `responded_at`. Campos: status da operadora (códigos 1–7 com rótulo de `STATUS_SOLICITACAO`; o "6 - Solicitação cancelada" só aparece para owner/admin), número da guia na operadora (20), senha (20), data da autorização, validade da senha, e por item a quantidade autorizada (0–999) — e o valor autorizado só em OPME. Envia `POST …/response`.
+- [ ] **17.7 Ações.** "Baixar XML" (visível fora de draft): `fetch` do `GET …/xml`; se `ok`, cria `Blob`, lê o nome do `Content-Disposition` e dispara download; se 409/422, mostra `error` e a lista `errors` (já sem valores). "Marcar como enviada" (`canMarkSent`) e "Cancelar" (`canCancel(status)`) com `confirm()`; ambos `POST …/transitions`. Botões escondidos quando a regra do `status.ts` não permite.
+- [ ] **17.8 Resposta (`AuthorizationResponseForm`).** Formulário quando `canRecordResponse(status)`: em `sent | under_review | pending_info` aberto direto; em `authorized | partially_authorized | denied` (R1) a resposta aparece em leitura com o botão "Corrigir resposta", que abre o mesmo formulário preenchido com os valores gravados. Em `cancelled` com `responded_at`, só leitura. Campos: status da operadora (códigos 1–7 com rótulo de `STATUS_SOLICITACAO`, todos disponíveis), número da guia na operadora (20), senha (20), data da autorização, validade da senha, e por item a quantidade autorizada (0–999) — e o valor autorizado só em OPME. Envia `POST …/response`.
 - [ ] **17.9 Histórico (`AuthorizationTimeline`).** `GET …/events`; lista em ordem com rótulo do evento (`created` "Criada", `updated` "Editada", `items_changed` "Itens alterados", `refreshed` "Dados recarregados", `ready` "Pronta para envio", `sent` "Marcada como enviada", `response_recorded` "Resposta registrada", `cancelled` "Cancelada", `xml_generated` "XML gerado"), transição `de → para` com `AUTHORIZATION_STATUS_LABELS`, data/hora em `America/Sao_Paulo` e autor (nome se `actor_id` estiver em `professionals`; senão "Equipe" — `profiles` é privado por RLS). Recarrega quando `refreshKey` muda.
 - [ ] **17.10 Verificar:** `npx tsc --noEmit`; `npx eslint components/billing/authorizations`; `npx vitest run tests/billing tests/tiss tests/nav`. Smoke manual (Tarefa 19).
 - [ ] **17.11 Commit:**
@@ -5445,10 +5564,10 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 **Files:** modificar `components/agenda/AppointmentModal.tsx`.
 
 **Interfaces:**
-- Consumes: `values.id`, `values.patient_id`, `values.billing?.insurer_id` (já existentes no formulário).
-- Produces: links para `/faturamento?tab=autorizacoes&nova=<tipo>&appointment_id=<id>` (lidos pela página na Tarefa 15/16).
+- Consumes: `values.id`, `values.patient_id`, `values.billing?.insurer_id` (já existentes no formulário); `useSession()` de `@/lib/session/session-context` (`role`; o modal já roda dentro do `SessionProvider` do layout do dashboard).
+- Produces: links para `/faturamento?tab=autorizacoes&nova=<tipo>&appointment_id=<id>` (lidos pela página na Tarefa 15/16), **só para owner/admin** (P3). Member não vê o atalho — a página e a API o recusariam de qualquer forma.
 
-- [ ] **18.1** Na seção de convênio (dentro de `{billingMode && (…)}`, logo depois de `<AppointmentBillingFields … />`), quando `values.id && values.patient_id && values.billing?.insurer_id`, renderizar:
+- [ ] **18.1** No topo do componente: `const { role } = useSession()` e `const canRequestAuthorization = role === 'owner' || role === 'admin'` (com `import { useSession } from '@/lib/session/session-context'`). Na seção de convênio (dentro de `{billingMode && (…)}`, logo depois de `<AppointmentBillingFields … />`), quando `canRequestAuthorization && values.id && values.patient_id && values.billing?.insurer_id`, renderizar:
 
 ```tsx
 <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -5474,7 +5593,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 
 ```bash
 git add components/agenda/AppointmentModal.tsx
-git commit -m "feat(tiss): atalho para solicitar autorização a partir do agendamento
+git commit -m "feat(tiss): atalho de owner/admin para solicitar autorização a partir do agendamento
 
 Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 ```
@@ -5496,8 +5615,8 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>"
 - [ ] **19.4 Lint só dos caminhos alterados** (o lint do repo inteiro estoura memória em worktree):
 
 ```bash
-npx eslint lib/billing/authorizations lib/billing/tabs.ts lib/tiss/v4_03_00 lib/nav/tabs.ts \
-  app/api/billing/authorizations "app/(dashboard)/faturamento/page.tsx" \
+npx eslint lib/billing/authorizations lib/tiss/v4_03_00 lib/nav/tabs.ts \
+  app/api/billing/authorizations "app/api/patients/[id]/route.ts" "app/(dashboard)/faturamento/page.tsx" \
   components/billing/authorizations components/agenda/AppointmentModal.tsx next.config.ts \
   tests/billing tests/tiss tests/nav
 ```
@@ -5507,10 +5626,13 @@ npx eslint lib/billing/authorizations lib/billing/tabs.ts lib/tiss/v4_03_00 lib/
 - [ ] **19.7 Build:** `npm run build`. Depois conferir que os XSDs entram no trace da rota de XML: `grep -l "tissV4_03_00.xsd" ".next/server/app/api/billing/authorizations/[id]/xml/route.js.nft.json"` (se o arquivo tiver outro nome, `find .next/server/app/api/billing/authorizations -name "*.nft.json"`). Se o build falhar só por download de fontes do Google no sandbox, registrar e repetir com rede.
 - [ ] **19.8 Documentação:** em `docs/billing-tiss.md`, acrescentar seção "Autorizações (SP/SADT, Internação, OPME)":
   - instalação: rodar `supabase/tiss-authorizations.sql` no SQL Editor **depois** de `supabase/billing.sql` (dev e prod separadamente; idempotente; não mexe em dados existentes);
-  - quem usa: qualquer membro com o módulo; cancelar após envio e registrar "6 - cancelada" só owner/admin;
-  - fluxo: criar → completar pendências → "Baixar XML" → enviar pelo portal/webservice da operadora → "Marcar como enviada" → registrar resposta;
+  - quem usa: só owner/admin com o módulo (menu "Convênios / TISS", aba Autorizações, atalho na agenda); member não vê nem acessa — mesma regra de Guias/Lotes (UI, API `adminOnly` e RLS `is_account_admin`);
+  - numeração: o mesmo contador das guias da operadora (`next_tiss_number`), então a sequência das guias de cobrança passa a ter números usados por autorizações;
+  - profissional solicitante: escolhido entre os profissionais com CRM; telefone/e-mail digitados na autorização (obrigatório no OPME), não vêm do perfil;
+  - fluxo: criar → completar pendências → "Baixar XML" → enviar pelo portal/webservice da operadora → "Marcar como enviada" → registrar resposta (pode ser corrigida depois de autorizada/negada);
+  - paciente com autorização não pode ser excluído (a exclusão responde com aviso);
   - limites conhecidos (seção "Pontos do design" abaixo).
-- [ ] **19.9 Smoke manual sugerido ao usuário (após aplicar o SQL no dev):** criar SP/SADT a partir de um agendamento de convênio; completar pendências; adicionar 2 itens; "Adicionar OPME" com 1 material; baixar o XML da SP/SADT (deve conter `anexoClinico`) e o do OPME (`ENVIO_ANEXO`); marcar enviada; registrar resposta 7 com quantidade autorizada; como member, tentar cancelar após envio (botão não aparece; API 403); conferir que `/faturamento` como member mostra só Autorizações e que gerar lote de guias continua igual.
+- [ ] **19.9 Smoke manual sugerido ao usuário (após aplicar o SQL no dev):** criar SP/SADT a partir de um agendamento de convênio; completar pendências; adicionar 2 itens; "Adicionar OPME" com 1 material; baixar o XML da SP/SADT (deve conter `anexoClinico`) e o do OPME (`ENVIO_ANEXO`); marcar enviada; registrar resposta 7 com quantidade autorizada e depois "Corrigir resposta" para 1; tentar excluir o paciente (aviso 409); como member: menu "Convênios / TISS" ausente, `/faturamento` redireciona, atalho do `AppointmentModal` ausente e `GET /api/billing/authorizations` → 403; conferir que gerar lote de guias continua igual.
 - [ ] **19.10 Commit:**
 
 ```bash
@@ -5526,16 +5648,15 @@ Comandos de verificação, em ordem: `npx tsc --noEmit` → `npx eslint <caminho
 
 ## Pontos do design que esbarram no código (decididos no plano; revisar com o usuário)
 
-Nenhuma decisão D1–D6 foi trocada. Onde o código atual impede a leitura literal, o plano escolheu o caminho abaixo:
+As decisões D1–D6 continuam valendo, com P1–P4 e R1–R4 de 2026-10-06 por cima (bloco no topo). Onde o código atual impede a leitura literal, o plano escolheu o caminho abaixo:
 
-1. **D4 — `next_tiss_number('guide')` exige `is_account_admin`** (versão do bloco authenticated). Como `member` cria autorizações, o RPC `create_tiss_authorization` incrementa `health_insurers.next_guide_number` **inline**, com o mesmo `select … for update` da linha da operadora — exatamente como `ensure_tiss_guide_for_appointment` já faz. Mesmo contador, sem alterar a função. Efeito: a sequência das guias de cobrança passa a ter "buracos" (números usados por autorizações), aceito pelo TISS.
-2. **`billing` em `ADMIN_MIN_MODULES`.** Para o member ver o menu, `billing` sai dessa lista; Guias/Lotes ficam escondidos pela página e continuam bloqueados na API e na RLS. Limitação herdada: `billing` não está em `OVERRIDABLE_MODULES`, então um member **com** `module_overrides` não vê o menu (a API funciona). Se quiser controle por pessoa, incluir `billing` em `OVERRIDABLE_MODULES` (aparece um checkbox novo em Equipe) — fora deste plano.
-3. **Resposta "6 - Solicitação cancelada".** D3 mapeia 6→`cancelled`, e a seção de permissões diz que cancelar após envio exige admin. O plano exige owner/admin também para registrar a resposta 6 (senão o member contornaria a regra).
-4. **Estados terminais.** Por D3, `authorized`/`partially_authorized`/`denied` não têm saída: um erro de digitação na senha depois de "autorizada" não pode ser corrigido. Se for necessário, seria uma transição nova (ex.: `authorized → authorized` só para admin).
+1. **D4 — numeração por `next_tiss_number('guide')` (resolvido por P1/P4).** A versão em uso (bloco authenticated de `billing.sql`/`billing-authenticated.sql`) exige `is_account_admin` — agora todo criador é admin, então `create_tiss_authorization` chama a função existente, sem alteração. Chamada de dentro de outro `security definer` funciona: `auth.uid()`/`auth.role()` leem os GUCs `request.jwt.claim.*` da sessão (não mudam com o dono da função), e o `execute` é checado contra o dono do RPC. O RPC ainda trava a linha da operadora (`for update`) antes, para conferir ANS/código do prestador sem consumir número em vão; erro depois da numeração desfaz o incremento no rollback. Efeito herdado: a sequência das guias de cobrança passa a ter "buracos" (números usados por autorizações), aceito pelo TISS.
+2. **Leitura admin-only em vez de por workspace.** A RLS das tabelas novas é `is_account_admin(account_id)`, idêntica a `tiss_guides`; um admin com `workspace_ids` restrito enxerga as autorizações de todas as unidades da account (como já acontece com guias). `create_tiss_authorization` e `tiss_authorization_professionals` ainda exigem que o workspace pedido esteja em `my_workspace_ids()` (como `tiss_professional_for_appointment`).
+3. **Resposta "6 - Solicitação cancelada".** Com P1 a distinção sumiu: qualquer owner/admin registra o código 6 (→ `cancelled`), e `cancelled` não aceita nova resposta (R1 só reabre `authorized`/`partially_authorized`/`denied`).
+4. **Estados finais (R1).** Correção da resposta em estado final é um novo `response_recorded` (com `from_status`/`to_status` no histórico), não uma edição: itens não citados mantêm a quantidade/valor autorizados já gravados. Cancelar a partir de estado final continua proibido.
 5. **OPME embutido incompleto.** D5 manda embutir quando há exatamente 1 OPME não cancelado; se esse OPME está em rascunho, o XML do pai é recusado (409 "Complete ou cancele o anexo") em vez de sair inválido ou sem o anexo. Marcar o pai como enviado **não** muda o status do OPME embutido (cada um tem seu ciclo); o usuário marca o OPME separadamente.
 6. **Regras acrescentadas (não contradizem o design):** OPME não pode ser criado sob pai cancelado e herda o workspace do pai; o `payload` repete o `type` para o TypeScript estreitar (o RPC confere); `requested_at` é editável em draft/ready.
-7. **`patient_id` com FK NO ACTION.** Apagar um paciente que tem autorização passa a falhar (antes não existia a tabela). É o comportamento desejado para auditoria, mas é uma mudança visível em `DELETE /api/patients/[id]` para esses pacientes.
-8. **Profissionais listados a membros.** `tiss_authorization_professionals` expõe nome, CRM/UF/CBO, telefone e e-mail dos membros **com CRM** a qualquer membro da account com o módulo (necessário para escolher o solicitante do OPME). Membros sem CRM não aparecem. O histórico mostra o nome do autor só quando ele está nessa lista (profiles é privado).
+7. **`patient_id` com FK NO ACTION (R2).** Apagar um paciente que tem autorização falha no banco; `DELETE /api/patients/[id]` traduz a violação dessa FK (casada pelo nome `tiss_authorizations…`) em 409 "Este paciente tem autorizações TISS e não pode ser excluído.". Outras falhas continuam como hoje (500 com a mensagem do banco — comportamento preexistente, fora do escopo).
+8. **Profissionais (R3).** `tiss_authorization_professionals` expõe só id, nome, CRM, UF e CBO dos membros **com CRM**, e só a owner/admin. Telefone/e-mail do solicitante são digitados na autorização (o snapshot começa com `null`; "Recarregar dados" preserva o digitado; trocar por outro profissional limpa). O histórico mostra o nome do autor só quando ele está nessa lista (profiles é privado); senão "Equipe".
 9. **"transition: ready"** da ordem sugerida não vira rota: por D3, `draft`/`ready` são calculados por `missing_fields` a cada edição.
 10. **Ambiguidades do XSD já documentadas na spec**, implementadas assim: `tipoTransacao` inferido (`SOLICITACAO_PROCEDIMENTOS`, `ENVIO_ANEXO`); tabela 19 como padrão de OPME; `numeroGuiaReferenciada` = número do prestador do pai; `valorSolicitado` tratado como unitário (como no formulário em papel).
-
