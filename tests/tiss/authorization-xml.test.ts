@@ -18,6 +18,11 @@ describe('helpers de texto das solicitações', () => {
     expect(clip('😀😀abc', 2)).toBe('ab')
     expect(optText('observacao', '  \n ', 500)).toBeNull()
   })
+
+  it('clip troca quebra de linha e tab por espaço e colapsa espaços repetidos', () => {
+    expect(clip('fixação\r\ninterna\tda\n\ntíbia', 1000)).toBe('fixação interna da tíbia')
+    expect(clip('a — b 😀  c', 100)).toBe('a b c')
+  })
 })
 
 describe('Anexo de Solicitação de OPME avulso (ENVIO_ANEXO)', () => {
@@ -98,9 +103,18 @@ describe('Anexo de Solicitação de OPME avulso (ENVIO_ANEXO)', () => {
     const { xml, hash } = opmeXml(annex)
     const t = text(xml)
     expect(t).toContain('Dor &amp; edema &lt;grave&gt;')
-    expect(t).toContain('Erdoslinha ½ º')
+    expect(t).toContain('Erdos linha ½ º')
     expect(t).not.toContain('😀')
-    expect(t).toContain('Parafuso cortical ½ rosca  3,5 mm')
+    expect(t).toContain('Parafuso cortical ½ rosca 3,5 mm')
+    expect(hash).toBe(hashFromFile(xml))
+    expect((await validate(xml)).valid).toBe(true)
+  })
+
+  it('justificativa com \\r\\n e \\t entre palavras sai com espaços simples', async () => {
+    const annex = fakeOpmeAnnex()
+    annex.payload.request.technical_justification = 'Fratura\r\nde\ttíbia\r\n\r\ncom  desvio'
+    const { xml, hash } = opmeXml(annex)
+    expect(text(xml)).toContain('<ans:justificativaTecnica>Fratura de tíbia com desvio</ans:justificativaTecnica>')
     expect(hash).toBe(hashFromFile(xml))
     expect((await validate(xml)).valid).toBe(true)
   })

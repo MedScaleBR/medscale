@@ -8,8 +8,12 @@ import type {
 // Texto livre: Latin-1 e corte no maxLength do XSD. Identificadores: nunca
 // cortados — o XSD reprova o excesso e a rota devolve 422.
 
+// Quebra de linha e tab viram espaço antes do Latin-1 (toLatin1Text apagaria
+// e grudaria as palavras); depois, espaços repetidos — inclusive os deixados
+// por caracteres descartados — viram um só.
 export function clip(value: string | null | undefined, max: number): string {
-  return toLatin1Text(value ?? '').slice(0, max).trim()
+  const spaced = (value ?? '').replace(/[\r\n\t]+/g, ' ')
+  return toLatin1Text(spaced).replace(/ {2,}/g, ' ').slice(0, max).trim()
 }
 
 // Elemento opcional de texto livre: omitido quando vazio (minLength=1).
