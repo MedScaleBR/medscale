@@ -1,6 +1,8 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
+import { useSession } from '@/lib/session/session-context'
 import { formatBrazilianPhone } from '@/lib/phone'
 import {
   Dialog,
@@ -141,6 +143,8 @@ interface AppointmentFormProps {
 function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenChange, showTranscriptions, procedures, healthPlans, billingInsurers }: AppointmentFormProps) {
   const [values, setValues] = useState<AppointmentFormValues>({ ...EMPTY, ...initialValues })
   const [saving, setSaving] = useState(false)
+  const { role } = useSession()
+  const canRequestAuthorization = role === 'owner' || role === 'admin'
   const isConvenio = values.health_plan != null
   const showUnitPicker = workspaces.length > 1
   const billingMode = billingInsurers.length > 0
@@ -348,6 +352,24 @@ function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenCh
                   // Mexer em carteirinha/TUSS/autorização também precisa ir no PATCH.
                   onChange={(billing) => setValues((v) => ({ ...v, billing, billing_type: 'convenio' }))}
                 />
+              )}
+              {canRequestAuthorization && values.id && values.patient_id && values.billing?.insurer_id && (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <span className="text-xs text-gray-400">Solicitar autorização:</span>
+                  <Link
+                    href={`/faturamento?tab=autorizacoes&nova=sp_sadt_request&appointment_id=${values.id}`}
+                    className="text-xs text-[var(--cyan-dark)] underline"
+                  >
+                    SP/SADT
+                  </Link>
+                  <Link
+                    href={`/faturamento?tab=autorizacoes&nova=hospitalization_request&appointment_id=${values.id}`}
+                    className="text-xs text-[var(--cyan-dark)] underline"
+                  >
+                    Internação
+                  </Link>
+                  <span className="basis-full text-xs text-gray-400">Usa os dados já salvos do agendamento.</span>
+                </div>
               )}
             </div>
           )}
