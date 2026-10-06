@@ -2,14 +2,14 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireBilling } from '@/lib/billing/access'
 import { loadAuthorizationDetail } from '@/lib/billing/authorizations/detail'
-import { authorizationRpcError } from '@/lib/billing/authorizations/rpc-errors'
+import { authorizationRpcError, withReadGuard } from '@/lib/billing/authorizations/rpc-errors'
 import { canRecordResponse } from '@/lib/billing/authorizations/status'
 import { parseResponseBody } from '@/lib/billing/authorizations/validation'
 
 // D6: resposta da operadora digitada (status, número na operadora, senha,
 // datas e quantidades/valores autorizados). Sem parse de XML de resposta.
 // R1: estado final aceita nova resposta (correção). Só owner/admin (P1).
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withReadGuard(async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
@@ -49,4 +49,4 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   })
   if (error) return authorizationRpcError(error)
   return NextResponse.json(await loadAuthorizationDetail(supabase, session.accountId, id))
-}
+})

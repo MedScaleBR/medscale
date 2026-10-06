@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
-  buildResponseItems, buildRequestPatch, fileNameFromDisposition, phoneDigits,
+  buildResponseItems, buildRequestPatch, catalogItemDescription, fileNameFromDisposition, opmeEmbedHint, phoneDigits,
 } from '@/components/billing/authorizations/sheet-helpers'
 import { parseContentPatch, parseRequestPatch } from '@/lib/billing/authorizations/validation'
 import type { OpmeRequestData } from '@/lib/billing/authorizations/types'
@@ -145,5 +145,21 @@ describe('buildRequestPatch output is accepted by the server validators', () => 
     expect(patch).toEqual({ technical_justification: 'necessário', material_specification: 'parafuso' })
     expect(parseRequestPatch('opme_request', opme, patch).ok).toBe(true)
     expect(parseContentPatch({ expected_updated_at: '2026-10-06T10:00:00.123456+00:00', request: patch }).ok).toBe(true)
+  })
+})
+
+describe('catalogItemDescription', () => {
+  it('cuts catalog descriptions at the 150-char XSD limit', () => {
+    expect(catalogItemDescription('x'.repeat(200))).toHaveLength(150)
+    expect(catalogItemDescription('Hemograma')).toBe('Hemograma')
+  })
+})
+
+describe('opmeEmbedHint', () => {
+  it('hints only with exactly one active OPME (parent) or on the OPME itself', () => {
+    expect(opmeEmbedHint(1, false)).toContain('embutido no XML desta solicitação')
+    expect(opmeEmbedHint(0, false)).toBeNull()
+    expect(opmeEmbedHint(2, false)).toBeNull()
+    expect(opmeEmbedHint(0, true)).toContain('solicitação de origem')
   })
 })

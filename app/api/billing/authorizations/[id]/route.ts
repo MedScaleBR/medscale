@@ -4,14 +4,14 @@ import { requireBilling } from '@/lib/billing/access'
 import { loadAuthorizationDetail } from '@/lib/billing/authorizations/detail'
 import { applyContentPatch, refreshPayload, type PatchDeps } from '@/lib/billing/authorizations/edit'
 import { computeAuthorizationMissing } from '@/lib/billing/authorizations/missing'
-import { authorizationRpcError, readOnlyConflict } from '@/lib/billing/authorizations/rpc-errors'
+import { authorizationRpcError, readOnlyConflict, withReadGuard } from '@/lib/billing/authorizations/rpc-errors'
 import { loadAuthorizationSources } from '@/lib/billing/authorizations/sources'
 import type { AnyAuthorizationPayload } from '@/lib/billing/authorizations/types'
 import { parseContentPatch } from '@/lib/billing/authorizations/validation'
 
 type Ctx = { params: Promise<{ id: string }> }
 
-export async function GET(req: NextRequest, { params }: Ctx) {
+export const GET = withReadGuard(async function GET(req: NextRequest, { params }: Ctx) {
   const { id } = await params
   const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
@@ -19,11 +19,11 @@ export async function GET(req: NextRequest, { params }: Ctx) {
   const found = await loadAuthorizationDetail(supabase, result.session.accountId, id)
   if (!found) return NextResponse.json({ error: 'Autorização não encontrada' }, { status: 404 })
   return NextResponse.json(found)
-}
+})
 
 // Conteúdo só em draft/ready (o RPC repete a regra e confere updated_at).
 // { action: 'refresh' } = "Recarregar dados" (configurações novas, pedido preservado).
-export async function PATCH(req: NextRequest, { params }: Ctx) {
+export const PATCH = withReadGuard(async function PATCH(req: NextRequest, { params }: Ctx) {
   const { id } = await params
   const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
@@ -64,7 +64,9 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
         }
         const deps: PatchDeps = {
           professional: patch.professional_id !== undefined ? loaded.sources.professional : undefined,
-          patientInsurance: patch.patient_insurance_id !== undefined ? loaded.sources.patientInsurance : undefined,
+          // null explícito = carteirinha digitada, sem vínculo: não herda a 1ª carteirinha.
+          patientInsurance: patch.patient_insurance_id === null ? null
+            : patch.patient_insurance_id !== undefined ? loaded.sources.patientInsurance : undefined,
         }
         const applied = applyContentPatch(a.payload, patch, deps)
         if (!applied.ok) return NextResponse.json({ error: applied.error }, { status: 400 })
@@ -89,4 +91,4 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
   })
   if (error) return authorizationRpcError(error)
   return NextResponse.json(await loadAuthorizationDetail(supabase, session.accountId, id))
-}
+})

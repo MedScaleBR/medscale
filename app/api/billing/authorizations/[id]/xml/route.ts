@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireBilling } from '@/lib/billing/access'
-import { authorizationRpcError } from '@/lib/billing/authorizations/rpc-errors'
+import { authorizationRpcError, withReadGuard } from '@/lib/billing/authorizations/rpc-errors'
 import { generateAuthorizationXml } from '@/lib/billing/authorizations/xml'
 
 // Validação com xmllint-wasm pode levar alguns segundos na primeira chamada.
@@ -9,7 +9,7 @@ export const maxDuration = 60
 
 // Gera o XML na hora (D5: nada no storage), valida no XSD e registra o
 // evento xml_generated. Erros de validação saem sem valores.
-export async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const GET = withReadGuard(async function GET(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
@@ -30,4 +30,4 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ id: 
       'Cache-Control': 'no-store',
     },
   })
-}
+})

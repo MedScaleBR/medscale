@@ -84,3 +84,13 @@ export function fileNameFromDisposition(header: string | null): string | null {
 export function phoneDigits(v: string): string | null {
   return v.replace(/\D/g, '') || null
 }
+
+// A descrição do catálogo pode passar do limite do XSD (150): cortar ao pré-preencher.
+export const catalogItemDescription = (description: string): string => description.slice(0, 150)
+
+// Dica sobre o anexo OPME: com exatamente um ativo ele vai embutido no XML do pai.
+export function opmeEmbedHint(activeOpmeCount: number, isOpme: boolean): string | null {
+  if (isOpme) return 'Este anexo vai embutido no XML da solicitação de origem.'
+  if (activeOpmeCount === 1) return 'Este anexo vai embutido no XML desta solicitação.'
+  return null
+}

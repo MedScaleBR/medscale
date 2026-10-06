@@ -25,7 +25,7 @@ import { AuthorizationResponseForm } from './AuthorizationResponseForm'
 import { AuthorizationStatusBadge } from './AuthorizationStatusBadge'
 import { AuthorizationTimeline } from './AuthorizationTimeline'
 import { formatProfessional } from './NewAuthorizationDialog'
-import { buildRequestPatch, fileNameFromDisposition, phoneDigits } from './sheet-helpers'
+import { buildRequestPatch, fileNameFromDisposition, opmeEmbedHint, phoneDigits } from './sheet-helpers'
 
 type Busy = 'save' | 'refresh' | 'items' | 'sent' | 'cancel' | 'response' | 'xml' | 'opme'
 type Message = { kind: 'error' | 'info'; text: string; list?: string[] }
@@ -276,6 +276,7 @@ function AuthorizationEditor({
   const settingsMissing = AUTHORIZATION_SETTINGS_FIELDS.filter((f) => missing.includes(f))
   const activeOpme = detail.children.filter((c) => c.status !== 'cancelled')
   const parent = detail.parent
+  const embedHint = a.status === 'cancelled' ? null : opmeEmbedHint(activeOpme.length, a.type === 'opme_request')
   const insurerName = a.health_insurers?.name ?? insurers.find((i) => i.id === a.insurer_id)?.name ?? 'Operadora'
 
   return (
@@ -313,6 +314,13 @@ function AuthorizationEditor({
           </button>
         )}
 
+        {a.type === 'opme_request' && embedHint && (
+          <p className="flex items-start gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
+            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            {embedHint}
+          </p>
+        )}
+
         {a.type !== 'opme_request' && (
           <Section title="Anexos OPME">
             {detail.children.length === 0 ? (
@@ -332,6 +340,12 @@ function AuthorizationEditor({
                   </li>
                 ))}
               </ul>
+            )}
+            {embedHint && (
+              <p className="flex items-start gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                {embedHint}
+              </p>
             )}
             {activeOpme.length >= 2 && (
               <p className="flex items-start gap-1.5 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
@@ -458,7 +472,7 @@ function AuthorizationEditor({
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          {a.status !== 'draft' && (
+          {a.status !== 'draft' && a.status !== 'cancelled' && (
             <Button variant="outline" className="gap-1.5" disabled={busy !== null} onClick={downloadXml}>
               <Download className="h-3.5 w-3.5" />
               {busy === 'xml' ? 'Gerando…' : 'Baixar XML'}

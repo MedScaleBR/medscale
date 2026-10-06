@@ -2,13 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireBilling } from '@/lib/billing/access'
 import { loadAuthorizationDetail } from '@/lib/billing/authorizations/detail'
-import { authorizationRpcError } from '@/lib/billing/authorizations/rpc-errors'
+import { authorizationRpcError, withReadGuard } from '@/lib/billing/authorizations/rpc-errors'
 import { canCancel, canMarkSent } from '@/lib/billing/authorizations/status'
 import { parseExpectedUpdatedAt } from '@/lib/billing/authorizations/validation'
 
 // D3: ready → sent; cancelamento de draft até aguardando resposta. Só
 // owner/admin (adminOnly, P1). O RPC repete tudo.
-export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const POST = withReadGuard(async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
@@ -36,4 +36,4 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const { error } = await supabase.rpc('transition_tiss_authorization', { p_id: id, p_to: to, p_expected_updated_at: at.value })
   if (error) return authorizationRpcError(error)
   return NextResponse.json(await loadAuthorizationDetail(supabase, session.accountId, id))
-}
+})

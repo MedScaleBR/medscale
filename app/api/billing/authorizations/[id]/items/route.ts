@@ -3,12 +3,12 @@ import { createClient } from '@/lib/supabase/server'
 import { requireBilling } from '@/lib/billing/access'
 import { loadAuthorizationDetail } from '@/lib/billing/authorizations/detail'
 import { computeAuthorizationMissing } from '@/lib/billing/authorizations/missing'
-import { authorizationRpcError, readOnlyConflict } from '@/lib/billing/authorizations/rpc-errors'
+import { authorizationRpcError, readOnlyConflict, withReadGuard } from '@/lib/billing/authorizations/rpc-errors'
 import { parseExpectedUpdatedAt, parseItems } from '@/lib/billing/authorizations/validation'
 
 // Substitui todos os itens (procedimentos ou materiais OPME) numa transação,
 // recalculando as pendências; só em draft/ready.
-export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+export const PUT = withReadGuard(async function PUT(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const result = await requireBilling(req, { adminOnly: true })
   if ('error' in result) return result.error
@@ -38,4 +38,4 @@ export async function PUT(req: NextRequest, { params }: { params: Promise<{ id: 
   })
   if (error) return authorizationRpcError(error)
   return NextResponse.json(await loadAuthorizationDetail(supabase, session.accountId, id))
-}
+})

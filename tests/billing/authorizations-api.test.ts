@@ -214,6 +214,29 @@ describe('detalhe, conteúdo e itens', () => {
     expect(args.p_payload.request.clinical_indication).toBe('Investigação de anemia')
   })
 
+  it('carteirinha digitada (patient_insurance_id null) não herda o vínculo da primeira carteirinha', async () => {
+    detailMock(authorizationRow(), {
+      health_insurers: { select: { data: AUTH_SOURCES.insurer } },
+      workspaces: { select: { data: AUTH_SOURCES.workspace } },
+      patient_insurances: { select: { data: [{ id: 'piA', card_number: 'CARD-A', is_primary: true }] } },
+    })
+    const res = await patch(req('/api/billing/authorizations/a1', json({ expected_updated_at: AT, patient_insurance_id: null, card_number: 'DIGITADA-9' }, 'PATCH')), ctx('a1'))
+    expect(res.status).toBe(200)
+    const args = rpcArgs('update_tiss_authorization') as { p_payload: { beneficiary: { patient_insurance_id: string | null; card_number: string } } }
+    expect(args.p_payload.beneficiary.patient_insurance_id).toBeNull()
+    expect(args.p_payload.beneficiary.card_number).toBe('DIGITADA-9')
+  })
+
+  it('falha ao ler os itens no detalhe → 500 fixo, sem RPC', async () => {
+    detailMock(authorizationRow(), { tiss_authorization_items: { select: { data: null, error: { message: 'relation x (paciente Fulano)' } } } })
+    const res = await detail(req('/api/billing/authorizations/a1'), ctx('a1'))
+    expect(res.status).toBe(500)
+    expect(JSON.stringify(await res.json())).not.toContain('Fulano')
+    const p = await patch(req('/api/billing/authorizations/a1', json({ expected_updated_at: AT, newborn: true }, 'PATCH')), ctx('a1'))
+    expect(p.status).toBe(500)
+    expect(rpcArgs('update_tiss_authorization')).toBeUndefined()
+  })
+
   it('profissional fora da lista (sem CRM) → 400', async () => {
     detailMock(authorizationRow(), {
       health_insurers: { select: { data: AUTH_SOURCES.insurer } },
@@ -359,6 +382,31 @@ describe('status, resposta, histórico e XML', () => {
     expect(body.startsWith('<?xml version="1.0" encoding="ISO-8859-1"?>')).toBe(true)
     expect(body).toContain('<ans:tipoTransacao>SOLICITACAO_PROCEDIMENTOS</ans:tipoTransacao>')
     expect(rpcArgs('log_tiss_authorization_xml')).toMatchObject({ p_id: 'a1', p_hash: expect.stringMatching(/^[a-f0-9]{32}$/) })
+  })
+
+  it('XML: falha ao ler os itens → 500 fixo, sem gerar nem registrar', async () => {
+    const m = detailMock(authorizationRow(), { tiss_authorization_items: { select: { data: null, error: { message: 'boom' } } } })
+    const res = await xml(req('/x'), ctx('a1'))
+    expect(res.status).toBe(500)
+    expect(res.headers.get('content-type')).not.toContain('xml')
+    expect(m.rpc).not.toHaveBeenCalledWith('log_tiss_authorization_xml', expect.anything())
+  })
+
+  it('XML: falha ao ler os OPME vinculados → 500 fixo, sem registrar', async () => {
+    const m = detailMock(authorizationRow(), {
+      tiss_authorizations: { select: (call: RecordedCall) => (filterValue(call, 'eq', 'parent_id') ? { data: null, error: { message: 'boom' } } : { data: authorizationRow() }) },
+    })
+    const res = await xml(req('/x'), ctx('a1'))
+    expect(res.status).toBe(500)
+    expect(m.rpc).not.toHaveBeenCalledWith('log_tiss_authorization_xml', expect.anything())
+  })
+
+  it('XML: autorização cancelada → 409 fixo, sem registrar', async () => {
+    const m = detailMock(authorizationRow({ status: 'cancelled' }))
+    const res = await xml(req('/x'), ctx('a1'))
+    expect(res.status).toBe(409)
+    expect((await res.json()).error).toBe('Autorização cancelada não gera XML.')
+    expect(m.rpc).not.toHaveBeenCalledWith('log_tiss_authorization_xml', expect.anything())
   })
 
   it('XML: autorização inexistente → 404', async () => {

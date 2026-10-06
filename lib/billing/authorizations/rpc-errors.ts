@@ -26,6 +26,32 @@ const RPC_ERRORS: Record<string, { status: number; error: string }> = {
   tiss_insurer_incomplete: { status: 400, error: INCOMPLETE_INSURER_ERROR },
 }
 
+// Falha de leitura do banco (erro do Supabase em select): nunca vira "vazio".
+// Só o rótulo da leitura é registrado, sem texto do banco nem dados do paciente.
+export class AuthorizationReadError extends Error {
+  constructor(readonly where: string, readonly code?: string) {
+    super(`billing: falha ao ler ${where}`)
+    this.name = 'AuthorizationReadError'
+  }
+}
+
+export function failIfRead(where: string, error: { code?: string } | null | undefined): void {
+  if (error) throw new AuthorizationReadError(where, error.code)
+}
+
+// Envolve o handler: AuthorizationReadError vira 500 com mensagem fixa.
+export function withReadGuard<A extends unknown[]>(handler: (...args: A) => Promise<Response>) {
+  return async (...args: A): Promise<Response> => {
+    try {
+      return await handler(...args)
+    } catch (err) {
+      if (!(err instanceof AuthorizationReadError)) throw err
+      console.error('[billing] falha de leitura de autorização', { where: err.where, code: err.code ?? 'unknown' })
+      return NextResponse.json({ error: 'Não foi possível carregar os dados da autorização.' }, { status: 500 })
+    }
+  }
+}
+
 export function authorizationRpcError(error: { message?: string; code?: string } | null): NextResponse {
   const known = error?.message ? RPC_ERRORS[error.message] : undefined
   if (known) return NextResponse.json({ error: known.error }, { status: known.status })

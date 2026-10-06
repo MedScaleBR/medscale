@@ -3,6 +3,7 @@ import type { Database } from '@/types/database'
 import type { ApiSession } from '@/lib/session/api'
 import { INCOMPLETE_INSURER_ERROR, hasTissIdentity } from '../insurer'
 import { buildInitialPayload } from './edit'
+import { AuthorizationReadError, failIfRead } from './rpc-errors'
 import type { AuthorizationSources, ProfessionalOption } from './payload'
 import type { AnyAuthorizationPayload, AuthorizationItemInput } from './types'
 import type { CreateInput } from './validation'
@@ -15,7 +16,7 @@ export type Failure = { ok: false; status: 400 | 404; error: string }
 // — a rota responde 500 genérico.
 export async function loadProfessionals(supabase: BillingClient, workspaceId: string): Promise<ProfessionalOption[]> {
   const { data, error } = await supabase.rpc('tiss_authorization_professionals', { p_workspace_id: workspaceId })
-  if (error) throw new Error('billing: não foi possível carregar os profissionais')
+  if (error) throw new AuthorizationReadError('profissionais', error.code)
   return data ?? []
 }
 
@@ -31,7 +32,7 @@ export async function loadAuthorizationSources(
     professionalId: string | null
   },
 ): Promise<{ ok: true; sources: AuthorizationSources; professionals: ProfessionalOption[] } | Failure> {
-  const [{ data: insurer }, { data: workspace }, { data: cards }, professionals] = await Promise.all([
+  const [{ data: insurer, error: insurerError }, { data: workspace, error: workspaceError }, { data: cards, error: cardsError }, professionals] = await Promise.all([
     supabase
       .from('health_insurers')
       .select('ans_registry, provider_code, tiss_version')
@@ -54,6 +55,9 @@ export async function loadAuthorizationSources(
     loadProfessionals(supabase, args.workspaceId),
   ])
 
+  failIfRead('operadora', insurerError)
+  failIfRead('unidade', workspaceError)
+  failIfRead('carteirinhas', cardsError)
   if (!insurer || !hasTissIdentity(insurer)) return { ok: false, status: 400, error: INCOMPLETE_INSURER_ERROR }
   if (!workspace) return { ok: false, status: 404, error: 'Unidade não encontrada' }
 
@@ -99,12 +103,13 @@ export async function resolveCreateContext(
   let items: AuthorizationItemInput[] = []
 
   if (input.parent_id) {
-    const { data } = await supabase
+    const { data, error: parentError } = await supabase
       .from('tiss_authorizations')
       .select('id, workspace_id, patient_id, insurer_id, appointment_id, type, status, payload')
       .eq('id', input.parent_id)
       .eq('account_id', session.accountId)
       .maybeSingle()
+    failIfRead('guia de origem', parentError)
     const parent = data as unknown as {
       workspace_id: string; patient_id: string; insurer_id: string; appointment_id: string | null
       type: string; status: string; payload: AnyAuthorizationPayload
@@ -118,12 +123,13 @@ export async function resolveCreateContext(
     patientInsuranceId = patientInsuranceId ?? parent.payload.beneficiary.patient_insurance_id
     professionalId = professionalId ?? parent.payload.professional.id
   } else if (input.appointment_id) {
-    const { data: appointment } = await supabase
+    const { data: appointment, error: appointmentError } = await supabase
       .from('appointments')
       .select('id, workspace_id, patient_id, doctor_id, insurer_id, patient_insurance_id, insurer_procedure_id')
       .eq('id', input.appointment_id)
       .eq('account_id', session.accountId)
       .maybeSingle()
+    failIfRead('agendamento', appointmentError)
     if (!appointment) return { ok: false, status: 404, error: 'Agendamento não encontrado' }
     if (!appointment.patient_id || !appointment.insurer_id) {
       return { ok: false, status: 400, error: 'O agendamento precisa ter paciente cadastrado e convênio.' }
@@ -136,13 +142,14 @@ export async function resolveCreateContext(
     // solicitante se aparecer na lista de profissionais com CRM.
     professionalId = professionalId ?? appointment.doctor_id
     if (input.type === 'sp_sadt_request' && appointment.insurer_procedure_id) {
-      const { data: procedure } = await supabase
+      const { data: procedure, error: procedureError } = await supabase
         .from('insurer_procedures')
         .select('tuss_code, description')
         .eq('id', appointment.insurer_procedure_id)
         .eq('insurer_id', appointment.insurer_id)
         .eq('account_id', session.accountId)
         .maybeSingle()
+      failIfRead('procedimento', procedureError)
       if (procedure) {
         items = [{
           table_code: '22', code: procedure.tuss_code, description: procedure.description.slice(0, 150),

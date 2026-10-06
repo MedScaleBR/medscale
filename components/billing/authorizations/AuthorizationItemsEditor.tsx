@@ -11,6 +11,7 @@ import { OPCAO_FABRICANTE, TABELA, type OpcaoFabricante, type Tabela } from '@/l
 import type { AuthorizationItem, AuthorizationItemInput, AuthorizationType } from '@/lib/billing/authorizations/types'
 import { centsToInput, formatCents, parseCents } from '../money'
 import { CodeSelect } from './AuthorizationRequestFields'
+import { catalogItemDescription } from './sheet-helpers'
 
 interface ProcedureOption {
   id: string
@@ -213,7 +214,7 @@ function ItemsForm({
   const addFromCatalog = (id: string) => {
     const p = procedures?.find((x) => x.id === id)
     if (!p || full) return
-    setRows((rs) => [...rs, { ...blankRow(false), table_code: '22', code: p.tuss_code, description: p.description }])
+    setRows((rs) => [...rs, { ...blankRow(false), table_code: '22', code: p.tuss_code, description: catalogItemDescription(p.description) }])
   }
 
   const save = async () => {

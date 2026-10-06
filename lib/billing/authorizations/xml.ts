@@ -6,6 +6,7 @@ import {
   AuthorizationBuildError, buildAuthorizationRequestMessage, buildOpmeAnnexMessage,
 } from '@/lib/tiss/v4_03_00/authorization-messages'
 import { AUTHORIZATION_ITEM_COLUMNS } from './constants'
+import { failIfRead } from './rpc-errors'
 import type {
   AnyAuthorizationPayload, AnyAuthorizationXmlSource, AuthorizationItem, AuthorizationStatus, AuthorizationType,
   AuthorizationXmlSource,
@@ -54,14 +55,16 @@ function toSource(row: XmlRow, items: AuthorizationItem[]): AnyAuthorizationXmlS
 }
 
 async function loadItems(supabase: BillingClient, authorizationId: string): Promise<AuthorizationItem[]> {
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('tiss_authorization_items')
     .select(AUTHORIZATION_ITEM_COLUMNS)
     .eq('authorization_id', authorizationId)
     .order('position', { ascending: true })
+  failIfRead('itens', error)
   return (data ?? []) as unknown as AuthorizationItem[]
 }
 
+const CANCELLED = 'Autorização cancelada não gera XML.'
 const INCOMPLETE = 'Complete os campos pendentes antes de gerar o XML.'
 
 // Gera sob demanda (nada vai para o storage), valida no XSD e registra o
@@ -72,34 +75,38 @@ export async function generateAuthorizationXml(
   id: string,
   now: Date,
 ): Promise<AuthorizationXmlResult> {
-  const { data } = await supabase
+  const { data, error: rowError } = await supabase
     .from('tiss_authorizations')
     .select(XML_ROW_COLUMNS)
     .eq('id', id)
     .eq('account_id', accountId)
     .maybeSingle()
+  failIfRead('autorização', rowError)
   const row = data as unknown as XmlRow | null
   if (!row) return { ok: false, status: 404, error: 'Autorização não encontrada' }
+  if (row.status === 'cancelled') return { ok: false, status: 409, error: CANCELLED }
   if (row.status === 'draft' || row.missing_fields.length > 0) return { ok: false, status: 409, error: INCOMPLETE }
 
   const source = toSource(row, await loadItems(supabase, row.id))
   let built: BuiltBatch
   try {
     if (source.type === 'opme_request') {
-      const { data: parent } = await supabase
+      const { data: parent, error: parentError } = await supabase
         .from('tiss_authorizations')
         .select('provider_guide_number')
         .eq('id', row.parent_id ?? '')
         .eq('account_id', accountId)
         .maybeSingle()
+      failIfRead('guia de origem', parentError)
       if (!parent) return { ok: false, status: 404, error: 'Guia de origem não encontrada' }
       built = buildOpmeAnnexMessage({ annex: source, referencedGuideNumber: parent.provider_guide_number, now })
     } else {
-      const { data: children } = await supabase
+      const { data: children, error: childrenError } = await supabase
         .from('tiss_authorizations')
         .select(XML_ROW_COLUMNS)
         .eq('parent_id', row.id)
         .eq('account_id', accountId)
+      failIfRead('anexos vinculados', childrenError)
       const embedded = selectEmbeddedOpme((children ?? []) as unknown as XmlRow[])
       let opme: AuthorizationXmlSource<'opme_request'> | null = null
       if (embedded) {
