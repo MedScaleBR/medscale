@@ -125,7 +125,7 @@ export function parseRequestPatch<T extends AuthorizationType>(
   const specs: Record<string, FieldSpec> = REQUEST_FIELDS[type]
 
   for (const [key, value] of Object.entries(patch)) {
-    const spec = specs[key]
+    const spec = Object.hasOwn(specs, key) ? specs[key] : undefined
     if (spec) {
       const r = parseField(spec, value)
       if (!r.ok) return fail(r.error)
@@ -297,7 +297,9 @@ export function parseContentPatch(body: unknown): Result<ContentPatch> {
     }
   }
   if ('professional_phone' in body) {
-    const raw = typeof body.professional_phone === 'string' ? body.professional_phone.replace(/\D/g, '') : ''
+    const v = body.professional_phone
+    if (v !== null && v !== undefined && typeof v !== 'string') return fail('Telefone: valor inválido.')
+    const raw = typeof v === 'string' ? v.replace(/\D/g, '') : ''
     if (raw && !/^\d{10,11}$/.test(raw)) return fail('Telefone: DDD + número (10 ou 11 dígitos).')
     out.professional_phone = raw || null
   }

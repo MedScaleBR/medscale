@@ -238,3 +238,23 @@ describe('itens: nunca viola o CHECK do banco', () => {
     expect(proc.ok && proc.value[0]).toMatchObject({ manufacturer_option: null, requested_value_cents: null, anvisa_registration: null, manufacturer_reference: null, operating_authorization: null })
   })
 })
+
+describe('chaves hostis e tipos errados', () => {
+  it('chaves de protótipo no pedido viram campo desconhecido, não TypeError', () => {
+    const base = defaultRequestData('opme_request')
+    for (const patch of [{ constructor: 1 }, { toString: 1 }, JSON.parse('{"__proto__": 1}')]) {
+      const r = parseRequestPatch('opme_request', base, patch)
+      expect(r.ok).toBe(false)
+      expect(!r.ok && r.error).toMatch(/^Campo desconhecido:/)
+    }
+  })
+
+  it('telefone e e-mail não-string são recusados, não viram null', () => {
+    const at = '2026-10-05T13:00:00.123456+00:00'
+    expect(parseContentPatch({ expected_updated_at: at, professional_phone: 31988887777 }).ok).toBe(false)
+    expect(parseContentPatch({ expected_updated_at: at, professional_email: 5 }).ok).toBe(false)
+    expect(parseContentPatch({ expected_updated_at: at, professional_phone: null })).toEqual({
+      ok: true, value: { expected_updated_at: at, refresh: false, professional_phone: null },
+    })
+  })
+})
