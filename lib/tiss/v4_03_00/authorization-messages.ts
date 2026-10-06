@@ -6,6 +6,15 @@ import { buildSpSadtRequest } from './request-sp-sadt'
 import type { BuiltBatch } from '@/lib/billing/types'
 import type { AuthorizationXmlSource } from '@/lib/billing/authorizations/types'
 
+// Falha esperada dos montadores (mensagem sem itens). Qualquer outro erro é bug
+// e deve propagar.
+export class AuthorizationBuildError extends Error {
+  constructor(message: string) {
+    super(message)
+    this.name = 'AuthorizationBuildError'
+  }
+}
+
 // Solicitação de SP/SADT ou de Internação: prestadorParaOperadora/
 // solicitacaoProcedimento — uma solicitação por mensagem (o choice de
 // ctm_solicitacaoLote não repete). Com exatamente um OPME vinculado, ele vai
@@ -16,8 +25,8 @@ export function buildAuthorizationRequestMessage(input: {
   now: Date
 }): BuiltBatch {
   const { request } = input
-  if (request.items.length === 0) throw new Error('solicitação sem procedimentos')
-  if (input.embeddedOpme && input.embeddedOpme.items.length === 0) throw new Error('anexo OPME sem materiais')
+  if (request.items.length === 0) throw new AuthorizationBuildError('solicitação sem procedimentos')
+  if (input.embeddedOpme && input.embeddedOpme.items.length === 0) throw new AuthorizationBuildError('anexo OPME sem materiais')
   const opme = input.embeddedOpme
     ? { annex: input.embeddedOpme, referencedGuideNumber: request.providerGuideNumber }
     : null
@@ -43,7 +52,7 @@ export function buildOpmeAnnexMessage(input: {
   now: Date
 }): BuiltBatch {
   const { annex } = input
-  if (annex.items.length === 0) throw new Error('anexo OPME sem materiais')
+  if (annex.items.length === 0) throw new AuthorizationBuildError('anexo OPME sem materiais')
   return mensagemTISS(
     cabecalho({
       tipoTransacao: 'ENVIO_ANEXO',
