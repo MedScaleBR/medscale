@@ -493,3 +493,22 @@ describe('faturamento intacto', () => {
     expect(batchable.rows).toHaveLength(1)
   })
 })
+
+describe('espelho em schema.sql', () => {
+  it('o bloco está idêntico em schema.sql, antes do bloco authenticated do faturamento', async () => {
+    const begin = '-- BEGIN TISS AUTHORIZATIONS'
+    const end = '-- END TISS AUTHORIZATIONS'
+    const block = migration.slice(migration.indexOf(begin), migration.indexOf(end) + end.length)
+    const reset = await readFile('supabase/schema.sql', 'utf8')
+    const extra = await readFile('supabase/billing-authenticated.sql', 'utf8')
+    expect(migration.indexOf(begin)).toBeGreaterThan(-1)
+    expect(reset.includes(block)).toBe(true)
+    expect(reset.indexOf(block)).toBeLessThan(reset.indexOf('-- BEGIN BILLING AUTHENTICATED OPERATIONS'))
+    expect(reset.endsWith(extra)).toBe(true)
+    // O reset do schema apaga as tabelas novas antes de tiss_guides.
+    for (const table of ['tiss_authorization_events', 'tiss_authorization_items', 'tiss_authorizations']) {
+      expect(reset).toMatch(new RegExp(`drop table if exists[\\s\\S]*public\\.${table},[\\s\\S]*public\\.tiss_guides,`))
+    }
+    expect(reset).toContain('drop function if exists public.create_tiss_authorization(uuid, uuid, uuid, text, uuid, uuid, jsonb, text[], jsonb) cascade;')
+  })
+})
