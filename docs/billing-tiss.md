@@ -46,6 +46,8 @@ Permite montar, acompanhar e registrar a resposta de solicitações de SP/SADT, 
 
 ### Instalação
 
+- Ordem de implantação: 1) confirmar que `supabase/billing.sql` está aplicado e atualizado no banco; 2) rodar `supabase/tiss-authorizations.sql` (dev, depois prod); 3) só então fazer o deploy do código.
+- Por quê: a aba Autorizações agora é a aba padrão de `/faturamento`. Se o código for ao ar antes do SQL, essa aba mostra erro até o SQL ser aplicado; aplicar o SQL antes é inofensivo (só adiciona tabelas e funções novas).
 - Execute `supabase/tiss-authorizations.sql` no SQL Editor **depois** de `supabase/billing.sql`. Faça no dev e, separadamente, no prod.
 - O script é idempotente e aditivo: só cria tabelas, índices e funções novas, sem mexer em dados existentes.
 - `supabase/schema.sql` contém o mesmo bloco (entre `BEGIN TISS AUTHORIZATIONS` e `END TISS AUTHORIZATIONS`) para reconstrução de ambientes vazios.
