@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -24,12 +24,14 @@ export function NewAuthorizationDialog({
   open,
   onOpenChange,
   insurers,
+  professionals,
   defaults,
   onCreated,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   insurers: InsurerOption[]
+  professionals: ProfessionalOption[]
   defaults?: { type?: CreatableType; appointmentId?: string }
   onCreated: (id: string) => void
 }) {
@@ -39,6 +41,7 @@ export function NewAuthorizationDialog({
         {open && (
           <NewAuthorizationForm
             insurers={insurers}
+            professionals={professionals}
             defaults={defaults}
             onCancel={() => onOpenChange(false)}
             onCreated={(id) => {
@@ -54,11 +57,13 @@ export function NewAuthorizationDialog({
 
 function NewAuthorizationForm({
   insurers,
+  professionals,
   defaults,
   onCancel,
   onCreated,
 }: {
   insurers: InsurerOption[]
+  professionals: ProfessionalOption[]
   defaults?: { type?: CreatableType; appointmentId?: string }
   onCancel: () => void
   onCreated: (id: string) => void
@@ -69,34 +74,33 @@ function NewAuthorizationForm({
   const [insurances, setInsurances] = useState<PatientInsuranceRow[] | null>(null)
   // Valor do seletor de operadora: id da carteirinha ou, sem carteirinha, id da operadora.
   const [insuranceKey, setInsuranceKey] = useState('')
-  const [professionals, setProfessionals] = useState<ProfessionalOption[]>([])
+  const [insurancesFailed, setInsurancesFailed] = useState(false)
+  // Paciente da busca em andamento: resposta de um paciente anterior é ignorada.
+  const currentPatientId = useRef<string | null>(null)
   const [professionalId, setProfessionalId] = useState(NONE)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    let cancelled = false
-    fetch('/api/billing/authorizations/professionals')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => !cancelled && d && setProfessionals(d.professionals ?? []))
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [])
-
   const pickPatient = (p: PatientHit | null) => {
+    currentPatientId.current = p?.id ?? null
     setPatient(p)
     setInsuranceKey('')
     setInsurances(null)
+    setInsurancesFailed(false)
     if (!p) return
+    const isCurrent = () => currentPatientId.current === p.id
     fetch(`/api/billing/patients/${p.id}/insurances`)
-      .then((r) => (r.ok ? r.json() : []))
-      .then((rows: PatientInsuranceRow[]) => {
+      .then((r) => (r.ok ? r.json() : null))
+      .then((rows: PatientInsuranceRow[] | null) => {
+        if (!isCurrent()) return
+        if (rows === null) {
+          setInsurancesFailed(true)
+          return
+        }
         setInsurances(rows)
         if (rows.length > 0) setInsuranceKey(rows[0].id)
       })
-      .catch(() => setInsurances([]))
+      .catch(() => isCurrent() && setInsurancesFailed(true))
   }
 
   const hasCards = (insurances?.length ?? 0) > 0
@@ -184,6 +188,11 @@ function NewAuthorizationForm({
               </Label>
               <PatientSearch id="new_auth_patient" value={patient} onChange={pickPatient} />
             </div>
+            {patient && insurancesFailed && (
+              <p className="text-xs text-red-600">
+                Não foi possível carregar as carteirinhas deste paciente. Selecione o paciente de novo para tentar outra vez.
+              </p>
+            )}
             {patient && insurances !== null && (
               <div>
                 <Label className="text-xs">{hasCards ? 'Operadora / carteirinha' : 'Operadora'}</Label>

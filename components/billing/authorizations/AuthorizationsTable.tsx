@@ -12,6 +12,7 @@ import type { ProfessionalOption } from '@/lib/billing/authorizations/payload'
 import type { AuthorizationListRow, AuthorizationType } from '@/lib/billing/authorizations/types'
 import { formatDate } from '../GuideEditSheet'
 import type { InsurerOption } from '../PatientInsurances'
+import { AuthorizationEditSheet } from './AuthorizationEditSheet'
 import { AuthorizationStatusBadge } from './AuthorizationStatusBadge'
 import { NewAuthorizationDialog, formatProfessional } from './NewAuthorizationDialog'
 import { PatientSearch, type PatientHit } from './PatientSearch'
@@ -47,7 +48,7 @@ export function AuthorizationsTable({
   const [dialogDefaults, setDialogDefaults] = useState<DialogDefaults | undefined>(
     opensDialogFromUrl ? { type: initial?.newType, appointmentId: initial?.appointmentId } : undefined,
   )
-  // O sheet de edição entra na Tarefa 17; aqui só guardamos qual abrir.
+  // Autorização aberta no sheet de edição.
   const [selectedId, setSelectedId] = useState<string | null>(initial?.openId ?? null)
 
   // Parâmetros de URL valem uma vez: limpa a query para o refresh não reabrir.
@@ -265,14 +266,21 @@ export function AuthorizationsTable({
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         insurers={insurers}
+        professionals={professionals}
         defaults={dialogDefaults}
         onCreated={(id) => {
           setReloadKey((k) => k + 1)
           setSelectedId(id)
         }}
       />
-      {/* Tarefa 17: AuthorizationEditSheet com authorizationId={selectedId}. */}
-      <span hidden data-selected-authorization={selectedId ?? ''} />
+      <AuthorizationEditSheet
+        authorizationId={selectedId}
+        insurers={insurers}
+        professionals={professionals}
+        onOpenChange={(open) => !open && setSelectedId(null)}
+        onChanged={() => setReloadKey((k) => k + 1)}
+        onOpenAuthorization={setSelectedId}
+      />
     </div>
   )
 }
