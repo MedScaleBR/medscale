@@ -27,6 +27,10 @@ import { GET as list, POST as create } from '@/app/api/billing/authorizations/ro
 import { GET as professionals } from '@/app/api/billing/authorizations/professionals/route'
 import { GET as detail, PATCH as patch } from '@/app/api/billing/authorizations/[id]/route'
 import { PUT as putItems } from '@/app/api/billing/authorizations/[id]/items/route'
+import { POST as transition } from '@/app/api/billing/authorizations/[id]/transitions/route'
+import { POST as respond } from '@/app/api/billing/authorizations/[id]/response/route'
+import { GET as events } from '@/app/api/billing/authorizations/[id]/events/route'
+import { GET as xml } from '@/app/api/billing/authorizations/[id]/xml/route'
 
 const ADMIN = { userId: 'u1', accountId: 'acc1', workspaceId: 'w1', role: 'admin', modules: ['billing'] }
 const AT = '2026-10-05T13:00:00.123456+00:00'
@@ -244,5 +248,121 @@ describe('detalhe, conteúdo e itens', () => {
     detailMock(authorizationRow({ type: 'opme_request', payload: { ...fakeSpSadtRequest(1).payload, type: 'opme_request', request: { technical_justification: 'x', material_specification: null, observation: null } } }))
     const bad = await putItems(req('/api/billing/authorizations/a1/items', json({ expected_updated_at: AT, items: [{ table_code: '19', code: '7000', description: 'Placa', quantity_requested: 1 }] }, 'PUT')), ctx('a1'))
     expect(bad.status).toBe(400)
+  })
+})
+
+describe('status, resposta, histórico e XML', () => {
+  beforeEach(() => { g.session = { ...ADMIN } })
+
+  it('admin marca como enviada a partir de ready', async () => {
+    detailMock()
+    const res = await transition(req('/api/billing/authorizations/a1/transitions', json({ to: 'sent', expected_updated_at: AT })), ctx('a1'))
+    expect(res.status).toBe(200)
+    expect(rpcArgs('transition_tiss_authorization')).toEqual({ p_id: 'a1', p_to: 'sent', p_expected_updated_at: AT })
+  })
+
+  it('member não opera status, resposta, histórico nem XML (403 sem leitura nem RPC)', async () => {
+    detailMock(authorizationRow({ status: 'sent' }))
+    g.session = { ...ADMIN, role: 'member' }
+    expect((await transition(req('/x', json({ to: 'cancelled', expected_updated_at: AT })), ctx('a1'))).status).toBe(403)
+    expect((await respond(req('/x', json({ expected_updated_at: AT, status_code: '1' })), ctx('a1'))).status).toBe(403)
+    expect((await events(req('/x'), ctx('a1'))).status).toBe(403)
+    expect((await xml(req('/x'), ctx('a1'))).status).toBe(403)
+    expect(g.supabase.callsTo('tiss_authorizations')).toHaveLength(0)
+    expect(g.supabase.callsTo('tiss_authorization_events')).toHaveLength(0)
+    expect(g.supabase.rpc).not.toHaveBeenCalled()
+  })
+
+  it('owner cancela depois do envio; estado final → 409 sem RPC', async () => {
+    g.session = { ...ADMIN, role: 'owner' }
+    detailMock(authorizationRow({ status: 'sent' }))
+    expect((await transition(req('/x', json({ to: 'cancelled', expected_updated_at: AT })), ctx('a1'))).status).toBe(200)
+    detailMock(authorizationRow({ status: 'authorized' }))
+    expect((await transition(req('/x', json({ to: 'cancelled', expected_updated_at: AT })), ctx('a1'))).status).toBe(409)
+    expect(rpcArgs('transition_tiss_authorization')).toBeUndefined()
+  })
+
+  it('transição: destino inválido ou sem expected_updated_at → 400; enviar fora de ready → 409 sem RPC; conflito do RPC → 409', async () => {
+    detailMock()
+    expect((await transition(req('/x', json({ to: 'authorized', expected_updated_at: AT })), ctx('a1'))).status).toBe(400)
+    expect((await transition(req('/x', json({ to: 'sent' })), ctx('a1'))).status).toBe(400)
+    detailMock(authorizationRow({ status: 'sent' }))
+    expect((await transition(req('/x', json({ to: 'sent', expected_updated_at: AT })), ctx('a1'))).status).toBe(409)
+    expect(rpcArgs('transition_tiss_authorization')).toBeUndefined()
+    const m = detailMock()
+    m.rpc.mockImplementation(async () => ({ data: null, error: { message: 'tiss_authorization_changed' } }))
+    expect((await transition(req('/x', json({ to: 'sent', expected_updated_at: AT })), ctx('a1'))).status).toBe(409)
+  })
+
+  it('resposta: admin registra com itens; código 6 vale; correção em estado final (R1); antes do envio ou cancelada → 409', async () => {
+    detailMock(authorizationRow({ status: 'sent' }))
+    const ok = await respond(req('/x', json({ expected_updated_at: AT, status_code: '1', operator_guide_number: 'OP1', password: 'S1',
+      authorization_date: '2026-10-06', password_valid_until: '2026-11-05', items: [{ id: 'i1', quantity_authorized: 1, authorized_value_cents: null }] })), ctx('a1'))
+    expect(ok.status).toBe(200)
+    expect(rpcArgs('record_tiss_authorization_response')).toEqual({
+      p_id: 'a1', p_expected_updated_at: AT, p_status_code: '1', p_operator_guide_number: 'OP1', p_password: 'S1',
+      p_authorization_date: '2026-10-06', p_password_valid_until: '2026-11-05',
+      p_items: [{ id: 'i1', quantity_authorized: 1, authorized_value_cents: null }],
+    })
+    detailMock(authorizationRow({ status: 'sent' }))
+    expect((await respond(req('/x', json({ expected_updated_at: AT, status_code: '6' })), ctx('a1'))).status).toBe(200)
+    detailMock(authorizationRow({ status: 'partially_authorized' }))
+    expect((await respond(req('/x', json({ expected_updated_at: AT, status_code: '1' })), ctx('a1'))).status).toBe(200)
+    for (const status of ['draft', 'ready', 'cancelled']) {
+      detailMock(authorizationRow({ status }))
+      expect((await respond(req('/x', json({ expected_updated_at: AT, status_code: '1' })), ctx('a1'))).status).toBe(409)
+      expect(rpcArgs('record_tiss_authorization_response')).toBeUndefined()
+    }
+  })
+
+  it('resposta: item de outra autorização, valor em procedimento e quantidade acima da solicitada → 400 sem RPC', async () => {
+    const bodies = [
+      { items: [{ id: 'outro', quantity_authorized: 1, authorized_value_cents: null }] },
+      { items: [{ id: 'i1', quantity_authorized: 1, authorized_value_cents: 5000 }] },
+      { items: [{ id: 'i1', quantity_authorized: 2, authorized_value_cents: null }] },
+    ]
+    for (const extra of bodies) {
+      detailMock(authorizationRow({ status: 'sent' }))
+      const res = await respond(req('/x', json({ expected_updated_at: AT, status_code: '1', ...extra })), ctx('a1'))
+      expect(res.status).toBe(400)
+      expect(rpcArgs('record_tiss_authorization_response')).toBeUndefined()
+    }
+  })
+
+  it('resposta: item repetido ou sem as duas chaves → 400; autorização fora da account → 404', async () => {
+    detailMock(authorizationRow({ status: 'sent' }))
+    const dup = { id: 'i1', quantity_authorized: 1, authorized_value_cents: null }
+    expect((await respond(req('/x', json({ expected_updated_at: AT, status_code: '1', items: [dup, dup] })), ctx('a1'))).status).toBe(400)
+    expect((await respond(req('/x', json({ expected_updated_at: AT, status_code: '1', items: [{ id: 'i1', quantity_authorized: 1 }] })), ctx('a1'))).status).toBe(400)
+    setup({ tiss_authorizations: { select: { data: null } } })
+    expect((await respond(req('/x', json({ expected_updated_at: AT, status_code: '1' })), ctx('x'))).status).toBe(404)
+  })
+
+  it('histórico em ordem de gravação, preso à account', async () => {
+    setup({ tiss_authorization_events: { select: { data: [{ id: 1, event: 'created' }, { id: 2, event: 'ready' }] } } })
+    const res = await events(req('/x'), ctx('a1'))
+    expect(await res.json()).toEqual({ events: [{ id: 1, event: 'created' }, { id: 2, event: 'ready' }] })
+    const [call] = g.supabase.callsTo('tiss_authorization_events', 'select')
+    expect(call.filters).toEqual(expect.arrayContaining([['eq', 'authorization_id', 'a1'], ['eq', 'account_id', 'acc1'], ['order', 'id', { ascending: true }]]))
+  })
+
+  it('XML: rascunho → 409 JSON; pronta → arquivo ISO-8859-1 com nome e evento registrado', async () => {
+    detailMock(authorizationRow({ status: 'draft', missing_fields: ['items'] }))
+    expect((await xml(req('/x'), ctx('a1'))).status).toBe(409)
+    detailMock()
+    const res = await xml(req('/x'), ctx('a1'))
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('application/xml; charset=ISO-8859-1')
+    expect(res.headers.get('content-disposition')).toBe('attachment; filename="solicitacao-sp-sadt-41.xml"')
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    const body = Buffer.from(await res.arrayBuffer()).toString('latin1')
+    expect(body.startsWith('<?xml version="1.0" encoding="ISO-8859-1"?>')).toBe(true)
+    expect(body).toContain('<ans:tipoTransacao>SOLICITACAO_PROCEDIMENTOS</ans:tipoTransacao>')
+    expect(rpcArgs('log_tiss_authorization_xml')).toMatchObject({ p_id: 'a1', p_hash: expect.stringMatching(/^[a-f0-9]{32}$/) })
+  })
+
+  it('XML: autorização inexistente → 404', async () => {
+    setup({ tiss_authorizations: { select: { data: null } } })
+    expect((await xml(req('/x'), ctx('x'))).status).toBe(404)
   })
 })

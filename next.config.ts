@@ -13,6 +13,9 @@ const nextConfig: NextConfig = {
     // do disco em runtime (lib/tiss/validate.ts) — mesmo caso do medscale-site.
     '/api/billing/batches': ['./lib/tiss/schemas/**/*'],
     '/api/cron/tiss-batches': ['./lib/tiss/schemas/**/*'],
+    // XML de autorização sob demanda valida no mesmo XSD; a chave é um glob
+    // picomatch contra a rota dinâmica (/api/billing/authorizations/[id]/xml).
+    '/api/billing/authorizations/*/xml': ['./lib/tiss/schemas/**/*'],
   },
   // xmllint-wasm sobe um worker_thread com o libxml2 em WebAssembly a partir
   // de arquivos do próprio pacote (xmllint-node.js + xmllint.wasm) — precisa
