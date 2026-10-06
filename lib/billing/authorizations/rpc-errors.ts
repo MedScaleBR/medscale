@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server'
 import { INCOMPLETE_INSURER_ERROR } from '../insurer'
+import { isEditable } from './status'
+import type { AuthorizationStatus } from './types'
 
 // Mensagens fixas por chave de erro dos RPCs (raise exception '<chave>').
 // Nunca devolver error.message cru: pode citar valores (carteirinha etc.).
@@ -33,4 +35,11 @@ export function authorizationRpcError(error: { message?: string; code?: string }
   }
   console.error('[billing] erro inesperado em RPC de autorização', { code: error?.code ?? 'unknown' })
   return NextResponse.json({ error: 'Não foi possível concluir a operação.' }, { status: 500 })
+}
+
+// 409 antes de chamar o RPC quando o status já não permite editar conteúdo
+// ou itens (sent, final, cancelled). Mesma mensagem do RPC not_editable.
+export function readOnlyConflict(status: AuthorizationStatus): NextResponse | null {
+  if (isEditable(status)) return null
+  return NextResponse.json({ error: RPC_ERRORS.tiss_authorization_not_editable.error }, { status: 409 })
 }

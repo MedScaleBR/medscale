@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireBilling } from '@/lib/billing/access'
-import { isDate } from '@/lib/billing/validation'
 import { AUTHORIZATION_LIST_COLUMNS } from '@/lib/billing/authorizations/constants'
 import { computeAuthorizationMissing } from '@/lib/billing/authorizations/missing'
 import { authorizationRpcError } from '@/lib/billing/authorizations/rpc-errors'
@@ -10,6 +9,12 @@ import { isAuthorizationStatus, isAuthorizationType } from '@/lib/billing/author
 import { parseCreateBody } from '@/lib/billing/authorizations/validation'
 
 const PAGE_SIZE = 50
+// Data de calendário real (2026-02-30 e 2026-99-99 não passam).
+function isRealDate(v: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return false
+  const d = new Date(`${v}T00:00:00Z`)
+  return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v
+}
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 // Só owner/admin com o módulo billing ativo na account (P1/P2, como guias e
@@ -21,7 +26,13 @@ export async function GET(req: NextRequest) {
   const { session } = result
 
   const sp = req.nextUrl.searchParams
-  const page = Math.max(1, Number(sp.get('page')) || 1)
+  const rawPage = Math.floor(Number(sp.get('page')))
+  const page = Number.isFinite(rawPage) ? Math.min(10000, Math.max(1, rawPage)) : 1
+  const from = sp.get('from')
+  const to = sp.get('to')
+  if ((from && !isRealDate(from)) || (to && !isRealDate(to))) {
+    return NextResponse.json({ error: 'Período inválido.' }, { status: 400 })
+  }
   const statuses = (sp.get('status') ?? '').split(',').filter(isAuthorizationStatus)
   const type = sp.get('type')
 
@@ -44,10 +55,8 @@ export async function GET(req: NextRequest) {
   if (professionalId && UUID.test(professionalId)) {
     query = query.filter('payload->professional->>id', 'eq', professionalId)
   }
-  const from = sp.get('from')
-  const to = sp.get('to')
-  if (from && isDate(from)) query = query.gte('requested_at', from)
-  if (to && isDate(to)) query = query.lte('requested_at', to)
+  if (from) query = query.gte('requested_at', from)
+  if (to) query = query.lte('requested_at', to)
 
   const { data, error, count } = await query
   if (error) return NextResponse.json({ error: 'Não foi possível carregar as autorizações.' }, { status: 500 })
