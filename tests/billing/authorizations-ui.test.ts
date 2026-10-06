@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   buildResponseItems, buildRequestPatch, fileNameFromDisposition, phoneDigits,
 } from '@/components/billing/authorizations/sheet-helpers'
+import { parseContentPatch, parseRequestPatch } from '@/lib/billing/authorizations/validation'
+import type { OpmeRequestData } from '@/lib/billing/authorizations/types'
 import type { AuthorizationItem, HospitalizationRequestData, SpSadtRequestData } from '@/lib/billing/authorizations/types'
 
 const sp: SpSadtRequestData = {
@@ -111,5 +113,37 @@ describe('phoneDigits', () => {
   it('strips formatting (st_texto11 keeps digits only)', () => {
     expect(phoneDigits('(11) 98765-4321')).toBe('11987654321')
     expect(phoneDigits('  ')).toBeNull()
+  })
+})
+
+describe('buildRequestPatch output is accepted by the server validators', () => {
+  const opme: OpmeRequestData = { technical_justification: null, material_specification: null, observation: null }
+
+  it('sp_sadt_request', () => {
+    const patch = buildRequestPatch(sp, {
+      ...sp, clinical_indication: ' dor ', character: '2', executor: { operator_code: '123', cnes: '1234567' },
+    })
+    expect(patch).not.toBeNull()
+    expect(parseRequestPatch('sp_sadt_request', sp, patch).ok).toBe(true)
+    expect(parseContentPatch({ expected_updated_at: '2026-10-06T10:00:00.123456+00:00', request: patch }).ok).toBe(true)
+  })
+
+  it('hospitalization_request', () => {
+    const patch = buildRequestPatch(hosp, {
+      ...hosp, hospital: { operator_code: '99', name: 'Hospital X', suggested_date: '2026-11-01' },
+      daily_count: 3, cid10: ['K359', 'j18.9'], opme_expected: true, clinical_indication: 'apendicite',
+    })
+    expect(patch).not.toBeNull()
+    expect(parseRequestPatch('hospitalization_request', hosp, patch).ok).toBe(true)
+    expect(parseContentPatch({ expected_updated_at: '2026-10-06T10:00:00.123456+00:00', request: patch }).ok).toBe(true)
+  })
+
+  it('opme_request', () => {
+    const patch = buildRequestPatch(opme, {
+      technical_justification: ' necessário ', material_specification: 'parafuso', observation: '  ',
+    })
+    expect(patch).toEqual({ technical_justification: 'necessário', material_specification: 'parafuso' })
+    expect(parseRequestPatch('opme_request', opme, patch).ok).toBe(true)
+    expect(parseContentPatch({ expected_updated_at: '2026-10-06T10:00:00.123456+00:00', request: patch }).ok).toBe(true)
   })
 })

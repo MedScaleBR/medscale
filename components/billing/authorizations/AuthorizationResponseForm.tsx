@@ -20,9 +20,11 @@ const AWAITING: readonly AuthorizationStatus[] = ['sent', 'under_review', 'pendi
 // só leitura.
 export function AuthorizationResponseForm({
   detail,
+  disabled = false,
   onSubmit,
 }: {
   detail: AuthorizationDetail
+  disabled?: boolean
   onSubmit: (body: Omit<ResponseInput, 'expected_updated_at'>) => Promise<void>
 }) {
   const a = detail.authorization
@@ -32,7 +34,7 @@ export function AuthorizationResponseForm({
 
   if (!recordable && !(a.status === 'cancelled' && a.responded_at)) return null
   if (editing && recordable) {
-    return <ResponseEditor detail={detail} onSubmit={onSubmit} onCancel={awaiting ? undefined : () => setEditing(false)} />
+    return <ResponseEditor detail={detail} disabled={disabled} onSubmit={onSubmit} onCancel={awaiting ? undefined : () => setEditing(false)} />
   }
   return (
     <div className="space-y-2">
@@ -67,10 +69,12 @@ function ResponseSummary({ detail }: { detail: AuthorizationDetail }) {
 
 function ResponseEditor({
   detail,
+  disabled,
   onSubmit,
   onCancel,
 }: {
   detail: AuthorizationDetail
+  disabled: boolean
   onSubmit: (body: Omit<ResponseInput, 'expected_updated_at'>) => Promise<void>
   onCancel?: () => void
 }) {
@@ -217,7 +221,7 @@ function ResponseEditor({
             Descartar
           </Button>
         )}
-        <Button size="sm" disabled={saving} onClick={submit}>
+        <Button size="sm" disabled={saving || disabled} onClick={submit}>
           {saving ? 'Registrando…' : 'Registrar resposta'}
         </Button>
       </div>

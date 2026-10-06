@@ -97,17 +97,19 @@ export function AuthorizationItemsEditor({
   insurerId,
   items,
   editable,
+  disabled = false,
   onSave,
 }: {
   type: AuthorizationType
   insurerId: string
   items: AuthorizationItem[]
   editable: boolean
+  disabled?: boolean
   onSave: (items: AuthorizationItemInput[]) => Promise<void>
 }) {
   const opme = type === 'opme_request'
   if (!editable) return <ItemsReadOnly items={items} opme={opme} />
-  return <ItemsForm opme={opme} insurerId={insurerId} items={items} onSave={onSave} />
+  return <ItemsForm opme={opme} insurerId={insurerId} items={items} disabled={disabled} onSave={onSave} />
 }
 
 function ItemsReadOnly({ items, opme }: { items: AuthorizationItem[]; opme: boolean }) {
@@ -166,11 +168,13 @@ function ItemsForm({
   opme,
   insurerId,
   items,
+  disabled,
   onSave,
 }: {
   opme: boolean
   insurerId: string
   items: AuthorizationItem[]
+  disabled: boolean
   onSave: (items: AuthorizationItemInput[]) => Promise<void>
 }) {
   const [rows, setRows] = useState<Row[]>(() => items.map(toRow))
@@ -368,7 +372,7 @@ function ItemsForm({
         {!opme && catalogFailed && (
           <span className="text-xs text-red-600">Não foi possível carregar o catálogo de procedimentos.</span>
         )}
-        <Button size="sm" className="ml-auto" disabled={saving} onClick={save}>
+        <Button size="sm" className="ml-auto" disabled={saving || disabled} onClick={save}>
           {saving ? 'Salvando…' : 'Salvar itens'}
         </Button>
       </div>

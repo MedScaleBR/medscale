@@ -18,7 +18,6 @@ import type {
   AnyAuthorizationPayload, AuthorizationDetail, AuthorizationMissingField, AuthorizationType, RequestDataByType,
 } from '@/lib/billing/authorizations/types'
 import { friendlyErrorMessage } from '@/lib/friendly-errors'
-import { formatDate } from '../GuideEditSheet'
 import type { InsurerOption, PatientInsuranceRow } from '../PatientInsurances'
 import { AuthorizationItemsEditor } from './AuthorizationItemsEditor'
 import { AuthorizationRequestFields, MISSING_HIGHLIGHT } from './AuthorizationRequestFields'
@@ -105,6 +104,12 @@ export function AuthorizationEditSheet({
     </Sheet>
   )
 }
+
+const isMissingField = (f: string): f is AuthorizationMissingField => Object.hasOwn(AUTHORIZATION_MISSING_LABELS, f)
+
+// Data do envio no fuso da clínica (como o histórico), não o dia UTC.
+const formatSentAt = (iso: string) =>
+  new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })
 
 function AuthorizationEditor({
   id,
@@ -267,7 +272,7 @@ function AuthorizationEditor({
 
   const a = detail.authorization
   const editable = isEditable(a.status)
-  const missing = editable ? (a.missing_fields as AuthorizationMissingField[]) : []
+  const missing = editable ? a.missing_fields.filter(isMissingField) : []
   const settingsMissing = AUTHORIZATION_SETTINGS_FIELDS.filter((f) => missing.includes(f))
   const activeOpme = detail.children.filter((c) => c.status !== 'cancelled')
   const parent = detail.parent
@@ -293,7 +298,7 @@ function AuthorizationEditor({
           {a.sent_at && (
             <>
               <dt className="text-gray-400">Enviada em</dt>
-              <dd className="text-gray-900">{formatDate(a.sent_at.slice(0, 10))}</dd>
+              <dd className="text-gray-900">{formatSentAt(a.sent_at)}</dd>
             </>
           )}
         </dl>
@@ -399,6 +404,7 @@ function AuthorizationEditor({
             insurerId={a.insurer_id}
             items={detail.items}
             editable={editable}
+            disabled={busy !== null}
             onSave={async (items) => {
               await mutate('items', '/items', 'PUT', { items })
             }}
@@ -410,6 +416,7 @@ function AuthorizationEditor({
             <AuthorizationResponseForm
               key={a.updated_at}
               detail={detail}
+              disabled={busy !== null}
               onSubmit={async (body) => {
                 await mutate('response', '/response', 'POST', body)
               }}
