@@ -441,6 +441,29 @@ describe('RPCs de autorização — edição e máquina de estados', () => {
       .toEqual([{ quantity_authorized: 1, authorized_value_cents: 120000 }])
   })
 
+  it('resposta recusa quantidade autorizada maior que a solicitada', async () => {
+    await asUser(ids.owner)
+    const a = await create()
+    await transition(a.id, 'sent')
+    await asSuperuser()
+    const item = (await db.query<{ id: string; quantity_requested: number }>(
+      'select id, quantity_requested from public.tiss_authorization_items where authorization_id = $1', [a.id])).rows[0]
+    await asUser(ids.owner)
+    await expect(respond(a.id, '1', [{ id: item.id, quantity_authorized: item.quantity_requested + 1 }]))
+      .rejects.toThrow('tiss_authorization_quantity')
+    await asSuperuser()
+    expect((await db.query<{ status: string; quantity_authorized: number | null }>(
+      `select a.status, it.quantity_authorized from public.tiss_authorizations a
+       join public.tiss_authorization_items it on it.authorization_id = a.id where it.id = $1`, [item.id])).rows)
+      .toEqual([{ status: 'sent', quantity_authorized: null }])
+    await asUser(ids.owner)
+    await respond(a.id, '1', [{ id: item.id, quantity_authorized: item.quantity_requested }])
+    await asSuperuser()
+    expect((await db.query<{ quantity_authorized: number }>(
+      'select quantity_authorized from public.tiss_authorization_items where id = $1', [item.id])).rows)
+      .toEqual([{ quantity_authorized: item.quantity_requested }])
+  })
+
   it('resposta nunca a partir de draft, ready ou cancelled (R1 só reabre os finais)', async () => {
     await asUser(ids.owner)
     const draft = await create({ items: [] })

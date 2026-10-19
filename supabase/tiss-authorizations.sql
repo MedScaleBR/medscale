@@ -590,6 +590,16 @@ begin
   ) then
     raise exception 'tiss_authorization_item_not_found' using errcode = '22023';
   end if;
+  if exists (
+    select 1
+    from jsonb_array_elements(v_items) x
+    join public.tiss_authorization_items it
+      on it.authorization_id = a.id and it.id::text = x ->> 'id'
+    where (x ->> 'quantity_authorized') is not null
+      and (x ->> 'quantity_authorized')::int > it.quantity_requested
+  ) then
+    raise exception 'tiss_authorization_quantity' using errcode = '22023';
+  end if;
 
   update public.tiss_authorization_items it set
     quantity_authorized    = (x.item ->> 'quantity_authorized')::int,

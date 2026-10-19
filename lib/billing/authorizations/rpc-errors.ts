@@ -23,6 +23,7 @@ const RPC_ERRORS: Record<string, { status: number; error: string }> = {
   tiss_authorization_appointment_mismatch: { status: 400, error: 'O agendamento não é deste paciente ou desta unidade.' },
   tiss_authorization_item_kind: { status: 400, error: 'Tipo de item incompatível com a autorização.' },
   tiss_authorization_item_not_found: { status: 400, error: 'Item da resposta não pertence a esta autorização.' },
+  tiss_authorization_quantity: { status: 400, error: 'Quantidade autorizada maior que a solicitada.' },
   tiss_authorization_invalid: { status: 400, error: 'Dados inválidos.' },
   tiss_insurer_incomplete: { status: 400, error: INCOMPLETE_INSURER_ERROR },
 }
