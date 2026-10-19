@@ -107,7 +107,9 @@ export async function generateAuthorizationXml(
         .eq('parent_id', row.id)
         .eq('account_id', accountId)
       failIfRead('anexos vinculados', childrenError)
-      const embedded = selectEmbeddedOpme((children ?? []) as unknown as XmlRow[])
+      const childRows = (children ?? []) as unknown as XmlRow[]
+      const embedded = selectEmbeddedOpme(childRows)
+      const hasActiveOpme = childRows.some((child) => child.status !== 'cancelled')
       let opme: AuthorizationXmlSource<'opme_request'> | null = null
       if (embedded) {
         if (embedded.missing_fields.length > 0) {
@@ -117,7 +119,7 @@ export async function generateAuthorizationXml(
         if (child.type !== 'opme_request') return { ok: false, status: 409, error: INCOMPLETE }
         opme = child
       }
-      built = buildAuthorizationRequestMessage({ request: source, embeddedOpme: opme, now })
+      built = buildAuthorizationRequestMessage({ request: source, embeddedOpme: opme, hasActiveOpme, now })
     }
   } catch (err) {
     // Só a falha conhecida dos montadores (sem itens, já coberta por

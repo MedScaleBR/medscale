@@ -17,6 +17,7 @@ import type { AuthorizationXmlSource } from '@/lib/billing/authorizations/types'
 export function buildHospitalizationRequest(
   source: AuthorizationXmlSource<'hospitalization_request'>,
   opme: OpmeAnnexInput | null,
+  hasActiveOpme = false,
 ): XmlNode {
   const { payload } = source
   const r = payload.request
@@ -40,8 +41,9 @@ export function buildHospitalizationRequest(
       el('tipoInternacao', r.hospitalization_type),
       el('regimeInternacao', r.regime),
       el('qtDiariasSolicitadas', r.daily_count === null ? '' : String(r.daily_count)),
-      // Com anexo OPME embutido, a previsão de OPME é necessariamente "S".
-      el('indicadorOPME', r.opme_expected || opme ? 'S' : 'N'),
+      // S se a previsão foi marcada ou se existe ao menos um OPME não
+      // cancelado — embutido nesta mensagem ou enviado à parte.
+      el('indicadorOPME', r.opme_expected || opme || hasActiveOpme ? 'S' : 'N'),
       el('indicadorQuimio', r.chemo_expected ? 'S' : 'N'),
       el('indicacaoClinica', clip(r.clinical_indication, 500)),
     ]),

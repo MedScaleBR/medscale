@@ -6,7 +6,7 @@ import { generateAuthorizationXml, selectEmbeddedOpme } from '@/lib/billing/auth
 import { authorizationRpcError } from '@/lib/billing/authorizations/rpc-errors'
 import { applyContentPatch, refreshPayload } from '@/lib/billing/authorizations/edit'
 import { resolveCreateContext } from '@/lib/billing/authorizations/sources'
-import { AUTH_SOURCES, fakeOpmeAnnex, fakeSpSadtRequest, opmeItem, procedureItem } from '../tiss/authorization-fixtures'
+import { AUTH_SOURCES, fakeHospitalizationRequest, fakeOpmeAnnex, fakeSpSadtRequest, opmeItem, procedureItem } from '../tiss/authorization-fixtures'
 
 const asClient = (m: ReturnType<typeof createSupabaseMock>) => m.client as unknown as SupabaseClient<Database>
 const NOW = new Date('2026-10-05T15:00:00Z')
@@ -57,6 +57,31 @@ describe('generateAuthorizationXml', () => {
     expect(r.fileName).toBe('solicitacao-sp-sadt-41.xml')
     expect(m.rpc).toHaveBeenCalledWith('log_tiss_authorization_xml', { p_id: 'a41', p_hash: r.hash })
     expect(filterValue(m.callsTo('tiss_authorizations')[0], 'eq', 'account_id')).toBe('acc1')
+  })
+
+  it('internação com OPME ativo não embutido marca indicadorOPME = S sem o checkbox', async () => {
+    const hosp = fakeHospitalizationRequest()
+    hosp.payload.request.opme_expected = false
+    const two = xmlMock({
+      main: row(hosp),
+      children: [
+        row(fakeOpmeAnnex(), { parent_id: 'a42' }),
+        row(fakeOpmeAnnex(), { id: 'a44', provider_guide_number: '44', parent_id: 'a42' }),
+      ],
+    })
+    const r = await generateAuthorizationXml(asClient(two), 'acc1', 'a42', NOW)
+    if (!r.ok) throw new Error(JSON.stringify(r))
+    const xml = r.xml.toString('latin1')
+    expect(xml).toContain('<ans:indicadorOPME>S</ans:indicadorOPME>')
+    expect(xml).not.toContain('anexoClinico')
+
+    const onlyCancelled = xmlMock({
+      main: row(hosp),
+      children: [row(fakeOpmeAnnex(), { status: 'cancelled', parent_id: 'a42' })],
+    })
+    const cancelled = await generateAuthorizationXml(asClient(onlyCancelled), 'acc1', 'a42', NOW)
+    if (!cancelled.ok) throw new Error(JSON.stringify(cancelled))
+    expect(cancelled.xml.toString('latin1')).toContain('<ans:indicadorOPME>N</ans:indicadorOPME>')
   })
 
   it('dois OPME ativos → não embute; um OPME incompleto → 409', async () => {

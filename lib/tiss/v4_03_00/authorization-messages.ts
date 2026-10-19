@@ -22,6 +22,8 @@ export class AuthorizationBuildError extends Error {
 export function buildAuthorizationRequestMessage(input: {
   request: AuthorizationXmlSource<'sp_sadt_request'> | AuthorizationXmlSource<'hospitalization_request'>
   embeddedOpme: AuthorizationXmlSource<'opme_request'> | null
+  // OPME não cancelado que não cabe nesta mensagem (dois ou mais anexos).
+  hasActiveOpme?: boolean
   now: Date
 }): BuiltBatch {
   const { request } = input
@@ -32,7 +34,7 @@ export function buildAuthorizationRequestMessage(input: {
     : null
   const body = request.type === 'sp_sadt_request'
     ? buildSpSadtRequest(request, opme)
-    : buildHospitalizationRequest(request, opme)
+    : buildHospitalizationRequest(request, opme, input.hasActiveOpme ?? false)
   return mensagemTISS(
     cabecalho({
       tipoTransacao: 'SOLICITACAO_PROCEDIMENTOS',

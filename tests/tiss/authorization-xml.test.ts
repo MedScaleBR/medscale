@@ -13,8 +13,11 @@ const EMPTY_ELEMENT = /<ans:\w+\/>|<ans:(\w+)><\/ans:\1>/
 const opmeXml = (annex = fakeOpmeAnnex()) => buildOpmeAnnexMessage({ annex, referencedGuideNumber: '41', now: FIXED_NOW })
 
 type RequestSource = AuthorizationXmlSource<'sp_sadt_request'> | AuthorizationXmlSource<'hospitalization_request'>
-const requestXml = (request: RequestSource, embeddedOpme: AuthorizationXmlSource<'opme_request'> | null = null) =>
-  buildAuthorizationRequestMessage({ request, embeddedOpme, now: FIXED_NOW })
+const requestXml = (
+  request: RequestSource,
+  embeddedOpme: AuthorizationXmlSource<'opme_request'> | null = null,
+  hasActiveOpme = false,
+) => buildAuthorizationRequestMessage({ request, embeddedOpme, hasActiveOpme, now: FIXED_NOW })
 
 describe('helpers de texto das solicitações', () => {
   it('clip converte para Latin-1 antes de cortar e optText omite vazio', () => {
@@ -288,6 +291,16 @@ describe('OPME embutido em anexoClinico/solicitacaoOPME', () => {
     )
     expect(t).toContain('</ans:solicitacaoOPME></ans:anexoClinico><ans:observacao>Com OPME</ans:observacao>')
     expect(t).not.toContain('anexoSolicitacaoOPME')
+  })
+
+  it('Internação: indicadorOPME = S com OPME ativo não embutido, mesmo sem o checkbox', async () => {
+    const req = fakeHospitalizationRequest(1)
+    req.payload.request.opme_expected = false
+    const { xml } = requestXml(req, null, true)
+    const t = text(xml)
+    expect(t).toContain('<ans:indicadorOPME>S</ans:indicadorOPME>')
+    expect(t).not.toContain('solicitacaoOPME')
+    expect((await validate(xml)).errors).toEqual([])
   })
 
   it('Internação: anexo por último e indicadorOPME = S mesmo se não marcado', async () => {
