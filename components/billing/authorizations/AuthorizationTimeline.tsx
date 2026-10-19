@@ -21,8 +21,8 @@ const formatDateTime = (iso: string) =>
   new Date(iso).toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', dateStyle: 'short', timeStyle: 'short' })
 
 // Histórico. O autor só tem nome quando é um dos profissionais listados
-// (profiles é privado por RLS); senão "Equipe". `data` não é exibido (a
-// resposta guarda a senha da operadora).
+// (profiles é privado por RLS); senão "Equipe". O payload do evento (senha,
+// número, hash) não vem nesta resposta.
 export function AuthorizationTimeline({
   authorizationId,
   professionals,

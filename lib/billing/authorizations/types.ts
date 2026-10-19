@@ -180,6 +180,5 @@ export interface AuthorizationEventRow {
   from_status: AuthorizationStatus | null
   to_status: AuthorizationStatus | null
   actor_id: string | null
-  data: Record<string, unknown>
   created_at: string
 }

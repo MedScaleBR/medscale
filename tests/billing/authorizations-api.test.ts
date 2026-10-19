@@ -366,7 +366,12 @@ describe('status, resposta, histórico e XML', () => {
     const res = await events(req('/x'), ctx('a1'))
     expect(await res.json()).toEqual({ events: [{ id: 1, event: 'created' }, { id: 2, event: 'ready' }] })
     const [call] = g.supabase.callsTo('tiss_authorization_events', 'select')
-    expect(call.filters).toEqual(expect.arrayContaining([['eq', 'authorization_id', 'a1'], ['eq', 'account_id', 'acc1'], ['order', 'id', { ascending: true }]]))
+    expect(call.filters).toEqual(expect.arrayContaining([
+      ['select', 'id, event, from_status, to_status, actor_id, created_at'],
+      ['eq', 'authorization_id', 'a1'],
+      ['eq', 'account_id', 'acc1'],
+      ['order', 'id', { ascending: true }],
+    ]))
   })
 
   it('XML: rascunho → 409 JSON; pronta → arquivo ISO-8859-1 com nome e evento registrado', async () => {
