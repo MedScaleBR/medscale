@@ -132,6 +132,7 @@ describe('erros de RPC', () => {
     expect(authorizationRpcError({ message: 'tiss_authorization_forbidden', code: '42501' }).status).toBe(403)
     expect(authorizationRpcError({ message: 'billing_forbidden', code: '42501' }).status).toBe(403)
     expect(authorizationRpcError({ message: 'tiss_authorization_invalid_transition' }).status).toBe(409)
+    expect(authorizationRpcError({ message: 'tiss_authorization_cancelled' }).status).toBe(409)
     const unknown = authorizationRpcError({ message: 'duplicate key value violates ... FICT-CARD' })
     expect(unknown.status).toBe(500)
     expect(JSON.stringify(await unknown.json())).not.toContain('FICT-CARD')

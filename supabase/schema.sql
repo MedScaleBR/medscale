@@ -2805,6 +2805,9 @@ begin
   if a.status = 'draft' then
     raise exception 'tiss_authorization_incomplete' using errcode = 'P0001';
   end if;
+  if a.status = 'cancelled' then
+    raise exception 'tiss_authorization_cancelled' using errcode = 'P0001';
+  end if;
   perform public.tiss_authorization_log(a.id, 'xml_generated', null, null, jsonb_build_object('hash', p_hash));
 end; $$;
 

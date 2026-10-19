@@ -16,6 +16,7 @@ const RPC_ERRORS: Record<string, { status: number; error: string }> = {
   tiss_authorization_changed: { status: 409, error: 'A autorização foi alterada por outra pessoa. Recarregue e tente de novo.' },
   tiss_authorization_invalid_transition: { status: 409, error: 'Mudança de status não permitida.' },
   tiss_authorization_incomplete: { status: 409, error: 'Complete os campos pendentes antes de gerar o XML.' },
+  tiss_authorization_cancelled: { status: 409, error: 'Autorização cancelada não gera XML.' },
   tiss_authorization_payload_mismatch: { status: 409, error: 'Os dados da operadora mudaram. Use "Recarregar dados".' },
   tiss_authorization_parent_invalid: { status: 400, error: 'Guia de origem inválida para o anexo OPME.' },
   tiss_authorization_account_mismatch: { status: 400, error: 'Paciente, operadora ou unidade não pertencem a esta conta.' },

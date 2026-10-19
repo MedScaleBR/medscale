@@ -463,6 +463,14 @@ describe('RPCs de autorização — edição e máquina de estados', () => {
     expect((await events(a.id)).map((e) => e.event)).toEqual(['created', 'xml_generated'])
   })
 
+  it('registro de XML gerado recusa autorização cancelada', async () => {
+    await asUser(ids.owner)
+    const a = await create()
+    await transition(a.id, 'cancelled')
+    await expect(db.query('select public.log_tiss_authorization_xml($1::uuid, $2)', [a.id, 'b'.repeat(32)]))
+      .rejects.toThrow('tiss_authorization_cancelled')
+  })
+
   it('usuário de outra account (mesmo sendo owner lá) não opera a autorização nem pelo RPC', async () => {
     await asUser(ids.owner)
     const a = await create()
