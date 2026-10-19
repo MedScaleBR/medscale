@@ -156,10 +156,16 @@ describe('catalogItemDescription', () => {
 })
 
 describe('opmeEmbedHint', () => {
-  it('hints only with exactly one active OPME (parent) or on the OPME itself', () => {
+  it('no pai, só afirma o embutido quando há exatamente um OPME ativo', () => {
     expect(opmeEmbedHint(1, false)).toContain('embutido no XML desta solicitação')
     expect(opmeEmbedHint(0, false)).toBeNull()
     expect(opmeEmbedHint(2, false)).toBeNull()
-    expect(opmeEmbedHint(0, true)).toContain('solicitação de origem')
+  })
+
+  it('no próprio OPME, não afirma que vai embutido — isso só vale se for o único ativo', () => {
+    const hint = opmeEmbedHint(0, true)
+    expect(hint).toContain('único OPME ativo')
+    expect(hint).toContain('baixe o XML deste anexo')
+    expect(hint).not.toBe('Este anexo vai embutido no XML da solicitação de origem.')
   })
 })

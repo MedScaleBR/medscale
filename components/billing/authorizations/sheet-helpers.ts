@@ -88,9 +88,14 @@ export function phoneDigits(v: string): string | null {
 // A descrição do catálogo pode passar do limite do XSD (150): cortar ao pré-preencher.
 export const catalogItemDescription = (description: string): string => description.slice(0, 150)
 
-// Dica sobre o anexo OPME: com exatamente um ativo ele vai embutido no XML do pai.
+// Dica sobre o anexo OPME. No pai, `activeOpmeCount` é o número de anexos
+// ativos. No próprio OPME a contagem não está disponível (os filhos dele são
+// sempre zero), então a frase não pode afirmar que ele vai embutido: isso só
+// acontece quando ele é o único ativo (selectEmbeddedOpme).
 export function opmeEmbedHint(activeOpmeCount: number, isOpme: boolean): string | null {
-  if (isOpme) return 'Este anexo vai embutido no XML da solicitação de origem.'
+  if (isOpme) {
+    return 'Este anexo só vai embutido no XML da solicitação de origem se for o único OPME ativo. Com mais de um, baixe o XML deste anexo.'
+  }
   if (activeOpmeCount === 1) return 'Este anexo vai embutido no XML desta solicitação.'
   return null
 }
