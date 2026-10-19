@@ -98,6 +98,7 @@ drop function if exists public.mark_tiss_batch_sent(uuid) cascade;
 drop function if exists public.enforce_tiss_authorization() cascade;
 drop function if exists public.enforce_tiss_authorization_item() cascade;
 drop function if exists public.enforce_tiss_authorization_event() cascade;
+drop function if exists public.tiss_authorization_assert_ready(text, jsonb, integer) cascade;
 drop function if exists public.tiss_authorization_require_billing(uuid) cascade;
 drop function if exists public.tiss_authorization_lock(uuid) cascade;
 drop function if exists public.tiss_authorization_write_items(uuid, jsonb) cascade;
@@ -2521,11 +2522,46 @@ begin
   ), '[]'::jsonb);
 end; $$;
 
+-- Recusa marcar ready se faltarem itens ou os campos que o XSD exige e o
+-- Next já lista em missing_fields. Presença apenas: formato continua no XSD.
+-- Não roda em draft — rascunho incompleto continua podendo ser salvo.
+create or replace function public.tiss_authorization_assert_ready(p_type text, p_payload jsonb, p_item_count integer)
+returns void language plpgsql immutable set search_path = '' as $$
+begin
+  if p_item_count is null or p_item_count <= 0
+     or nullif(btrim(p_payload #>> '{beneficiary,card_number}'), '') is null then
+    raise exception 'tiss_authorization_not_ready' using errcode = 'P0001';
+  end if;
+  if p_type = 'opme_request' then
+    if nullif(btrim(p_payload #>> '{professional,name}'), '') is null
+       or nullif(btrim(p_payload #>> '{professional,phone}'), '') is null
+       or nullif(btrim(p_payload #>> '{request,technical_justification}'), '') is null then
+      raise exception 'tiss_authorization_not_ready' using errcode = 'P0001';
+    end if;
+    return;
+  end if;
+  if nullif(btrim(p_payload #>> '{professional,crm}'), '') is null
+     or nullif(btrim(p_payload #>> '{professional,crm_uf}'), '') is null
+     or nullif(btrim(p_payload #>> '{professional,cbo_code}'), '') is null
+     or (p_type = 'sp_sadt_request' and nullif(btrim(p_payload #>> '{provider,legal_name}'), '') is null) then
+    raise exception 'tiss_authorization_not_ready' using errcode = 'P0001';
+  end if;
+  if p_type = 'hospitalization_request' and (
+       nullif(btrim(p_payload #>> '{request,clinical_indication}'), '') is null
+       or nullif(btrim(p_payload #>> '{request,hospital,operator_code}'), '') is null
+       or nullif(btrim(p_payload #>> '{request,hospital,name}'), '') is null
+       or nullif(btrim(p_payload #>> '{request,hospital,suggested_date}'), '') is null
+       or (p_payload #>> '{request,daily_count}') is null
+     ) then
+    raise exception 'tiss_authorization_not_ready' using errcode = 'P0001';
+  end if;
+end; $$;
+
 -- Cria a solicitação já numerada por next_tiss_number(insurer, 'guide') — o
 -- mesmo contador das guias (D4/P4). payload e missing_fields vêm do servidor
 -- Next (lib/billing/authorizations); aqui só se garante o que não pode ser
 -- forjado: owner/admin, módulo, operadora TISS completa, payload da mesma
--- operadora, pai do OPME, draft sem itens.
+-- operadora, pai do OPME, draft sem itens e ready sem o essencial.
 create or replace function public.create_tiss_authorization(
   p_workspace_id   uuid,
   p_patient_id     uuid,
@@ -2588,6 +2624,9 @@ begin
 
   if jsonb_array_length(p_items) = 0 and not ('items' = any(v_missing)) then
     v_missing := array_append(v_missing, 'items');
+  end if;
+  if cardinality(v_missing) = 0 then
+    perform public.tiss_authorization_assert_ready(p_type, p_payload, jsonb_array_length(p_items));
   end if;
   v_status := case when cardinality(v_missing) = 0 then 'ready' else 'draft' end;
 
@@ -2661,6 +2700,12 @@ begin
   if not exists (select 1 from public.tiss_authorization_items where authorization_id = a.id)
      and not ('items' = any(v_missing)) then
     v_missing := array_append(v_missing, 'items');
+  end if;
+  if cardinality(v_missing) = 0 then
+    perform public.tiss_authorization_assert_ready(
+      a.type, p_payload,
+      (select count(*)::int from public.tiss_authorization_items where authorization_id = a.id)
+    );
   end if;
 
   v_from := a.status;
@@ -2821,6 +2866,7 @@ begin
   perform public.tiss_authorization_log(a.id, 'xml_generated', null, null, jsonb_build_object('hash', p_hash));
 end; $$;
 
+revoke all on function public.tiss_authorization_assert_ready(text, jsonb, integer) from public, anon, authenticated;
 revoke all on function public.tiss_authorization_require_billing(uuid) from public, anon, authenticated;
 revoke all on function public.tiss_authorization_lock(uuid) from public, anon, authenticated;
 revoke all on function public.tiss_authorization_write_items(uuid, jsonb) from public, anon, authenticated;

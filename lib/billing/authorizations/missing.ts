@@ -3,7 +3,8 @@ import type { AnyAuthorizationPayload, AuthorizationMissingField } from './types
 
 // Campos que o XSD exige e que o MedScale pode não ter. O XSD confere de novo
 // na geração do XML (tamanho exato, enum de CBOS etc.). O SQL acrescenta
-// 'items' por conta própria se não houver item.
+// 'items' se não houver item e recusa ready se esses campos essenciais
+// estiverem em branco — missing_fields vazio não basta.
 export function computeAuthorizationMissing(payload: AnyAuthorizationPayload, itemCount: number): AuthorizationMissingField[] {
   const missing: AuthorizationMissingField[] = []
   const { beneficiary, professional, provider } = payload

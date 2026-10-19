@@ -23,6 +23,15 @@ async function asSuperuser() {
 }
 
 function payload(type: string) {
+  const request: Record<string, unknown> = type === 'opme_request'
+    ? { technical_justification: 'Justificativa fictícia' }
+    : type === 'hospitalization_request'
+      ? {
+          clinical_indication: 'Indicação fictícia',
+          hospital: { operator_code: 'H1', name: 'Hospital Fictício', suggested_date: '2026-10-20' },
+          daily_count: 1,
+        }
+      : {}
   return {
     type,
     insurer: { ans_registry: '999999', provider_code: 'PREST0001', tiss_version: '4.03.00' },
@@ -30,7 +39,7 @@ function payload(type: string) {
     // phone/email: digitados na autorização (R3), nunca lidos de profiles.
     professional: { id: ids.doctor, name: 'Dra. Fictícia', crm: '123456', crm_uf: 'SP', cbo_code: '225125', phone: '11999990000', email: null },
     beneficiary: { patient_insurance_id: ids.insurance, card_number: 'FICT-CARD-001', newborn: false },
-    request: {},
+    request,
   }
 }
 
@@ -283,6 +292,36 @@ describe('RPCs de autorização — criação e numeração', () => {
     expect(await nextGuideNumber()).toBe('1')
   })
 
+  it('ready recusa payload sem os campos essenciais, mesmo com missing_fields vazio', async () => {
+    await asUser(ids.owner)
+    const noCard = payload('sp_sadt_request')
+    noCard.beneficiary.card_number = '  '
+    await expect(create({ missing: [], payload: noCard })).rejects.toThrow('tiss_authorization_not_ready')
+    const draft = await create({ missing: ['beneficiary.card_number'], payload: noCard })
+    expect(draft.status).toBe('draft')
+
+    const hosp = payload('hospitalization_request')
+    hosp.request = { ...hosp.request, clinical_indication: '' }
+    await expect(create({ type: 'hospitalization_request', payload: hosp })).rejects.toThrow('tiss_authorization_not_ready')
+
+    const parent = await create()
+    const opme = payload('opme_request')
+    opme.request = { technical_justification: null }
+    await expect(create({ type: 'opme_request', parent: parent.id, payload: opme })).rejects.toThrow('tiss_authorization_not_ready')
+
+    const noName = payload('sp_sadt_request')
+    noName.provider.legal_name = ''
+    const editable = await create({ missing: ['provider.legal_name'] })
+    await expect(db.query(
+      `select public.update_tiss_authorization($1::uuid, $2::timestamptz, $3::jsonb, '{}'::text[])`,
+      [editable.id, await updatedAt(editable.id), JSON.stringify(noName)],
+    )).rejects.toThrow('tiss_authorization_not_ready')
+    expect((await db.query<{ status: string }>(
+      'select status from public.tiss_authorizations where id = $1', [editable.id])).rows[0].status).toBe('draft')
+    // Recusas não consomem número: draft, pai e a edição que continua draft.
+    expect(await nextGuideNumber()).toBe('4')
+  })
+
   it('sem itens vira draft com "items" em missing_fields, mesmo que o cliente mande vazio', async () => {
     await asUser(ids.owner)
     const a = await create({ items: [], missing: [] })
@@ -346,6 +385,8 @@ describe('RPCs de autorização — funções internas', () => {
     ]) {
       await expect(db.query(sql, [sql.includes('require_billing') ? ids.account : a.id])).rejects.toThrow(/permission denied/)
     }
+    await expect(db.query(`select public.tiss_authorization_assert_ready('sp_sadt_request', '{}'::jsonb, 1)`))
+      .rejects.toThrow(/permission denied/)
     for (const fn of ['enforce_tiss_authorization', 'enforce_tiss_authorization_item', 'enforce_tiss_authorization_event']) {
       for (const role of ['anon', 'authenticated']) {
         const r = await db.query<{ ok: boolean }>(`select has_function_privilege($1, 'public.${fn}()', 'execute') as ok`, [role])
