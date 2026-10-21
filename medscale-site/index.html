@@ -3,15 +3,15 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="A MedScale assume todo o crescimento do seu consultório — marketing, agenda, secretária com IA e tecnologia. Você cuida do paciente, a gente cuida do resto.">
-  <meta property="og:title" content="MedScale — Você cuida do paciente. A gente cuida do resto.">
+  <meta name="description" content="A MedScale assume todo o crescimento do seu consultório: marketing, agenda, secretária com IA e tecnologia. Você cuida do paciente, a gente cuida do resto.">
+  <meta property="og:title" content="MedScale · Você cuida do paciente. A gente cuida do resto.">
   <meta property="og:description" content="Assessoria médica especialista em crescimento de consultórios. Marketing, tráfego, secretária com IA e inteligência financeira sob um único parceiro.">
   <meta property="og:type" content="website">
-  <title>MedScale — Você cuida do paciente. A gente cuida do resto.</title>
+  <title>MedScale · Você cuida do paciente. A gente cuida do resto.</title>
 
   <!-- Preconnect for fonts -->
-  <link rel="icon" type="image/png" href="/logo-icon.png">
-  <link rel="apple-touch-icon" href="/logo-icon.png">
+  <link rel="icon" type="image/png" href="logo-icon.png">
+  <link rel="apple-touch-icon" href="logo-icon.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,400;0,500;0,600;0,700;0,800;1,400&display=swap" rel="stylesheet">
@@ -883,55 +883,10 @@
       background: linear-gradient(90deg, var(--cyan) 0%, #5CD9EE 100%);
     }
 
-    /* ── Jornada do paciente ──────────────────────────────────────────── */
-    .jor-grid {
-      display: grid; gap: 16px; grid-template-columns: 1fr;
-      position: relative;
-    }
-    @media (min-width: 900px) {
-      .jor-grid { grid-template-columns: repeat(4, 1fr); gap: 20px; }
-    }
-    .jor-card {
-      position: relative; display: flex; flex-direction: column; gap: 10px;
-      background: #fff; border: 1.5px solid #E2E8F0; border-radius: 16px;
-      padding: 24px 22px;
-      transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease;
-    }
-    .jor-card:hover {
-      transform: translateY(-4px); box-shadow: var(--shadow-md);
-      border-color: var(--cyan-30);
-    }
-    /* Seta ligando as etapas (desktop) */
-    @media (min-width: 900px) {
-      .jor-card:not(:last-child)::after {
-        content: ''; position: absolute; z-index: 1;
-        top: 50%; right: -14px; width: 8px; height: 8px;
-        border-top: 2px solid #CBD5E1; border-right: 2px solid #CBD5E1;
-        transform: translateY(-50%) rotate(45deg);
-      }
-    }
-    .jor-num {
+
+    .etapa-num {
       font-size: .6875rem; font-weight: 800; letter-spacing: .14em;
       color: var(--cyan); font-variant-numeric: tabular-nums;
-    }
-    .jor-card h3 {
-      margin: 0; font-size: 1.0625rem; font-weight: 700;
-      color: var(--navy); letter-spacing: -0.01em;
-    }
-    .jor-card p { margin: 0; font-size: .875rem; line-height: 1.6; color: #64748B; }
-    .jor-leak {
-      margin-top: auto; padding-top: 14px;
-      border-top: 1px dashed #E2E8F0;
-      display: flex; align-items: flex-start; gap: 7px;
-      font-size: .75rem; line-height: 1.5; color: #94A3B8;
-    }
-    .jor-leak svg { flex-shrink: 0; margin-top: 2px; }
-    .jor-pill {
-      display: inline-flex; align-items: center; align-self: flex-start;
-      padding: 4px 11px; border-radius: 99px;
-      background: var(--cyan-10); border: 1px solid var(--cyan-20);
-      font-size: .6875rem; font-weight: 700; color: var(--navy);
-      line-height: 1.4;
     }
 
     /* ── Secretária IA — mockup de conversa ───────────────────────────── */
@@ -1046,10 +1001,10 @@
   <nav class="nav-wrap" role="navigation" aria-label="Navegação principal">
     <div class="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between">
 
-      <a href="#" aria-label="MedScale — página inicial" class="flex items-center gap-3 no-underline">
+      <a href="#" aria-label="MedScale, página inicial" class="flex items-center gap-3 no-underline">
         <!-- Assinatura oficial: símbolo + wordmark, montada a partir da arte
              original sem a tagline, que seria ilegível no tamanho da nav. -->
-        <img src="/logo-nav.png"
+        <img src="logo-nav.png"
              alt="MedScale"
              width="538" height="138"
              class="nav-logo-img">
@@ -1062,6 +1017,7 @@
       <div class="hidden lg:flex items-center gap-8" role="list">
         <a href="#pilares" class="nav-link">O que fazemos</a>
         <a href="#como-funciona" class="nav-link">Como começa</a>
+        <a href="demonstracao.html" class="nav-link">Demonstração</a>
         <a href="#faq" class="nav-link">Dúvidas</a>
       </div>
 
@@ -1125,7 +1081,7 @@
             <span>Quero encher minha agenda
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13 7l5 5m0 0l-5 5m5-5H6"/></svg></span>
           </a>
-          <a href="#como-funciona" class="btn btn-ghost">
+          <a href="demonstracao.html" class="btn btn-ghost">
             Ver como funciona
           </a>
         </div>
@@ -1171,7 +1127,7 @@
               <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
             </svg>
           </span>
-          Retorno em até 1 hora
+          Retorno em até 15 minutos
         </div>
 
         <div class="trust-divider hidden sm:block" aria-hidden="true"></div>
@@ -1234,7 +1190,7 @@
               85%<span style="color:var(--cyan)">+</span>
             </p>
             <p class="text-sm leading-snug" style="color:#64748B">
-              dos médicos no Brasil sem presença digital ativa — pacientes escolhem quem comunica melhor
+              dos médicos no Brasil sem presença digital ativa. Pacientes escolhem quem comunica melhor
             </p>
           </div>
 
@@ -1243,7 +1199,7 @@
               1 <span style="font-size:1.6rem; font-weight:400; color:#94A3B8">em</span> 4
             </p>
             <p class="text-sm leading-snug" style="color:#64748B">
-              consultas vira falta sem confirmação automática — agenda furada é receita perdida
+              consultas vira falta sem confirmação automática. Agenda furada é receita perdida
             </p>
           </div>
 
@@ -1252,7 +1208,7 @@
               10h<span style="color:var(--cyan)">+</span>
             </p>
             <p class="text-sm leading-snug" style="color:#64748B">
-              por semana gastas em tarefas que não são medicina — tempo que não volta pra sua vida
+              por semana gastas em tarefas que não são medicina. Tempo que não volta pra sua vida
             </p>
           </div>
 
@@ -1283,7 +1239,7 @@
             </div>
             <h3 class="font-bold mb-2 text-lg" style="color:var(--navy)">Agenda imprevisível</h3>
             <p class="text-sm leading-relaxed" style="color:#64748B">
-              Meses cheios e meses fracos. Você depende de indicação — um canal que não se controla e não escala.
+              Meses cheios e meses fracos. Você depende de indicação, um canal que não se controla e não escala.
             </p>
           </article>
 
@@ -1319,7 +1275,7 @@
             </div>
             <h3 class="font-bold mb-2 text-lg" style="color:var(--navy)">Vida pessoal no fim da fila</h3>
             <p class="text-sm leading-relaxed" style="color:#64748B">
-              O consultório invade a noite e o fim de semana. Crescer virou sinônimo de trabalhar mais — e isso não é sustentável.
+              O consultório invade a noite e o fim de semana. Crescer virou sinônimo de trabalhar mais, e isso não é sustentável.
             </p>
           </article>
 
@@ -1338,7 +1294,7 @@
           Depois da social media.
         </h2>
         <p class="text-base leading-relaxed mb-5 mx-auto" style="color:#64748B; max-width:520px">
-          Cada um entregando a parte deles — e ninguém olhando o consultório inteiro.
+          Cada um entregando a parte deles, e ninguém olhando o consultório inteiro.
           Três fornecedores, três mensalidades e a agenda ainda imprevisível.
         </p>
         <p class="font-bold text-base" style="color:var(--navy)">
@@ -1348,23 +1304,709 @@
     </section>
 
     <!-- ────────────────────────────────────────────────────── VIRADA ── -->
-    <section class="section section-dark" aria-labelledby="virada-heading">
-      <div class="max-w-2xl mx-auto text-center reveal">
-        <p class="text-xs font-semibold tracking-widest mb-4 uppercase" style="color:var(--cyan)">A virada</p>
-        <h2 id="virada-heading" class="font-black leading-tight mb-6"
-            style="font-size:clamp(1.9rem,4.5vw,3rem); color:#fff; letter-spacing:-0.02em">
-          Sua agenda cheia.<br>
-          <span class="text-gradient">Seu tempo de volta.</span>
-        </h2>
-        <p class="text-lg leading-relaxed m-0" style="color:rgba(255,255,255,.65)">
-          Marketing, tráfego, conteúdo, site, secretária treinada, agendamento e controle financeiro —
-          uma estrutura inteira operando o crescimento do seu consultório, sob um único parceiro.
-          Você não gerencia nada disso. <strong style="color:#fff; font-weight:600">Você só atende.</strong>
-        </p>
+    
+
+    <!-- ─────────────────────────────────────────────── FORMULÁRIO ── -->
+
+    <!-- ────────────────────────────────────────────────────── SÓCIOS ── -->
+    <section id="socios" class="section" style="padding-bottom:44px; background:#fff; border-top:1px solid #E2E8F0"
+             aria-labelledby="socios-heading">
+      <div class="max-w-4xl mx-auto">
+
+        <div class="text-center mb-12 reveal">
+          <p class="text-xs font-semibold tracking-widest mb-3 uppercase" style="color:var(--cyan)">Quem está por trás</p>
+          <h2 id="socios-heading" class="font-black mb-5"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            Quem vende é quem executa
+          </h2>
+          <!-- TODO: trocar pelo texto de origem real da empresa -->
+          <p class="text-lg leading-relaxed mx-auto" style="color:#64748B; max-width:620px">
+            O médico é formado para cuidar de gente, não para gerir marketing, agenda e finanças ao mesmo tempo. Montamos a empresa que faz essa parte. Você fala direto com a gente.
+          </p>
+        </div>
+
+        <div class="fnd-grid">
+
+          <div class="fnd reveal">
+            <div class="fnd-foto">
+              <img src="socio-giuliano.jpg" alt="Giuliano Torres, co-fundador da MedScale"
+                   width="720" height="900" loading="lazy" decoding="async">
+            </div>
+            <h3 class="fnd-nome">Giuliano Torres</h3>
+            <p class="fnd-cargo">Co-fundador</p>
+          </div>
+
+          <div class="fnd reveal d1">
+            <div class="fnd-foto">
+              <img src="socio-joao.jpg" alt="João Victor Teixeira, co-fundador da MedScale"
+                   width="720" height="900" loading="lazy" decoding="async">
+            </div>
+            <h3 class="fnd-nome">João Victor Teixeira</h3>
+            <p class="fnd-cargo">Co-fundador</p>
+          </div>
+
+          <div class="fnd reveal d2">
+            <div class="fnd-foto">
+              <img src="socio-eduardo.jpg" alt="Eduardo Bordignon, co-fundador da MedScale"
+                   width="720" height="900" loading="lazy" decoding="async">
+            </div>
+            <h3 class="fnd-nome">Eduardo Bordignon</h3>
+            <p class="fnd-cargo">Co-fundador</p>
+          </div>
+
+        </div>
+
       </div>
     </section>
 
-    <!-- ─────────────────────────────────────────────── FORMULÁRIO ── -->
+    <!-- ──────────────────────────────────────────────────── JORNADA ── -->
+
+    <!-- ──────────────────────────────────────────────────── PILARES ── -->
+    <section id="pilares" class="section" style="padding-top:44px" aria-labelledby="pilares-heading">
+      <div class="max-w-5xl mx-auto">
+
+        <div class="text-center mb-11 reveal">
+          <h2 id="pilares-heading" class="font-black mb-3"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            Sua agenda cheia.<br>Seu tempo de volta.
+          </h2>
+          
+        </div>
+
+        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
+
+          <article class="card p-6 reveal">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">01</span>
+            </div>
+            <h3 class="font-bold mb-2" style="color:var(--navy)">Presença Digital</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              Site, branding, Google Meu Negócio, calendário editorial, roteiros de vídeo, edição e publicação programada. Autoridade construída sem você gastar tempo.
+            </p>
+          </article>
+
+          <article class="card card-accent p-6 reveal d1">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">02</span>
+            </div>
+            <h3 class="font-bold mb-2" style="color:var(--navy)">Tráfego & Agenda</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              Meta Ads e Google Ads gerenciados pelo nosso time. Landing pages otimizadas. Leads qualificados todo mês, sem depender só de indicação.
+            </p>
+          </article>
+
+          <article class="card p-6 reveal d2">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">03</span>
+            </div>
+            <h3 class="font-bold mb-2" style="color:var(--navy)">Operação & Secretária</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              Secretária treinada + agente de IA no WhatsApp 24/7. Confirmações automáticas, lembretes e remarcações. Nenhum horário desperdiçado.
+            </p>
+          </article>
+
+          <article class="card p-6 reveal d1">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">04</span>
+            </div>
+            <h3 class="font-bold mb-2" style="color:var(--navy)">Inteligência Clínica</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              Tecnologia que organiza e agiliza sua rotina clínica. Transcrições, resumos estruturados e análise de exames. A decisão é sempre, e só, sua.
+            </p>
+          </article>
+
+          <article class="card card-accent p-6 reveal d2">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">05</span>
+            </div>
+            <h3 class="font-bold mb-2" style="color:var(--navy)">Inteligência Financeira</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              Controle de PF e PJ sem planilha chata. Agente de IA no WhatsApp para lançar gastos. Você sabe exatamente para onde vai o seu dinheiro.
+            </p>
+          </article>
+
+          <article class="card p-6 reveal d3">
+            <div class="flex items-center gap-2 mb-4">
+              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">06</span>
+            </div>
+            <h3 class="font-bold mb-2" style="color:var(--navy)">Suporte & Estratégia</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">
+              Reunião estratégica mensal, suporte prioritário e onboarding em 2 semanas. Você não contrata uma agência, <strong style="color:var(--navy)">ganha um sócio de crescimento.</strong>
+            </p>
+          </article>
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────── SECRETÁRIA IA ── -->
+    <section id="secretaria" class="section section-dark" aria-labelledby="secretaria-heading">
+      <div class="max-w-5xl mx-auto">
+
+        <div class="text-center mb-14 reveal">
+          <p class="text-xs font-semibold tracking-widest mb-4 uppercase" style="color:var(--cyan)">
+            Pilar 03 · em detalhe
+          </p>
+          <h2 id="secretaria-heading" class="font-black leading-tight mb-5"
+              style="font-size:clamp(1.9rem,4.5vw,3rem); color:#fff; letter-spacing:-0.02em">
+            O paciente manda mensagem às 23h47.<br>
+            <span class="text-gradient">Ele marca a consulta às 23h48.</span>
+          </h2>
+          <p class="text-lg leading-relaxed mx-auto" style="color:rgba(255,255,255,.65); max-width:600px">
+            Secretária treinada no horário comercial. Agente de IA nas outras
+            <strong style="color:#fff; font-weight:600">118 horas da semana.</strong>
+            Juntos, seu consultório nunca fica sem resposta.
+          </p>
+        </div>
+
+        <div class="grid lg:grid-cols-2 gap-12 lg:gap-14 items-start">
+
+          <!-- ── Mockup de conversa ── -->
+          <div class="reveal">
+            <div class="wa-phone">
+              <div class="wa-screen">
+
+                <div class="wa-top">
+                  <span class="wa-avatar" aria-hidden="true">DR</span>
+                  <div>
+                    <p class="font-semibold text-sm m-0" style="color:#fff">Consultório Dr. Ricardo</p>
+                    <p class="text-xs m-0" style="color:var(--cyan)">online</p>
+                  </div>
+                </div>
+
+                <div class="wa-log">
+                  <div class="wa-msg wa-in">
+                    Boa noite! Vi o perfil do Dr. Ricardo. Ele tem horário essa semana?
+                    <span class="wa-stamp">23:47</span>
+                  </div>
+                  <div class="wa-msg wa-out">
+                    Boa noite, Marina! Tenho quinta às 14h ou sexta às 9h30. Qual fica melhor?
+                    <span class="wa-stamp">23:47</span>
+                  </div>
+                  <div class="wa-msg wa-in">
+                    Quinta às 14h
+                    <span class="wa-stamp">23:48</span>
+                  </div>
+                  <div class="wa-msg wa-out">
+                    Perfeito. Consulta confirmada para quinta, 14h. Já te mando o endereço e um lembrete um dia antes.
+                    <span class="wa-stamp">23:48</span>
+                  </div>
+
+                  <span class="wa-day">Quarta-feira</span>
+
+                  <div class="wa-msg wa-out">
+                    Oi, Marina! Sua consulta é amanhã às 14h. Posso confirmar?
+                    <span class="wa-stamp">09:00</span>
+                  </div>
+                  <div class="wa-msg wa-in">
+                    Confirmo!
+                    <span class="wa-stamp">09:04</span>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+            <p class="text-xs text-center mt-4" style="color:rgba(255,255,255,.35)">
+              Exemplo ilustrativo do agente MedScale em operação.
+            </p>
+          </div>
+
+          <!-- ── Como funciona + cobertura ── -->
+          <div class="flex flex-col gap-10">
+
+            
+
+            <!-- ── Mapa de cobertura ── -->
+            <div class="reveal d1">
+              <p class="text-xs font-semibold tracking-widest uppercase mb-5" style="color:rgba(255,255,255,.40)">
+                Cobertura de atendimento por semana
+              </p>
+
+              <div class="flex flex-col gap-6">
+
+                <div class="cov-block">
+                  <div class="cov-head">
+                    <span class="cov-label">Só secretária, horário comercial</span>
+                    <span class="cov-hours"><strong>50</strong> h</span>
+                  </div>
+                  <div class="cov-grid" id="cov-old" aria-hidden="true"></div>
+                </div>
+
+                <div class="cov-block cov-new">
+                  <div class="cov-head">
+                    <span class="cov-label">MedScale: secretária + agente</span>
+                    <span class="cov-hours"><strong>168</strong> h</span>
+                  </div>
+                  <div class="cov-grid" id="cov-new" aria-hidden="true"></div>
+                  <div class="cov-axis" aria-hidden="true">
+                    <span>00h</span><span>06h</span><span>12h</span><span>18h</span><span>24h</span>
+                  </div>
+                </div>
+
+              </div>
+
+              <p class="text-xs mt-4 m-0" style="color:rgba(255,255,255,.35)">
+                Cada quadrado é uma hora, 7 dias × 24 horas.
+              </p>
+            </div>
+
+          </div>
+        </div>
+
+        <div class="text-center mt-14 reveal">
+          <a href="#diagnostico" class="btn shiny"><span>Quero um agente na minha agenda</span></a>
+        </div>
+
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────────────────── EVIDÊNCIA ── -->
+    <section id="evidencia" class="section" aria-labelledby="evidencia-heading">
+      <div class="max-w-5xl mx-auto">
+
+        <div class="text-center mb-14 reveal">
+          <p class="text-xs font-semibold tracking-widest mb-3 uppercase" style="color:var(--cyan)">A base do método</p>
+          <h2 id="evidencia-heading" class="font-black mb-3"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            Não é opinião nossa.
+          </h2>
+          <p class="text-lg mx-auto" style="color:#64748B; max-width:560px">
+            A MedScale é uma empresa nova. A evidência por trás do que a gente faz, não.
+          </p>
+        </div>
+
+        <!-- uma ficha só: coluna única centrada, em vez de meia faixa vazia -->
+        <div class="grid gap-5" style="max-width:620px; margin:0 auto">
+
+          <!-- ── Velocidade de resposta ── -->
+          <article class="ev-card reveal">
+            <p class="ev-kicker">Velocidade de resposta</p>
+            <h3 class="font-bold mb-2" style="font-size:1.1875rem; color:var(--navy); letter-spacing:-0.01em">
+              Responder em até 1 hora muda o jogo
+            </h3>
+            <p class="text-sm leading-relaxed mb-2" style="color:#64748B">
+              Chance de qualificar um contato que chegou pela internet:
+            </p>
+
+            <div class="ev-chart">
+              <div class="ev-row">
+                <div class="ev-row-top">
+                  <span class="ev-name">Resposta em até 1 hora</span>
+                  <span class="ev-val">60×</span>
+                </div>
+                <div class="ev-track"><div class="ev-fill" style="width:100%"></div></div>
+              </div>
+              <div class="ev-row">
+                <div class="ev-row-top">
+                  <span class="ev-name">Resposta depois de 24 horas</span>
+                  <span class="ev-val">1×</span>
+                </div>
+                <div class="ev-track"><div class="ev-fill muted" style="width:1.7%"></div></div>
+              </div>
+            </div>
+
+            <div class="ev-note">
+              Mesmo <strong style="color:var(--navy)">uma única hora</strong> de atraso já corta a chance
+              em 7×. Por isso a Clara responde em segundos, a qualquer hora, e a nossa equipe retorna em até 15 minutos.
+              <span class="ev-cite">
+                Oldroyd, McElheran &amp; Elkington. <em>The Short Life of Online Sales Leads</em>,
+                Harvard Business Review, 2011. Análise de 1,25 milhão de contatos em 2.241 empresas.
+                <a href="https://hbr.org/2011/03/the-short-life-of-online-sales-leads" target="_blank" rel="noopener noreferrer">Ver estudo</a>
+              </span>
+            </div>
+          </article>
+
+          <!-- ── Lembrete e comparecimento ── -->
+          
+
+        </div>
+      </div>
+    </section>
+
+    <!-- ──────────────────────────────────────────────────────────────────
+         TRÁFEGO · números reais, dois clientes, com autorização
+         Os prints dos painéis vivem em demonstracao.html
+         ────────────────────────────────────────────────────────────── -->
+    <section class="section section-dark" aria-labelledby="trafego-heading">
+      <div style="max-width:1000px; margin:0 auto; padding:0 24px">
+        <div style="max-width:660px; margin-bottom:34px">
+          <p style="color:var(--cyan); font-size:.75rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; margin-bottom:16px">
+            Nossos números
+          </p>
+          <h2 id="trafego-heading" class="font-black mb-3"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:#fff; letter-spacing:-0.02em">
+            Quanto custa um contato.
+          </h2>
+          <p style="font-size:1.0625rem; line-height:1.65; color:rgba(255,255,255,.70)">
+            Dois clientes que a MedScale atende hoje, com autorização por escrito
+            e o nome protegido. Período declarado e conta aberta.
+          </p>
+        </div>
+
+        <style>@media (min-width:720px){ #traf-cards{ grid-template-columns:minmax(0,1fr) minmax(0,1fr) !important } }</style>
+        <div id="traf-cards" style="display:grid; gap:18px; grid-template-columns:minmax(0,1fr); margin-bottom:26px">
+
+          <article style="min-width:0; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.10); border-radius:18px; padding:26px 24px 24px">
+            <p style="font-size:.8125rem; font-weight:800; color:#fff; margin-bottom:3px">Cardiologia · Google Ads</p>
+            <p style="font-size:.75rem; color:rgba(255,255,255,.45); margin-bottom:22px">Março a maio de 2026, três meses</p>
+            <p class="text-gradient" style="font-size:2.5rem; font-weight:900; letter-spacing:-0.03em; line-height:1; font-variant-numeric:tabular-nums">R$&nbsp;15,93</p>
+            <p style="font-size:.875rem; color:rgba(255,255,255,.70); margin-top:7px">por conversão</p>
+            <div style="display:flex; flex-wrap:wrap; gap:14px 22px; margin-top:20px; padding-top:18px; border-top:1px solid rgba(255,255,255,.10)">
+              <div><p style="font-size:1.25rem; font-weight:800; color:#fff; font-variant-numeric:tabular-nums">589</p><p style="font-size:.6875rem; color:rgba(255,255,255,.45)">conversões</p></div>
+              <div><p style="font-size:1.25rem; font-weight:800; color:#fff; font-variant-numeric:tabular-nums">57,9&nbsp;mil</p><p style="font-size:.6875rem; color:rgba(255,255,255,.45)">impressões</p></div>
+              <div><p style="font-size:1.25rem; font-weight:800; color:rgba(255,255,255,.60); font-variant-numeric:tabular-nums">R$&nbsp;9,39&nbsp;mil</p><p style="font-size:.6875rem; color:rgba(255,255,255,.45)">investidos</p></div>
+            </div>
+          </article>
+
+          <article style="min-width:0; background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.10); border-radius:18px; padding:26px 24px 24px">
+            <p style="font-size:.8125rem; font-weight:800; color:#fff; margin-bottom:3px">Ortopedia · Meta Ads</p>
+            <p style="font-size:.75rem; color:rgba(255,255,255,.45); margin-bottom:22px">1 a 17 de outubro de 2026, dezessete dias</p>
+            <p class="text-gradient" style="font-size:2.5rem; font-weight:900; letter-spacing:-0.03em; line-height:1; font-variant-numeric:tabular-nums">R$&nbsp;6,50</p>
+            <p style="font-size:.875rem; color:rgba(255,255,255,.70); margin-top:7px">por conversa no WhatsApp</p>
+            <div style="display:flex; flex-wrap:wrap; gap:14px 22px; margin-top:20px; padding-top:18px; border-top:1px solid rgba(255,255,255,.10)">
+              <div><p style="font-size:1.25rem; font-weight:800; color:#fff; font-variant-numeric:tabular-nums">109</p><p style="font-size:.6875rem; color:rgba(255,255,255,.45)">conversas</p></div>
+              <div><p style="font-size:1.25rem; font-weight:800; color:#fff; font-variant-numeric:tabular-nums">41&nbsp;mil</p><p style="font-size:.6875rem; color:rgba(255,255,255,.45)">impressões</p></div>
+              <div><p style="font-size:1.25rem; font-weight:800; color:rgba(255,255,255,.60); font-variant-numeric:tabular-nums">R$&nbsp;709</p><p style="font-size:.6875rem; color:rgba(255,255,255,.45)">investidos</p></div>
+            </div>
+          </article>
+
+        </div>
+
+        <a href="demonstracao.html"
+           style="display:inline-flex; align-items:center; gap:8px; margin-top:4px;
+                  color:#8FE3F2; font-size:.9375rem; font-weight:700; text-decoration:none">
+          Ver os painéis completos
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="m9 18 6-6-6-6"/></svg>
+        </a>
+
+        
+      </div>
+    </section>
+
+
+
+    <!-- ──────────────────────────────────────────────── PARA QUEM ── -->
+    <section class="section-sm" style="background:#F8FAFC; border-top:1px solid #E2E8F0; border-bottom:1px solid #E2E8F0"
+             aria-labelledby="perfil-heading">
+      <div class="max-w-4xl mx-auto">
+
+        <div class="text-center mb-12 reveal">
+          <h2 id="perfil-heading" class="font-black mb-3"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            E se você não quiser aparecer?
+          </h2>
+          <p class="text-lg" style="color:#64748B">
+            A MedScale se adapta ao seu perfil. O resultado em agenda vem dos dois jeitos.
+          </p>
+        </div>
+
+        <div class="grid sm:grid-cols-2 gap-5">
+
+          <!-- Autoridade -->
+          <article class="card p-8 reveal">
+            <div class="icon-box mb-5" style="background:var(--navy)">
+              <svg width="20" height="20" fill="none" stroke="white" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+              </svg>
+            </div>
+            <h3 class="font-bold text-xl mb-1" style="color:var(--navy)">Quer construir autoridade</h3>
+            <p class="text-sm mb-6" style="color:#94A3B8">Para quem gosta de aparecer e quer virar referência.</p>
+            <ul class="space-y-3" role="list">
+              <li class="flex items-start gap-2.5 text-sm" style="color:#475569">
+                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
+                Conteúdo e vídeos com roteiro e edição nossa
+              </li>
+              <li class="flex items-start gap-2.5 text-sm" style="color:#475569">
+                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
+                Marca pessoal forte no Instagram e YouTube
+              </li>
+              <li class="flex items-start gap-2.5 text-sm" style="color:#475569">
+                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
+                Autoridade que justifica um ticket maior
+              </li>
+            </ul>
+          </article>
+
+          <!-- Bastidores -->
+          <article class="card card-dark p-8 reveal d1">
+            <div class="icon-box mb-5" style="background:var(--cyan)">
+              <svg width="20" height="20" fill="none" stroke="var(--navy-dark)" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
+              </svg>
+            </div>
+            <h3 class="font-bold text-xl mb-1" style="color:#fff">Prefere os bastidores</h3>
+            <p class="text-sm mb-6" style="color:rgba(255,255,255,.45)">Para quem é mais reservado ou não tem tempo de gravar.</p>
+            <ul class="space-y-3" role="list">
+              <li class="flex items-start gap-2.5 text-sm" style="color:rgba(255,255,255,.80)">
+                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
+                Foco total em tráfego, site e agendamento
+              </li>
+              <li class="flex items-start gap-2.5 text-sm" style="color:rgba(255,255,255,.80)">
+                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
+                Secretária treinada e inteligência financeira
+              </li>
+              <li class="flex items-start gap-2.5 text-sm" style="color:rgba(255,255,255,.80)">
+                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
+                Sua agenda enche sem você aparecer em vídeo
+              </li>
+            </ul>
+          </article>
+
+        </div>
+
+        
+      </div>
+    </section>
+
+    <!-- ────────────────────────────────────────────── COMO COMEÇA ── -->
+    <section id="como-funciona" class="section" aria-labelledby="steps-heading">
+      <div class="max-w-4xl mx-auto">
+
+        <div class="text-center mb-14 reveal">
+          <h2 id="steps-heading" class="font-black mb-3"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            Como começa
+          </h2>
+          <p class="text-lg" style="color:#64748B">
+            Onboarding leve e sem fricção. Em duas semanas, sua estrutura já está rodando.
+          </p>
+        </div>
+
+        <!-- Desktop timeline -->
+        <div class="hidden sm:flex items-start gap-0 reveal">
+
+          <div class="flex flex-col items-center text-center" style="flex:1">
+            <div class="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg mb-4"
+                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">01</div>
+            <div class="prog-line w-full" style="margin-bottom:16px; margin-top:-29px; z-index:-1; position:relative; top:-28px; margin-left:50%"></div>
+            <h3 class="font-bold mb-1.5 text-base" style="color:var(--navy)">Diagnóstico</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">Especialidade, metas e rotina. Definimos posicionamento e estratégia.</p>
+          </div>
+
+          <div class="flex flex-col items-center text-center" style="flex:1">
+            <div class="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg mb-4"
+                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">02</div>
+            <h3 class="font-bold mb-1.5 text-base" style="color:var(--navy)">Configuração</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">Acessos, agente WhatsApp, agenda, secretária e financeiro no seu fluxo.</p>
+          </div>
+
+          <div class="flex flex-col items-center text-center" style="flex:1">
+            <div class="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg mb-4"
+                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">03</div>
+            <h3 class="font-bold mb-1.5 text-base" style="color:var(--navy)">No ar</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">Site e Google Meu Negócio publicados. Primeiras campanhas rodando.</p>
+          </div>
+
+          <div class="flex flex-col items-center text-center" style="flex:1">
+            <div class="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg mb-4"
+                 style="background:var(--navy); color:#fff">04</div>
+            <h3 class="font-bold mb-1.5 text-base" style="color:var(--navy)">Crescimento</h3>
+            <p class="text-sm leading-relaxed" style="color:#64748B">Otimização contínua, relatório e reunião mensal. Agenda enchendo.</p>
+          </div>
+
+        </div>
+
+        <!-- Mobile timeline -->
+        <div class="sm:hidden space-y-4 reveal">
+          <div class="flex gap-4 items-start">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0"
+                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">01</div>
+            <div>
+              <h3 class="font-bold mb-1" style="color:var(--navy)">Diagnóstico</h3>
+              <p class="text-sm" style="color:#64748B">Especialidade, metas e rotina. Definimos posicionamento e estratégia.</p>
+            </div>
+          </div>
+          <div class="flex gap-4 items-start">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0"
+                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">02</div>
+            <div>
+              <h3 class="font-bold mb-1" style="color:var(--navy)">Configuração</h3>
+              <p class="text-sm" style="color:#64748B">Acessos, agente WhatsApp, agenda, secretária e financeiro no seu fluxo.</p>
+            </div>
+          </div>
+          <div class="flex gap-4 items-start">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0"
+                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">03</div>
+            <div>
+              <h3 class="font-bold mb-1" style="color:var(--navy)">No ar</h3>
+              <p class="text-sm" style="color:#64748B">Site e Google Meu Negócio publicados. Primeiras campanhas rodando.</p>
+            </div>
+          </div>
+          <div class="flex gap-4 items-start">
+            <div class="w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0"
+                 style="background:var(--navy); color:#fff">04</div>
+            <div>
+              <h3 class="font-bold mb-1" style="color:var(--navy)">Crescimento</h3>
+              <p class="text-sm" style="color:#64748B">Otimização contínua, relatório e reunião mensal. Agenda enchendo.</p>
+            </div>
+          </div>
+        </div>
+
+        <!-- ── Detalhe das duas primeiras etapas ── -->
+        
+
+      </div>
+    </section>
+
+    <!-- ────────────────────────────────────────────── STACK TÉCNICO ── -->
+    <section class="section-sm" style="background:#F8FAFC; border-top:1px solid #E2E8F0; border-bottom:1px solid #E2E8F0"
+             aria-labelledby="stack-heading">
+      <div class="max-w-4xl mx-auto text-center reveal">
+        <h2 id="stack-heading" class="text-xs font-semibold tracking-widest uppercase mb-8" style="color:#94A3B8">
+          A operação roda nas ferramentas que o mercado usa
+        </h2>
+
+        <div class="tech-row">
+          <span class="tech-mark">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.7 6.6c-1.3 0-2.3.9-3.1 2.1-.6-.9-1.3-2.1-2.9-2.1-2 0-3.4 2.4-3.4 5 0 1.6.7 2.7 1.9 2.7 1 0 1.6-.5 2.4-1.9l.8-1.4c.2-.4.4-.5.6-.5.4 0 .7.4 1.1 1.4l.9 2.1c.3.7.8 1.1 1.5 1.1 1.3 0 2.1-1 2.1-2.9 0-2.5-1.4-5.6-3.9-5.6zm-6 5.9c-.4 0-.7-.4-.7-1.2 0-1.5.7-3.1 1.7-3.1.5 0 .9.4 1.4 1.4-.9 1.9-1.6 2.9-2.4 2.9zm5.9.1c-.5 0-.8-.5-1.2-1.5l-.5-1.2c.6-1 1.2-1.6 1.8-1.6 1 0 1.7 1.4 1.7 3 0 .9-.4 1.3-1.8 1.3z"/></svg>
+            Meta Ads
+          </span>
+          <span class="tech-mark">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.24 10.29v3.7h5.24c-.21 1.36-1.58 3.99-5.24 3.99-3.15 0-5.73-2.61-5.73-5.83s2.58-5.83 5.73-5.83c1.8 0 3 .77 3.69 1.43l2.51-2.42C16.83 3.77 14.72 2.8 12.24 2.8 6.98 2.8 2.72 7.06 2.72 12.3s4.26 9.5 9.52 9.5c5.5 0 9.14-3.86 9.14-9.3 0-.63-.07-1.1-.15-1.58l-8.99-.63z"/></svg>
+            Google Ads
+          </span>
+          <span class="tech-mark">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2zm5.8 14.03c-.24.68-1.42 1.3-1.95 1.35-.5.05-.98.24-3.3-.69-2.77-1.09-4.53-3.92-4.67-4.1-.13-.18-1.11-1.48-1.11-2.82s.7-2 .95-2.28c.25-.27.54-.34.72-.34.18 0 .36 0 .52.01.17.01.39-.06.61.47.24.55.79 1.92.86 2.06.07.14.12.3.02.48-.09.18-.14.3-.28.46-.14.16-.3.36-.42.48-.14.14-.29.29-.12.57.16.28.73 1.2 1.56 1.95 1.07.95 1.97 1.25 2.25 1.39.28.14.44.12.6-.07.17-.19.7-.82.89-1.1.18-.28.37-.23.62-.14.25.09 1.6.75 1.87.89.27.14.46.21.53.32.06.11.06.65-.18 1.33z"/></svg>
+            WhatsApp Business
+          </span>
+          <span class="tech-mark">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>
+            Google Meu Negócio
+          </span>
+          <span class="tech-mark">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41-.56-.22-.96-.48-1.38-.9-.42-.42-.68-.82-.9-1.38-.16-.42-.36-1.06-.41-2.23C2.17 15.58 2.16 15.2 2.16 12s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41C8.42 2.17 8.8 2.16 12 2.16zM12 0C8.74 0 8.33.01 7.05.07 5.78.13 4.9.33 4.14.63c-.79.3-1.46.72-2.13 1.38C1.35 2.68.93 3.35.63 4.14.33 4.9.13 5.78.07 7.05.01 8.33 0 8.74 0 12s.01 3.67.07 4.95c.06 1.27.26 2.15.56 2.91.3.79.72 1.46 1.38 2.13.67.66 1.34 1.08 2.13 1.38.76.3 1.64.5 2.91.56C8.33 23.99 8.74 24 12 24s3.67-.01 4.95-.07c1.27-.06 2.15-.26 2.91-.56.79-.3 1.46-.72 2.13-1.38.66-.67 1.08-1.34 1.38-2.13.3-.76.5-1.64.56-2.91.06-1.28.07-1.69.07-4.95s-.01-3.67-.07-4.95c-.06-1.27-.26-2.15-.56-2.91-.3-.79-.72-1.46-1.38-2.13C21.32 1.35 20.65.93 19.86.63c-.76-.3-1.64-.5-2.91-.56C15.67.01 15.26 0 12 0zm0 5.84a6.16 6.16 0 1 0 0 12.32 6.16 6.16 0 0 0 0-12.32zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm7.85-10.4a1.44 1.44 0 1 1-2.88 0 1.44 1.44 0 0 1 2.88 0z"/></svg>
+            Instagram
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <!-- ─────────────────────────────────────── RESULTADOS ESPERADOS ── -->
+    <section class="section-sm" style="background:#fff; border-top:1px solid #E2E8F0"
+             aria-labelledby="resultados-heading">
+      <div class="max-w-4xl mx-auto">
+
+        <div class="text-center mb-10 reveal">
+          <p class="text-xs font-semibold tracking-widest mb-3 uppercase" style="color:var(--cyan)">O que muda</p>
+          <h2 id="resultados-heading" class="font-black mb-3"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            O que passa a existir no seu consultório
+          </h2>
+          <p class="text-lg" style="color:#64748B">Quatro mudanças concretas, a partir do primeiro mês.</p>
+        </div>
+
+        <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+          <div class="result-card reveal">
+            <div class="result-number">1<span></span></div>
+            <p class="text-sm font-semibold mb-1" style="color:var(--navy)">parceiro, não quatro</p>
+            <p class="text-xs" style="color:#94A3B8">marketing, secretária, IA e financeiro sob o mesmo teto</p>
+          </div>
+
+          <div class="result-card reveal d1">
+            <div class="result-number">0<span>h</span></div>
+            <p class="text-sm font-semibold mb-1" style="color:var(--navy)">dedicadas a marketing</p>
+            <p class="text-xs" style="color:#94A3B8">o time cuida de tudo, você só atende</p>
+          </div>
+
+          <div class="result-card reveal d2">
+            <div class="result-number">24<span>/7</span></div>
+            <p class="text-sm font-semibold mb-1" style="color:var(--navy)">secretária no WhatsApp</p>
+            <p class="text-xs" style="color:#94A3B8">nenhum lead perde para o concorrente por falta de resposta</p>
+          </div>
+
+          <div class="result-card reveal d3">
+            <div class="result-number">14<span>d</span></div>
+            <p class="text-sm font-semibold mb-1" style="color:var(--navy)">para estar no ar</p>
+            <p class="text-xs" style="color:#94A3B8">site, campanhas e agente prontos. sem esperar meses</p>
+          </div>
+
+        </div>
+      </div>
+    </section>
+
+
+    <!-- ──────────────────────────────────────────────────────────────────
+         DEMONSTRAÇÃO · prova construída, não prometida
+         A página inteira vive em demonstracao.html
+         ────────────────────────────────────────────────────────────── -->
+    <section class="section" style="background:#F8FAFC; border-top:1px solid #E2E8F0; border-bottom:1px solid #E2E8F0" aria-labelledby="demo-heading">
+      <div class="wrap" style="max-width:1120px; margin:0 auto; padding:0 24px">
+        <div style="max-width:720px">
+          <p style="color:var(--cyan-dark); font-size:.75rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; margin-bottom:16px">
+            Veja antes de contratar
+          </p>
+          <h2 id="demo-heading" class="font-black mb-3"
+              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
+            A gente construiu tudo<br>que está escrito aqui.
+          </h2>
+          <p style="font-size:1.0625rem; line-height:1.65; color:#64748B; margin-bottom:30px">
+            Empresa nova não tem dez anos de case. Em vez de contar, a gente construiu:
+            o site e o feed de uma médica demonstrativa, a Clara atendendo e os
+            painéis de dois clientes reais.
+          </p>
+        </div>
+
+        <div class="grid" style="display:grid; gap:16px; grid-template-columns:1fr; margin-bottom:30px">
+          <style>@media (min-width:760px){ #demo-cards{ grid-template-columns:repeat(3,1fr) !important } }</style>
+          <div id="demo-cards" style="display:grid; gap:16px; grid-template-columns:1fr">
+            <div class="card" style="background:#fff; border:1.5px solid #E2E8F0; border-radius:16px; padding:22px 20px">
+              <div class="icon-box icon-box-cyan" style="width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; background:var(--cyan-10); color:var(--cyan-dark); margin-bottom:13px">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4 8.5 8.5 0 0 1-3.8-.9L3 21l2-5.2a8.4 8.4 0 0 1-.9-3.8 8.4 8.4 0 0 1 8.4-9 8.4 8.4 0 0 1 8.5 8.5z"/></svg>
+              </div>
+              <h3 style="font-size:.9375rem; font-weight:800; color:var(--navy); margin-bottom:6px">A Clara atendendo</h3>
+              <p style="font-size:.8125rem; line-height:1.6; color:#64748B">A conversa inteira, do primeiro contato até o lembrete da véspera.</p>
+            </div>
+            <div class="card" style="background:#fff; border:1.5px solid #E2E8F0; border-radius:16px; padding:22px 20px">
+              <div class="icon-box icon-box-cyan" style="width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; background:var(--cyan-10); color:var(--cyan-dark); margin-bottom:13px">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/></svg>
+              </div>
+              <h3 style="font-size:.9375rem; font-weight:800; color:var(--navy); margin-bottom:6px">Site, feed e calendário</h3>
+              <p style="font-size:.8125rem; line-height:1.6; color:#64748B">De uma médica que não existe, construída do zero para mostrar o padrão.</p>
+            </div>
+            <div class="card" style="background:#fff; border:1.5px solid #E2E8F0; border-radius:16px; padding:22px 20px">
+              <div class="icon-box icon-box-cyan" style="width:40px; height:40px; border-radius:11px; display:flex; align-items:center; justify-content:center; background:var(--cyan-10); color:var(--cyan-dark); margin-bottom:13px">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M3 3v18h18"/><path d="m7 15 4-5 3 3 5-7"/></svg>
+              </div>
+              <h3 style="font-size:.9375rem; font-weight:800; color:var(--navy); margin-bottom:6px">Transcrição de consulta</h3>
+              <p style="font-size:.8125rem; line-height:1.6; color:#64748B">A fala crua de um lado, a nota estruturada do outro.</p>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; flex-wrap:wrap; gap:14px; align-items:center">
+          <!-- BOTAO DA CLARA · reativar quando a linha de demonstracao existir
+<a href="https://wa.me/5561995704956?text=Oi%21%20Vim%20pela%20p%C3%A1gina%20da%20MedScale%20e%20queria%20testar%20a%20Clara." target="_blank" rel="noopener" class="btn btn-cyan">
+            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" style="margin-right:8px"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2m0 18.15c-1.48 0-2.93-.4-4.2-1.15l-.3-.18-3.12.82.83-3.04-.19-.32a8.2 8.2 0 0 1-1.26-4.37c0-4.54 3.7-8.23 8.24-8.23s8.23 3.69 8.23 8.23-3.69 8.24-8.23 8.24"/></svg>
+            Converse com a Clara agora
+          </a>
+-->
+          <a href="demonstracao.html" class="btn btn-navy">Ver a demonstração completa</a>
+        </div>
+      </div>
+    </section>
+
+    <!--
+    ── PROVA SOCIAL (ativar após o case piloto) ──────────────────────────
+    <section style="padding:80px 24px; background:#F8FAFC; border-top:1px solid #E2E8F0">
+      <div style="max-width:700px; margin:0 auto; text-align:center">
+        <p style="color:var(--cyan); font-size:.75rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; margin-bottom:16px">O que os médicos dizem</p>
+        <blockquote style="font-size:1.5rem; font-weight:700; color:var(--navy); line-height:1.4; margin-bottom:24px">
+          "Em 60 dias minha agenda estava cheia. Nunca mais dependi só de indicação."
+        </blockquote>
+        <div style="display:flex; align-items:center; justify-content:center; gap:12px">
+          <img src="foto-dr-piloto.jpg" alt="Dr. [Nome]" width="48" height="48"
+               style="border-radius:50%; object-fit:cover; border:2px solid var(--cyan-20)">
+          <div style="text-align:left">
+            <p style="font-weight:600; color:var(--navy); font-size:.875rem; margin:0">Dr. [Nome Sobrenome]</p>
+            <p style="color:#94A3B8; font-size:.75rem; margin:0">[Especialidade] · Salvador, BA</p>
+          </div>
+        </div>
+      </div>
+    </section>
+    ──────────────────────────────────────────────────────────────────── -->
+
+    <!-- ───────────────────────────────────────────────────────── FAQ ── -->
     <section id="diagnostico" class="section-dark" aria-labelledby="form-heading"
              style="padding:0 24px 80px">
       <div class="max-w-lg mx-auto">
@@ -1510,7 +2152,7 @@
             <!-- ── STEP 3: Marketing ── -->
             <div x-show="step === 3" role="group" aria-labelledby="step3-label">
               <h3 id="step3-label" class="font-bold mb-1 text-lg" style="color:var(--navy)">Sobre seu marketing hoje</h3>
-              <p class="text-sm mb-6" style="color:#94A3B8">Sem julgamento — só precisamos entender o ponto de partida.</p>
+              <p class="text-sm mb-6" style="color:#94A3B8">Sem julgamento, só precisamos entender o ponto de partida.</p>
 
               <!-- Situação -->
               <fieldset class="mb-5 border-none p-0 m-0">
@@ -1566,7 +2208,7 @@
             <!-- ── STEP 4: Contato ── -->
             <div x-show="step === 4" role="group" aria-labelledby="step4-label">
               <h3 id="step4-label" class="font-bold mb-1 text-lg" style="color:var(--navy)">Quase lá! Como te encontramos?</h3>
-              <p class="text-sm mb-6" style="color:#94A3B8">Entraremos em contato pelo WhatsApp em até 24 horas.</p>
+              <p class="text-sm mb-6" style="color:#94A3B8">Entraremos em contato pelo WhatsApp em até 15 minutos.</p>
 
               <div class="space-y-4 mb-2">
 
@@ -1648,7 +2290,7 @@
               <p class="leading-relaxed mb-6" style="color:#64748B">
                 Recebemos seu diagnóstico. Analisaremos seu perfil e entraremos em contato pelo WhatsApp
                 <strong style="color:var(--navy)" x-text="form.whatsapp"></strong>
-                em até 24 horas.
+                em até 15 minutos.
               </p>
               <div class="p-5 rounded-2xl text-sm font-medium" style="background:var(--cyan-10); border:1px solid var(--cyan-20); color:var(--navy)">
                 Siga a <strong>@medscalebrasil</strong> no Instagram para ver como outros médicos estão transformando seus consultórios.
@@ -1661,851 +2303,6 @@
       </div>
     </section>
 
-    <!-- ────────────────────────────────────────────────────── SÓCIOS ── -->
-    <section id="socios" class="section" style="background:#fff; border-top:1px solid #E2E8F0"
-             aria-labelledby="socios-heading">
-      <div class="max-w-4xl mx-auto">
-
-        <div class="text-center mb-12 reveal">
-          <p class="text-xs font-semibold tracking-widest mb-3 uppercase" style="color:var(--cyan)">Quem está por trás</p>
-          <h2 id="socios-heading" class="font-black mb-5"
-              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
-            Quem vende é quem executa
-          </h2>
-          <!-- TODO: trocar pelo texto de origem real da empresa -->
-          <p class="text-lg leading-relaxed mx-auto" style="color:#64748B; max-width:620px">
-            A MedScale nasceu de uma constatação simples: o médico é formado para cuidar de gente —
-            não para gerir marketing, agenda, secretária e finanças ao mesmo tempo. Montamos a empresa
-            que faz essa parte inteira. Quando você contrata, fala direto com a gente.
-          </p>
-        </div>
-
-        <div class="fnd-grid">
-
-          <div class="fnd reveal">
-            <div class="fnd-foto">
-              <img src="/socio-giuliano.jpg" alt="Giuliano Torres, co-fundador da MedScale"
-                   width="720" height="900" loading="lazy" decoding="async">
-            </div>
-            <h3 class="fnd-nome">Giuliano Torres</h3>
-            <p class="fnd-cargo">Co-fundador</p>
-          </div>
-
-          <div class="fnd reveal d1">
-            <div class="fnd-foto">
-              <img src="/socio-joao.jpg" alt="João Victor Teixeira, co-fundador da MedScale"
-                   width="720" height="900" loading="lazy" decoding="async">
-            </div>
-            <h3 class="fnd-nome">João Victor Teixeira</h3>
-            <p class="fnd-cargo">Co-fundador</p>
-          </div>
-
-          <div class="fnd reveal d2">
-            <div class="fnd-foto">
-              <img src="/socio-eduardo.jpg" alt="Eduardo Bordignon, co-fundador da MedScale"
-                   width="720" height="900" loading="lazy" decoding="async">
-            </div>
-            <h3 class="fnd-nome">Eduardo Bordignon</h3>
-            <p class="fnd-cargo">Co-fundador</p>
-          </div>
-
-        </div>
-
-      </div>
-    </section>
-
-    <!-- ──────────────────────────────────────────────────── JORNADA ── -->
-    <section id="jornada" class="section-sm" style="background:#F8FAFC; border-bottom:1px solid #E2E8F0"
-             aria-labelledby="jornada-heading">
-      <div class="max-w-6xl mx-auto">
-
-        <div class="text-center mb-12 reveal">
-          <p class="text-xs font-semibold tracking-widest mb-3 uppercase" style="color:var(--cyan)">O mecanismo</p>
-          <h2 id="jornada-heading" class="font-black mb-3"
-              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
-            Todo paciente percorre o mesmo caminho<br class="hidden sm:block">
-            até a sua cadeira.
-          </h2>
-          <p class="text-lg mx-auto" style="color:#64748B; max-width:560px">
-            São quatro etapas. Não adianta ganhar uma e perder a seguinte —
-            e é sempre na etapa mais barata que o paciente escapa.
-          </p>
-        </div>
-
-        <div class="jor-grid mb-10">
-
-          <article class="jor-card reveal">
-            <span class="jor-num">ETAPA 01</span>
-            <h3>Descoberta</h3>
-            <p>
-              Ele tem um problema e ainda não sabe que você existe. Procura no Google,
-              rola o Instagram, pergunta para alguém.
-            </p>
-            <span class="jor-pill">Presença Digital · Tráfego</span>
-            <div class="jor-leak">
-              <svg width="12" height="12" fill="none" stroke="#CBD5E1" stroke-width="2.4" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-              Sem presença, você nem entra na lista dele.
-            </div>
-          </article>
-
-          <article class="jor-card reveal d1">
-            <span class="jor-num">ETAPA 02</span>
-            <h3>Confiança</h3>
-            <p>
-              Ele te achou — e está comparando com outros dois. Olha seu conteúdo,
-              seu site e o que dizem sobre você.
-            </p>
-            <span class="jor-pill">Presença Digital</span>
-            <div class="jor-leak">
-              <svg width="12" height="12" fill="none" stroke="#CBD5E1" stroke-width="2.4" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-              Sem autoridade, ele escolhe o outro nome.
-            </div>
-          </article>
-
-          <article class="jor-card reveal d2">
-            <span class="jor-num">ETAPA 03</span>
-            <h3>Agendamento</h3>
-            <p>
-              Ele manda mensagem. É aqui que a maior parte dos consultórios perde
-              o paciente que já estava decidido.
-            </p>
-            <span class="jor-pill">Operação &amp; Secretária</span>
-            <div class="jor-leak">
-              <svg width="12" height="12" fill="none" stroke="#CBD5E1" stroke-width="2.4" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-              Sem resposta rápida, ele marca com quem responder.
-            </div>
-          </article>
-
-          <article class="jor-card reveal d3">
-            <span class="jor-num">ETAPA 04</span>
-            <h3>Retorno</h3>
-            <p>
-              Ele foi bem atendido, volta quando precisa e indica. O paciente mais
-              barato de todos é o que você já tem.
-            </p>
-            <span class="jor-pill">Inteligência Clínica · Financeira</span>
-            <div class="jor-leak">
-              <svg width="12" height="12" fill="none" stroke="#CBD5E1" stroke-width="2.4" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
-              </svg>
-              Sem acompanhamento, ele some da sua base.
-            </div>
-          </article>
-
-        </div>
-
-        <p class="text-center font-bold text-base sm:text-lg reveal m-0" style="color:var(--navy)">
-          A MedScale opera as quatro juntas — não uma de cada vez.
-        </p>
-
-      </div>
-    </section>
-
-    <!-- ──────────────────────────────────────────────────── PILARES ── -->
-    <section id="pilares" class="section" aria-labelledby="pilares-heading">
-      <div class="max-w-5xl mx-auto">
-
-        <div class="text-center mb-14 reveal">
-          <h2 id="pilares-heading" class="font-black mb-3"
-              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
-            Um ecossistema completo, em 6 frentes
-          </h2>
-          <p class="text-lg" style="color:#64748B">Tudo integrado e operado pelo nosso time.</p>
-        </div>
-
-        <div class="grid sm:grid-cols-2 lg:grid-cols-3 gap-5">
-
-          <article class="card p-6 reveal">
-            <div class="flex items-center gap-2 mb-4">
-              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">01</span>
-            </div>
-            <h3 class="font-bold mb-2" style="color:var(--navy)">Presença Digital</h3>
-            <p class="text-sm leading-relaxed" style="color:#64748B">
-              Site, branding, Google Meu Negócio, calendário editorial, roteiros de vídeo, edição e publicação programada. Autoridade construída sem você gastar tempo.
-            </p>
-          </article>
-
-          <article class="card card-accent p-6 reveal d1">
-            <div class="flex items-center gap-2 mb-4">
-              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">02</span>
-            </div>
-            <h3 class="font-bold mb-2" style="color:var(--navy)">Tráfego & Agenda</h3>
-            <p class="text-sm leading-relaxed" style="color:#64748B">
-              Meta Ads e Google Ads gerenciados pelo nosso time. Landing pages otimizadas. Leads qualificados todo mês — sem depender só de indicação.
-            </p>
-          </article>
-
-          <article class="card p-6 reveal d2">
-            <div class="flex items-center gap-2 mb-4">
-              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">03</span>
-            </div>
-            <h3 class="font-bold mb-2" style="color:var(--navy)">Operação & Secretária</h3>
-            <p class="text-sm leading-relaxed" style="color:#64748B">
-              Secretária treinada + agente de IA no WhatsApp 24/7. Confirmações automáticas, lembretes e remarcações. Nenhum horário desperdiçado.
-            </p>
-          </article>
-
-          <article class="card p-6 reveal d1">
-            <div class="flex items-center gap-2 mb-4">
-              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">04</span>
-            </div>
-            <h3 class="font-bold mb-2" style="color:var(--navy)">Inteligência Clínica</h3>
-            <p class="text-sm leading-relaxed" style="color:#64748B">
-              Tecnologia que organiza e agiliza sua rotina clínica. Transcrições, resumos estruturados e análise de exames. A decisão é sempre, e só, sua.
-            </p>
-          </article>
-
-          <article class="card card-accent p-6 reveal d2">
-            <div class="flex items-center gap-2 mb-4">
-              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">05</span>
-            </div>
-            <h3 class="font-bold mb-2" style="color:var(--navy)">Inteligência Financeira</h3>
-            <p class="text-sm leading-relaxed" style="color:#64748B">
-              Controle de PF e PJ sem planilha chata. Agente de IA no WhatsApp para lançar gastos. Você sabe exatamente para onde vai o seu dinheiro.
-            </p>
-          </article>
-
-          <article class="card p-6 reveal d3">
-            <div class="flex items-center gap-2 mb-4">
-              <span class="text-xs font-black tracking-wider" style="color:var(--cyan)">06</span>
-            </div>
-            <h3 class="font-bold mb-2" style="color:var(--navy)">Suporte & Estratégia</h3>
-            <p class="text-sm leading-relaxed" style="color:#64748B">
-              Reunião estratégica mensal, suporte prioritário e onboarding em 2 semanas. Você não contrata uma agência — <strong style="color:var(--navy)">ganha um sócio de crescimento.</strong>
-            </p>
-          </article>
-
-        </div>
-      </div>
-    </section>
-
-    <!-- ─────────────────────────────────────────── SECRETÁRIA IA ── -->
-    <section id="secretaria" class="section section-dark" aria-labelledby="secretaria-heading">
-      <div class="max-w-5xl mx-auto">
-
-        <div class="text-center mb-14 reveal">
-          <p class="text-xs font-semibold tracking-widest mb-4 uppercase" style="color:var(--cyan)">
-            Pilar 03 · em detalhe
-          </p>
-          <h2 id="secretaria-heading" class="font-black leading-tight mb-5"
-              style="font-size:clamp(1.9rem,4.5vw,3rem); color:#fff; letter-spacing:-0.02em">
-            O paciente manda mensagem às 23h47.<br>
-            <span class="text-gradient">Ele marca a consulta às 23h48.</span>
-          </h2>
-          <p class="text-lg leading-relaxed mx-auto" style="color:rgba(255,255,255,.65); max-width:600px">
-            Secretária treinada no horário comercial. Agente de IA nas outras
-            <strong style="color:#fff; font-weight:600">118 horas da semana.</strong>
-            Juntos, seu consultório nunca fica sem resposta.
-          </p>
-        </div>
-
-        <div class="grid lg:grid-cols-2 gap-12 lg:gap-14 items-start">
-
-          <!-- ── Mockup de conversa ── -->
-          <div class="reveal">
-            <div class="wa-phone">
-              <div class="wa-screen">
-
-                <div class="wa-top">
-                  <span class="wa-avatar" aria-hidden="true">DR</span>
-                  <div>
-                    <p class="font-semibold text-sm m-0" style="color:#fff">Consultório Dr. Ricardo</p>
-                    <p class="text-xs m-0" style="color:var(--cyan)">online</p>
-                  </div>
-                </div>
-
-                <div class="wa-log">
-                  <div class="wa-msg wa-in">
-                    Boa noite! Vi o perfil do Dr. Ricardo. Ele tem horário essa semana?
-                    <span class="wa-stamp">23:47</span>
-                  </div>
-                  <div class="wa-msg wa-out">
-                    Boa noite, Marina! Tenho quinta às 14h ou sexta às 9h30. Qual fica melhor?
-                    <span class="wa-stamp">23:47</span>
-                  </div>
-                  <div class="wa-msg wa-in">
-                    Quinta às 14h
-                    <span class="wa-stamp">23:48</span>
-                  </div>
-                  <div class="wa-msg wa-out">
-                    Perfeito. Consulta confirmada para quinta, 14h. Já te mando o endereço e um lembrete um dia antes.
-                    <span class="wa-stamp">23:48</span>
-                  </div>
-
-                  <span class="wa-day">Quarta-feira</span>
-
-                  <div class="wa-msg wa-out">
-                    Oi, Marina! Sua consulta é amanhã às 14h. Consegue confirmar?
-                    <span class="wa-stamp">09:00</span>
-                  </div>
-                  <div class="wa-msg wa-in">
-                    Confirmo!
-                    <span class="wa-stamp">09:04</span>
-                  </div>
-                </div>
-
-              </div>
-            </div>
-            <p class="text-xs text-center mt-4" style="color:rgba(255,255,255,.35)">
-              Exemplo ilustrativo do agente MedScale em operação.
-            </p>
-          </div>
-
-          <!-- ── Como funciona + cobertura ── -->
-          <div class="flex flex-col gap-10">
-
-            <ul class="flex flex-col gap-6 m-0 p-0" role="list">
-
-              <li class="flex gap-4 reveal">
-                <span class="icon-box flex-shrink-0" style="background:var(--cyan-20)" aria-hidden="true">
-                  <svg width="20" height="20" fill="none" stroke="var(--cyan)" stroke-width="1.9" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z"/>
-                  </svg>
-                </span>
-                <div>
-                  <h3 class="font-bold mb-1.5" style="color:#fff">Responde em segundos, a qualquer hora</h3>
-                  <p class="text-sm leading-relaxed m-0" style="color:rgba(255,255,255,.60)">
-                    Quem chega às 23h, no domingo ou no feriado é atendido na hora. Sem fila e sem
-                    “retornaremos em breve”.
-                  </p>
-                </div>
-              </li>
-
-              <li class="flex gap-4 reveal d1">
-                <span class="icon-box flex-shrink-0" style="background:var(--cyan-20)" aria-hidden="true">
-                  <svg width="20" height="20" fill="none" stroke="var(--cyan)" stroke-width="1.9" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/>
-                  </svg>
-                </span>
-                <div>
-                  <h3 class="font-bold mb-1.5" style="color:#fff">Agenda, confirma e remarca sozinho</h3>
-                  <p class="text-sm leading-relaxed m-0" style="color:rgba(255,255,255,.60)">
-                    O agente escreve direto na sua agenda. O lembrete automático na véspera é o que
-                    derruba a taxa de falta.
-                  </p>
-                </div>
-              </li>
-
-              <li class="flex gap-4 reveal d2">
-                <span class="icon-box flex-shrink-0" style="background:var(--cyan-20)" aria-hidden="true">
-                  <svg width="20" height="20" fill="none" stroke="var(--cyan)" stroke-width="1.9" viewBox="0 0 24 24">
-                    <path stroke-linecap="round" stroke-linejoin="round" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
-                  </svg>
-                </span>
-                <div>
-                  <h3 class="font-bold mb-1.5" style="color:#fff">Passa o bastão para a pessoa certa</h3>
-                  <p class="text-sm leading-relaxed m-0" style="color:rgba(255,255,255,.60)">
-                    Dúvida clínica, exceção ou caso sensível vai direto para a secretária treinada.
-                    A IA não decide nada que precisa de gente.
-                  </p>
-                </div>
-              </li>
-
-            </ul>
-
-            <!-- ── Mapa de cobertura ── -->
-            <div class="reveal d1">
-              <p class="text-xs font-semibold tracking-widest uppercase mb-5" style="color:rgba(255,255,255,.40)">
-                Cobertura de atendimento por semana
-              </p>
-
-              <div class="flex flex-col gap-6">
-
-                <div class="cov-block">
-                  <div class="cov-head">
-                    <span class="cov-label">Só secretária, horário comercial</span>
-                    <span class="cov-hours"><strong>50</strong> h</span>
-                  </div>
-                  <div class="cov-grid" id="cov-old" aria-hidden="true"></div>
-                </div>
-
-                <div class="cov-block cov-new">
-                  <div class="cov-head">
-                    <span class="cov-label">MedScale — secretária + agente</span>
-                    <span class="cov-hours"><strong>168</strong> h</span>
-                  </div>
-                  <div class="cov-grid" id="cov-new" aria-hidden="true"></div>
-                  <div class="cov-axis" aria-hidden="true">
-                    <span>00h</span><span>06h</span><span>12h</span><span>18h</span><span>24h</span>
-                  </div>
-                </div>
-
-              </div>
-
-              <p class="text-xs mt-4 m-0" style="color:rgba(255,255,255,.35)">
-                Cada quadrado é uma hora — 7 dias × 24 horas.
-              </p>
-            </div>
-
-          </div>
-        </div>
-
-        <div class="text-center mt-14 reveal">
-          <a href="#diagnostico" class="btn shiny"><span>Quero um agente na minha agenda</span></a>
-        </div>
-
-      </div>
-    </section>
-
-    <!-- ─────────────────────────────────────────────────── EVIDÊNCIA ── -->
-    <section id="evidencia" class="section" aria-labelledby="evidencia-heading">
-      <div class="max-w-5xl mx-auto">
-
-        <div class="text-center mb-14 reveal">
-          <p class="text-xs font-semibold tracking-widest mb-3 uppercase" style="color:var(--cyan)">A base do método</p>
-          <h2 id="evidencia-heading" class="font-black mb-3"
-              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
-            Não é opinião nossa.
-          </h2>
-          <p class="text-lg mx-auto" style="color:#64748B; max-width:560px">
-            A MedScale é uma empresa nova. A evidência por trás do que a gente faz, não.
-          </p>
-        </div>
-
-        <div class="grid md:grid-cols-2 gap-5">
-
-          <!-- ── Velocidade de resposta ── -->
-          <article class="ev-card reveal">
-            <p class="ev-kicker">Velocidade de resposta</p>
-            <h3 class="font-bold mb-2" style="font-size:1.1875rem; color:var(--navy); letter-spacing:-0.01em">
-              Responder em até 1 hora muda o jogo
-            </h3>
-            <p class="text-sm leading-relaxed mb-2" style="color:#64748B">
-              Chance de qualificar um contato que chegou pela internet:
-            </p>
-
-            <div class="ev-chart">
-              <div class="ev-row">
-                <div class="ev-row-top">
-                  <span class="ev-name">Resposta em até 1 hora</span>
-                  <span class="ev-val">60×</span>
-                </div>
-                <div class="ev-track"><div class="ev-fill" style="width:100%"></div></div>
-              </div>
-              <div class="ev-row">
-                <div class="ev-row-top">
-                  <span class="ev-name">Resposta depois de 24 horas</span>
-                  <span class="ev-val">1×</span>
-                </div>
-                <div class="ev-track"><div class="ev-fill muted" style="width:1.7%"></div></div>
-              </div>
-            </div>
-
-            <div class="ev-note">
-              Mesmo <strong style="color:var(--navy)">uma única hora</strong> de atraso já corta a chance
-              em 7×. É exatamente por isso que o agente responde no minuto em que a mensagem chega —
-              inclusive às 23h de um domingo.
-              <span class="ev-cite">
-                Oldroyd, McElheran &amp; Elkington. <em>The Short Life of Online Sales Leads</em>,
-                Harvard Business Review, 2011 — análise de 1,25 milhão de contatos em 2.241 empresas.
-                <a href="https://hbr.org/2011/03/the-short-life-of-online-sales-leads" target="_blank" rel="noopener noreferrer">Ver estudo</a>
-              </span>
-            </div>
-          </article>
-
-          <!-- ── Lembrete e comparecimento ── -->
-          <article class="ev-card reveal d1">
-            <p class="ev-kicker">Confirmação de consulta</p>
-            <h3 class="font-bold mb-2" style="font-size:1.1875rem; color:var(--navy); letter-spacing:-0.01em">
-              Lembrete por mensagem derruba a falta
-            </h3>
-            <p class="text-sm leading-relaxed mb-2" style="color:#64748B">
-              Comparecimento a consultas médicas, com e sem lembrete:
-            </p>
-
-            <div class="ev-chart">
-              <div class="ev-row">
-                <div class="ev-row-top">
-                  <span class="ev-name">Com lembrete por mensagem</span>
-                  <span class="ev-val">+14%</span>
-                </div>
-                <div class="ev-track"><div class="ev-fill" style="width:100%"></div></div>
-              </div>
-              <div class="ev-row">
-                <div class="ev-row-top">
-                  <span class="ev-name">Sem lembrete</span>
-                  <span class="ev-val">referência</span>
-                </div>
-                <div class="ev-track"><div class="ev-fill muted" style="width:87.7%"></div></div>
-              </div>
-            </div>
-
-            <div class="ev-note">
-              Cada falta é um horário que não volta. O agente confirma na véspera e
-              <strong style="color:var(--navy)">reoferece o horário vago</strong> para quem está na fila
-              — sem ninguém precisar lembrar disso.
-              <span class="ev-cite">
-                Gurol-Urganci et al. <em>Mobile phone messaging reminders for attendance at healthcare
-                appointments</em>. Cochrane Database of Systematic Reviews, 2013 (CD007458) —
-                risco relativo 1,14; evidência de qualidade moderada.
-                <a href="https://www.cochranelibrary.com/cdsr/doi/10.1002/14651858.CD007458.pub3/full" target="_blank" rel="noopener noreferrer">Ver revisão</a>
-              </span>
-            </div>
-          </article>
-
-        </div>
-      </div>
-    </section>
-
-    <!-- ──────────────────────────────────────────────── PARA QUEM ── -->
-    <section class="section-sm" style="background:#F8FAFC; border-top:1px solid #E2E8F0; border-bottom:1px solid #E2E8F0"
-             aria-labelledby="perfil-heading">
-      <div class="max-w-4xl mx-auto">
-
-        <div class="text-center mb-12 reveal">
-          <h2 id="perfil-heading" class="font-black mb-3"
-              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
-            E se você não quiser aparecer?
-          </h2>
-          <p class="text-lg" style="color:#64748B">
-            A MedScale se adapta ao seu perfil. O resultado em agenda vem dos dois jeitos.
-          </p>
-        </div>
-
-        <div class="grid sm:grid-cols-2 gap-5">
-
-          <!-- Autoridade -->
-          <article class="card p-8 reveal">
-            <div class="icon-box mb-5" style="background:var(--navy)">
-              <svg width="20" height="20" fill="none" stroke="white" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M15 10l4.553-2.069A1 1 0 0121 8.82v6.36a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-              </svg>
-            </div>
-            <h3 class="font-bold text-xl mb-1" style="color:var(--navy)">Quer construir autoridade</h3>
-            <p class="text-sm mb-6" style="color:#94A3B8">Para quem gosta de aparecer e quer virar referência.</p>
-            <ul class="space-y-3" role="list">
-              <li class="flex items-start gap-2.5 text-sm" style="color:#475569">
-                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
-                Conteúdo e vídeos com roteiro e edição nossa
-              </li>
-              <li class="flex items-start gap-2.5 text-sm" style="color:#475569">
-                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
-                Marca pessoal forte no Instagram e YouTube
-              </li>
-              <li class="flex items-start gap-2.5 text-sm" style="color:#475569">
-                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
-                Autoridade que justifica um ticket maior
-              </li>
-            </ul>
-          </article>
-
-          <!-- Bastidores -->
-          <article class="card card-dark p-8 reveal d1">
-            <div class="icon-box mb-5" style="background:var(--cyan)">
-              <svg width="20" height="20" fill="none" stroke="var(--navy-dark)" stroke-width="1.8" viewBox="0 0 24 24" aria-hidden="true">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"/>
-              </svg>
-            </div>
-            <h3 class="font-bold text-xl mb-1" style="color:#fff">Prefere os bastidores</h3>
-            <p class="text-sm mb-6" style="color:rgba(255,255,255,.45)">Para quem é mais reservado ou não tem tempo de gravar.</p>
-            <ul class="space-y-3" role="list">
-              <li class="flex items-start gap-2.5 text-sm" style="color:rgba(255,255,255,.80)">
-                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
-                Foco total em tráfego, site e agendamento
-              </li>
-              <li class="flex items-start gap-2.5 text-sm" style="color:rgba(255,255,255,.80)">
-                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
-                Secretária treinada e inteligência financeira
-              </li>
-              <li class="flex items-start gap-2.5 text-sm" style="color:rgba(255,255,255,.80)">
-                <span style="color:var(--cyan); font-weight:700; flex-shrink:0; margin-top:1px">✓</span>
-                Sua agenda enche sem você aparecer em vídeo
-              </li>
-            </ul>
-          </article>
-
-        </div>
-      </div>
-    </section>
-
-    <!-- ────────────────────────────────────────────── COMO COMEÇA ── -->
-    <section id="como-funciona" class="section" aria-labelledby="steps-heading">
-      <div class="max-w-4xl mx-auto">
-
-        <div class="text-center mb-14 reveal">
-          <h2 id="steps-heading" class="font-black mb-3"
-              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
-            Como começa
-          </h2>
-          <p class="text-lg" style="color:#64748B">
-            Onboarding leve e sem fricção. Em duas semanas, sua estrutura já está rodando.
-          </p>
-        </div>
-
-        <!-- Desktop timeline -->
-        <div class="hidden sm:flex items-start gap-0 reveal">
-
-          <div class="flex flex-col items-center text-center" style="flex:1">
-            <div class="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg mb-4"
-                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">01</div>
-            <div class="prog-line w-full" style="margin-bottom:16px; margin-top:-29px; z-index:-1; position:relative; top:-28px; margin-left:50%"></div>
-            <h3 class="font-bold mb-1.5 text-base" style="color:var(--navy)">Diagnóstico</h3>
-            <p class="text-sm leading-relaxed" style="color:#64748B">Especialidade, metas e rotina. Definimos posicionamento e estratégia.</p>
-          </div>
-
-          <div class="flex flex-col items-center text-center" style="flex:1">
-            <div class="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg mb-4"
-                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">02</div>
-            <h3 class="font-bold mb-1.5 text-base" style="color:var(--navy)">Configuração</h3>
-            <p class="text-sm leading-relaxed" style="color:#64748B">Acessos, agente WhatsApp, agenda, secretária e financeiro no seu fluxo.</p>
-          </div>
-
-          <div class="flex flex-col items-center text-center" style="flex:1">
-            <div class="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg mb-4"
-                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">03</div>
-            <h3 class="font-bold mb-1.5 text-base" style="color:var(--navy)">No ar</h3>
-            <p class="text-sm leading-relaxed" style="color:#64748B">Site e Google Meu Negócio publicados. Primeiras campanhas rodando.</p>
-          </div>
-
-          <div class="flex flex-col items-center text-center" style="flex:1">
-            <div class="w-14 h-14 rounded-2xl flex items-center justify-center font-black text-lg mb-4"
-                 style="background:var(--navy); color:#fff">04</div>
-            <h3 class="font-bold mb-1.5 text-base" style="color:var(--navy)">Crescimento</h3>
-            <p class="text-sm leading-relaxed" style="color:#64748B">Otimização contínua, relatório e reunião mensal. Agenda enchendo.</p>
-          </div>
-
-        </div>
-
-        <!-- Mobile timeline -->
-        <div class="sm:hidden space-y-4 reveal">
-          <div class="flex gap-4 items-start">
-            <div class="w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0"
-                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">01</div>
-            <div>
-              <h3 class="font-bold mb-1" style="color:var(--navy)">Diagnóstico</h3>
-              <p class="text-sm" style="color:#64748B">Especialidade, metas e rotina. Definimos posicionamento e estratégia.</p>
-            </div>
-          </div>
-          <div class="flex gap-4 items-start">
-            <div class="w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0"
-                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">02</div>
-            <div>
-              <h3 class="font-bold mb-1" style="color:var(--navy)">Configuração</h3>
-              <p class="text-sm" style="color:#64748B">Acessos, agente WhatsApp, agenda, secretária e financeiro no seu fluxo.</p>
-            </div>
-          </div>
-          <div class="flex gap-4 items-start">
-            <div class="w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0"
-                 style="background:var(--cyan-10); color:var(--cyan); border:2px solid var(--cyan-20)">03</div>
-            <div>
-              <h3 class="font-bold mb-1" style="color:var(--navy)">No ar</h3>
-              <p class="text-sm" style="color:#64748B">Site e Google Meu Negócio publicados. Primeiras campanhas rodando.</p>
-            </div>
-          </div>
-          <div class="flex gap-4 items-start">
-            <div class="w-12 h-12 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0"
-                 style="background:var(--navy); color:#fff">04</div>
-            <div>
-              <h3 class="font-bold mb-1" style="color:var(--navy)">Crescimento</h3>
-              <p class="text-sm" style="color:#64748B">Otimização contínua, relatório e reunião mensal. Agenda enchendo.</p>
-            </div>
-          </div>
-        </div>
-
-        <!-- ── Detalhe das duas primeiras etapas ── -->
-        <div class="grid md:grid-cols-2 gap-5 mt-16">
-
-          <article class="card p-7 sm:p-8 reveal">
-            <span class="jor-num">Etapa 01</span>
-            <h3 class="font-black mt-3 mb-3" style="font-size:1.375rem; color:var(--navy); letter-spacing:-0.02em">
-              Preencha o diagnóstico e receba nosso retorno <span style="color:var(--cyan)">em até 1 hora</span>
-            </h3>
-            <p class="text-sm leading-relaxed mb-7" style="color:#64748B">
-              São 4 perguntas rápidas. A partir delas montamos um plano específico para a sua
-              especialidade e a sua cidade. Gratuito e sem compromisso — se não fizer sentido,
-              a gente diz na hora.
-            </p>
-
-            <div class="mk-frame">
-              <div class="mk-bar" aria-hidden="true">
-                <span class="mk-dot"></span><span class="mk-dot"></span><span class="mk-dot"></span>
-                <span class="mk-url">medscalebr.com/diagnostico</span>
-              </div>
-              <div class="mk-body">
-                <div class="mk-line">
-                  <span class="mk-check" aria-hidden="true">
-                    <svg width="10" height="10" fill="none" stroke="var(--cyan)" stroke-width="3.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                  </span>
-                  Especialidade · Dermatologia
-                </div>
-                <div class="mk-line">
-                  <span class="mk-check" aria-hidden="true">
-                    <svg width="10" height="10" fill="none" stroke="var(--cyan)" stroke-width="3.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                  </span>
-                  Consultório próprio · Brasília, DF
-                </div>
-                <div class="mk-line">
-                  <span class="mk-check" aria-hidden="true">
-                    <svg width="10" height="10" fill="none" stroke="var(--cyan)" stroke-width="3.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                  </span>
-                  Hoje depende de indicação
-                </div>
-                <div class="mk-line" style="color:rgba(255,255,255,.40)">
-                  <span class="mk-check pending" aria-hidden="true">
-                    <svg width="10" height="10" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="2.6" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg>
-                  </span>
-                  Enviando para o time…
-                </div>
-              </div>
-            </div>
-          </article>
-
-          <article class="card p-7 sm:p-8 reveal d1">
-            <span class="jor-num">Etapa 02</span>
-            <h3 class="font-black mt-3 mb-3" style="font-size:1.375rem; color:var(--navy); letter-spacing:-0.02em">
-              Sua estrutura completa <span style="color:var(--cyan)">no ar em 14 dias</span>
-            </h3>
-            <p class="text-sm leading-relaxed mb-7" style="color:#64748B">
-              Você entrega os acessos uma vez e o time assume. Site, campanhas, agente de WhatsApp
-              e financeiro entram em operação em duas semanas — sem você acompanhar tarefa por tarefa.
-            </p>
-
-            <div class="mk-frame">
-              <div class="mk-bar" aria-hidden="true">
-                <span class="mk-dot"></span><span class="mk-dot"></span><span class="mk-dot"></span>
-                <span class="mk-url">onboarding · dia 9 de 14</span>
-              </div>
-              <div class="mk-body">
-                <div class="mk-line">
-                  <span class="mk-check" aria-hidden="true">
-                    <svg width="10" height="10" fill="none" stroke="var(--cyan)" stroke-width="3.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                  </span>
-                  Site e Google Meu Negócio publicados
-                </div>
-                <div class="mk-line">
-                  <span class="mk-check" aria-hidden="true">
-                    <svg width="10" height="10" fill="none" stroke="var(--cyan)" stroke-width="3.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                  </span>
-                  Agente de WhatsApp treinado
-                </div>
-                <div class="mk-line">
-                  <span class="mk-check" aria-hidden="true">
-                    <svg width="10" height="10" fill="none" stroke="var(--cyan)" stroke-width="3.2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7"/></svg>
-                  </span>
-                  Agenda e confirmações integradas
-                </div>
-                <div class="mk-line" style="color:rgba(255,255,255,.40)">
-                  <span class="mk-check pending" aria-hidden="true">
-                    <svg width="10" height="10" fill="none" stroke="rgba(255,255,255,.45)" stroke-width="2.6" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/></svg>
-                  </span>
-                  Campanhas em revisão final
-                </div>
-                <div class="mk-bar-track" aria-hidden="true">
-                  <div class="mk-bar-fill" style="width:64%"></div>
-                </div>
-              </div>
-            </div>
-          </article>
-
-        </div>
-
-      </div>
-    </section>
-
-    <!-- ────────────────────────────────────────────── STACK TÉCNICO ── -->
-    <section class="section-sm" style="background:#F8FAFC; border-top:1px solid #E2E8F0; border-bottom:1px solid #E2E8F0"
-             aria-labelledby="stack-heading">
-      <div class="max-w-4xl mx-auto text-center reveal">
-        <h2 id="stack-heading" class="text-xs font-semibold tracking-widest uppercase mb-8" style="color:#94A3B8">
-          A operação roda nas ferramentas que o mercado usa
-        </h2>
-
-        <div class="tech-row">
-          <span class="tech-mark">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm4.7 6.6c-1.3 0-2.3.9-3.1 2.1-.6-.9-1.3-2.1-2.9-2.1-2 0-3.4 2.4-3.4 5 0 1.6.7 2.7 1.9 2.7 1 0 1.6-.5 2.4-1.9l.8-1.4c.2-.4.4-.5.6-.5.4 0 .7.4 1.1 1.4l.9 2.1c.3.7.8 1.1 1.5 1.1 1.3 0 2.1-1 2.1-2.9 0-2.5-1.4-5.6-3.9-5.6zm-6 5.9c-.4 0-.7-.4-.7-1.2 0-1.5.7-3.1 1.7-3.1.5 0 .9.4 1.4 1.4-.9 1.9-1.6 2.9-2.4 2.9zm5.9.1c-.5 0-.8-.5-1.2-1.5l-.5-1.2c.6-1 1.2-1.6 1.8-1.6 1 0 1.7 1.4 1.7 3 0 .9-.4 1.3-1.8 1.3z"/></svg>
-            Meta Ads
-          </span>
-          <span class="tech-mark">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.24 10.29v3.7h5.24c-.21 1.36-1.58 3.99-5.24 3.99-3.15 0-5.73-2.61-5.73-5.83s2.58-5.83 5.73-5.83c1.8 0 3 .77 3.69 1.43l2.51-2.42C16.83 3.77 14.72 2.8 12.24 2.8 6.98 2.8 2.72 7.06 2.72 12.3s4.26 9.5 9.52 9.5c5.5 0 9.14-3.86 9.14-9.3 0-.63-.07-1.1-.15-1.58l-8.99-.63z"/></svg>
-            Google Ads
-          </span>
-          <span class="tech-mark">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91S17.5 2 12.04 2zm5.8 14.03c-.24.68-1.42 1.3-1.95 1.35-.5.05-.98.24-3.3-.69-2.77-1.09-4.53-3.92-4.67-4.1-.13-.18-1.11-1.48-1.11-2.82s.7-2 .95-2.28c.25-.27.54-.34.72-.34.18 0 .36 0 .52.01.17.01.39-.06.61.47.24.55.79 1.92.86 2.06.07.14.12.3.02.48-.09.18-.14.3-.28.46-.14.16-.3.36-.42.48-.14.14-.29.29-.12.57.16.28.73 1.2 1.56 1.95 1.07.95 1.97 1.25 2.25 1.39.28.14.44.12.6-.07.17-.19.7-.82.89-1.1.18-.28.37-.23.62-.14.25.09 1.6.75 1.87.89.27.14.46.21.53.32.06.11.06.65-.18 1.33z"/></svg>
-            WhatsApp Business
-          </span>
-          <span class="tech-mark">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5A2.5 2.5 0 1 1 12 6.5a2.5 2.5 0 0 1 0 5z"/></svg>
-            Google Meu Negócio
-          </span>
-          <span class="tech-mark">
-            <svg width="19" height="19" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41-.56-.22-.96-.48-1.38-.9-.42-.42-.68-.82-.9-1.38-.16-.42-.36-1.06-.41-2.23C2.17 15.58 2.16 15.2 2.16 12s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41C8.42 2.17 8.8 2.16 12 2.16zM12 0C8.74 0 8.33.01 7.05.07 5.78.13 4.9.33 4.14.63c-.79.3-1.46.72-2.13 1.38C1.35 2.68.93 3.35.63 4.14.33 4.9.13 5.78.07 7.05.01 8.33 0 8.74 0 12s.01 3.67.07 4.95c.06 1.27.26 2.15.56 2.91.3.79.72 1.46 1.38 2.13.67.66 1.34 1.08 2.13 1.38.76.3 1.64.5 2.91.56C8.33 23.99 8.74 24 12 24s3.67-.01 4.95-.07c1.27-.06 2.15-.26 2.91-.56.79-.3 1.46-.72 2.13-1.38.66-.67 1.08-1.34 1.38-2.13.3-.76.5-1.64.56-2.91.06-1.28.07-1.69.07-4.95s-.01-3.67-.07-4.95c-.06-1.27-.26-2.15-.56-2.91-.3-.79-.72-1.46-1.38-2.13C21.32 1.35 20.65.93 19.86.63c-.76-.3-1.64-.5-2.91-.56C15.67.01 15.26 0 12 0zm0 5.84a6.16 6.16 0 1 0 0 12.32 6.16 6.16 0 0 0 0-12.32zM12 16a4 4 0 1 1 0-8 4 4 0 0 1 0 8zm7.85-10.4a1.44 1.44 0 1 1-2.88 0 1.44 1.44 0 0 1 2.88 0z"/></svg>
-            Instagram
-          </span>
-        </div>
-      </div>
-    </section>
-
-    <!-- ─────────────────────────────────────── RESULTADOS ESPERADOS ── -->
-    <section class="section-sm" style="background:#fff; border-top:1px solid #E2E8F0"
-             aria-labelledby="resultados-heading">
-      <div class="max-w-4xl mx-auto">
-
-        <div class="text-center mb-10 reveal">
-          <p class="text-xs font-semibold tracking-widest mb-3 uppercase" style="color:var(--cyan)">O que muda</p>
-          <h2 id="resultados-heading" class="font-black mb-3"
-              style="font-size:clamp(1.75rem,4vw,2.5rem); color:var(--navy); letter-spacing:-0.02em">
-            O que passa a existir no seu consultório
-          </h2>
-          <p class="text-lg" style="color:#64748B">Quatro mudanças concretas, a partir do primeiro mês.</p>
-        </div>
-
-        <div class="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
-
-          <div class="result-card reveal">
-            <div class="result-number">1<span></span></div>
-            <p class="text-sm font-semibold mb-1" style="color:var(--navy)">parceiro, não quatro</p>
-            <p class="text-xs" style="color:#94A3B8">marketing, secretária, IA e financeiro sob o mesmo teto</p>
-          </div>
-
-          <div class="result-card reveal d1">
-            <div class="result-number">0<span>h</span></div>
-            <p class="text-sm font-semibold mb-1" style="color:var(--navy)">dedicadas a marketing</p>
-            <p class="text-xs" style="color:#94A3B8">o time cuida de tudo, você só atende</p>
-          </div>
-
-          <div class="result-card reveal d2">
-            <div class="result-number">24<span>/7</span></div>
-            <p class="text-sm font-semibold mb-1" style="color:var(--navy)">secretária no WhatsApp</p>
-            <p class="text-xs" style="color:#94A3B8">nenhum lead perde para o concorrente por falta de resposta</p>
-          </div>
-
-          <div class="result-card reveal d3">
-            <div class="result-number">14<span>d</span></div>
-            <p class="text-sm font-semibold mb-1" style="color:var(--navy)">para estar no ar</p>
-            <p class="text-xs" style="color:#94A3B8">site, campanhas e agente prontos. sem esperar meses</p>
-          </div>
-
-        </div>
-      </div>
-    </section>
-
-    <!--
-    ── PROVA SOCIAL (ativar após o case piloto) ──────────────────────────
-    <section style="padding:80px 24px; background:#F8FAFC; border-top:1px solid #E2E8F0">
-      <div style="max-width:700px; margin:0 auto; text-align:center">
-        <p style="color:var(--cyan); font-size:.75rem; font-weight:700; letter-spacing:.1em; text-transform:uppercase; margin-bottom:16px">O que os médicos dizem</p>
-        <blockquote style="font-size:1.5rem; font-weight:700; color:var(--navy); line-height:1.4; margin-bottom:24px">
-          "Em 60 dias minha agenda estava cheia. Nunca mais dependi só de indicação."
-        </blockquote>
-        <div style="display:flex; align-items:center; justify-content:center; gap:12px">
-          <img src="foto-dr-piloto.jpg" alt="Dr. [Nome]" width="48" height="48"
-               style="border-radius:50%; object-fit:cover; border:2px solid var(--cyan-20)">
-          <div style="text-align:left">
-            <p style="font-weight:600; color:var(--navy); font-size:.875rem; margin:0">Dr. [Nome Sobrenome]</p>
-            <p style="color:#94A3B8; font-size:.75rem; margin:0">[Especialidade] · Salvador, BA</p>
-          </div>
-        </div>
-      </div>
-    </section>
-    ──────────────────────────────────────────────────────────────────── -->
-
-    <!-- ───────────────────────────────────────────────────────── FAQ ── -->
     <section id="faq" class="section-sm" style="background:#F8FAFC; border-top:1px solid #E2E8F0"
              aria-labelledby="faq-heading">
       <div class="max-w-3xl mx-auto">
@@ -2529,10 +2326,7 @@
               </span>
             </button>
             <div class="faq-a" id="faq-a1" x-show="open === 1" x-transition.opacity.duration.200ms x-cloak>
-              Não — e desconfie de quem garante. O que garantimos é a <strong>estrutura</strong>: as seis
-              frentes operando, um time dedicado e transparência total dos números. Você acompanha o que
-              entra, o que converte e o que custa. Resultado em saúde depende de especialidade, cidade,
-              concorrência e do seu próprio atendimento. O que está sob nosso controle, a gente entrega.
+              Não, e desconfie de quem garante. O que garantimos é a <strong>estrutura operando e os números abertos</strong>. Resultado depende também da sua especialidade, da sua cidade e do seu atendimento.
             </div>
           </div>
 
@@ -2545,9 +2339,7 @@
               </span>
             </button>
             <div class="faq-a" id="faq-a2" x-show="open === 2" x-transition.opacity.duration.200ms x-cloak>
-              Não. Agência entrega um pedaço — tráfego, ou social media, ou site. A MedScale assume o
-              consultório inteiro: presença digital, captação, secretária, agendamento, tecnologia e
-              controle financeiro. <strong>Um contrato, um time, um responsável.</strong>
+              Não. Agência entrega um pedaço: tráfego, ou social media, ou site. A MedScale assume o consultório inteiro. <strong>Um contrato, um time, um responsável.</strong>
             </div>
           </div>
 
@@ -2560,9 +2352,7 @@
               </span>
             </button>
             <div class="faq-a" id="faq-a3" x-show="open === 3" x-transition.opacity.duration.200ms x-cloak>
-              Não precisa. Boa parte do que fazemos foi desenhada exatamente para o médico que atende
-              sozinho ou com uma secretária. Consultório próprio, sala alugada, atendimento em clínica
-              de terceiros ou telemedicina — <strong>a estrutura se adapta ao seu formato.</strong>
+              Não precisa. Boa parte do que fazemos é desenhada para quem atende sozinho ou com uma secretária. Consultório próprio, sala alugada ou telemedicina: <strong>a estrutura se adapta.</strong>
             </div>
           </div>
 
@@ -2575,9 +2365,7 @@
               </span>
             </button>
             <div class="faq-a" id="faq-a4" x-show="open === 4" x-transition.opacity.duration.200ms x-cloak>
-              Depende do que o seu consultório precisa. Quem já tem site e secretária não paga pelo mesmo
-              escopo de quem está começando do zero. Por isso o diagnóstico é gratuito: a partir dele
-              montamos uma proposta com <strong>escopo e valor fechados, sem surpresa e sem fidelidade.</strong>
+              Depende do escopo. Quem já tem site e secretária não paga o mesmo que quem começa do zero. O diagnóstico é gratuito e dele sai uma proposta com <strong>valor fechado e sem fidelidade.</strong>
             </div>
           </div>
 
@@ -2590,25 +2378,7 @@
               </span>
             </button>
             <div class="faq-a" id="faq-a5" x-show="open === 5" x-transition.opacity.duration.200ms x-cloak>
-              Sua estrutura entra no ar em <strong>14 dias.</strong> Daí em diante o ritmo depende de
-              especialidade, cidade e investimento em mídia. O que dá para prometer com honestidade é
-              acompanhamento: você vê os números desde a primeira semana e tem reunião de estratégia
-              todo mês.
-            </div>
-          </div>
-
-          <div class="faq-item">
-            <button type="button" class="faq-q" @click="open = open === 6 ? null : 6"
-                    :aria-expanded="open === 6 ? 'true' : 'false'" aria-controls="faq-a6">
-              <span>Vocês cuidam do meu Instagram?</span>
-              <span class="faq-icon" :class="{ 'open': open === 6 }" aria-hidden="true">
-                <svg width="12" height="12" fill="none" stroke="var(--cyan-dark)" stroke-width="2.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M12 5v14M5 12h14"/></svg>
-              </span>
-            </button>
-            <div class="faq-a" id="faq-a6" x-show="open === 6" x-transition.opacity.duration.200ms x-cloak>
-              Sim — com foco em agenda cheia, não em número de seguidor. Roteiro, edição, calendário e
-              publicação são nossos. E se você não quiser aparecer em vídeo, tudo bem: existe uma trilha
-              inteira focada em tráfego, site e agendamento que <strong>funciona sem a sua imagem.</strong>
+              A estrutura entra no ar em <strong>14 dias.</strong> O ritmo depois depende de especialidade, cidade e mídia. Você vê os números desde a primeira semana e tem reunião todo mês.
             </div>
           </div>
 
@@ -2621,10 +2391,7 @@
               </span>
             </button>
             <div class="faq-a" id="faq-a7" x-show="open === 7" x-transition.opacity.duration.200ms x-cloak>
-              O agente de WhatsApp faz o que uma secretária faria fora do horário: responde dúvida
-              administrativa, mostra horários, agenda, confirma e lembra. <strong>Ele não dá orientação
-              clínica, não interpreta sintoma e não substitui você.</strong> Qualquer assunto que fuja
-              disso é repassado para a secretária treinada ou para você.
+              Responde dúvida administrativa, mostra horários, agenda, confirma e lembra. <strong>Não dá orientação clínica e não interpreta sintoma.</strong> Isso vai direto para a sua equipe.
             </div>
           </div>
 
@@ -2639,23 +2406,9 @@
     </section>
 
     <!-- ─────────────────────────────────────────────────── CTA FINAL ── -->
-    <section id="cta-final" class="section-sm section-dark" aria-labelledby="cta-final-heading">
-      <div class="max-w-2xl mx-auto text-center reveal">
-        <h2 id="cta-final-heading" class="font-black leading-tight mb-5"
-            style="font-size:clamp(1.6rem,3.8vw,2.25rem); color:#fff; letter-spacing:-0.02em">
-          Leu até aqui?<br>
-          <span class="text-gradient">Então o próximo passo é conversar.</span>
-        </h2>
-        <p class="text-base leading-relaxed mb-8 mx-auto" style="color:rgba(255,255,255,.60); max-width:480px">
-          O diagnóstico é gratuito e são 4 perguntas. Se a MedScale não fizer sentido para
-          o seu momento, a gente diz na hora.
-        </p>
-        <a href="#diagnostico" class="btn shiny"><span>Fazer meu diagnóstico gratuito</span></a>
-        <p class="text-sm mt-6 m-0" style="color:rgba(255,255,255,.35)">
-          Sem fidelidade · Retorno em até 1 hora em dias úteis
-        </p>
-      </div>
-    </section>
+    
+
+    
 
   </main>
 
@@ -2684,8 +2437,8 @@
         <nav class="ft-links" aria-label="Links do rodapé">
           <a href="https://medscalebr.com/login" class="ft-destaque">Acessar a plataforma</a>
           <a href="mailto:contato@medscalebr.com">contato@medscalebr.com</a>
-          <a href="/politica-privacidade.html">Política de Privacidade</a>
-          <a href="/exclusao-dados.html">Exclusão de Dados</a>
+          <a href="politica-privacidade.html">Política de Privacidade</a>
+          <a href="exclusao-dados.html">Exclusão de Dados</a>
           <a href="https://instagram.com/medscalebrasil" class="ft-social"
              target="_blank" rel="noopener noreferrer"
              aria-label="MedScale no Instagram (abre em nova aba)">@medscalebrasil</a>

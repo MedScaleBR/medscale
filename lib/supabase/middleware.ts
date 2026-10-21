@@ -38,10 +38,10 @@ export async function updateSession(request: NextRequest) {
   // e escolher Entrar/Criar conta) quanto logado (pra aceitar) — por isso é
   // uma rota pública separada, e não entra em AUTH_ROUTES (que redireciona
   // usuário já logado para o dashboard).
-  // /politica-privacidade.html e /exclusao-dados.html são servidos de public/
-  // (cópia do arquivo estático original em medscale-site/, sem alterá-lo) e
-  // são linkados pela landing page.
-  const PUBLIC_ROUTES = ['/invite', '/politica-privacidade.html', '/exclusao-dados.html']
+  // /politica-privacidade.html, /exclusao-dados.html e /demonstracao.html são
+  // servidos de public/ (cópia do arquivo estático original em medscale-site/,
+  // sem alterá-lo) e são linkados pela landing page.
+  const PUBLIC_ROUTES = ['/invite', '/politica-privacidade.html', '/exclusao-dados.html', '/demonstracao.html']
   const isPublicRoute = PUBLIC_ROUTES.some((route) => pathname === route || pathname.startsWith(`${route}/`))
   // "/" é a landing page estática (app/route.ts) — não pode entrar em
   // PUBLIC_ROUTES (que usa prefixo) porque "/" como prefixo bateria com
