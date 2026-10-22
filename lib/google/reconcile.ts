@@ -100,7 +100,10 @@ export async function reconcileCalendar(workspaceId: string, from: Date, to: Dat
   // existir no Google. Se sumiu ou foi cancelado, recria em vez de cancelar.
   // LGPD: falha só loga o id da consulta.
   const recreatePendingEvent = async (row: AppointmentRow) => {
-    if (!doctorEmail) return
+    if (!doctorEmail) {
+      console.error(`reconcileCalendar: sem e-mail Google para recriar o evento pendente da consulta ${row.id}`)
+      return
+    }
     try {
       const created = await createEvent({
         workspaceId,

@@ -49,7 +49,15 @@ export async function POST(req: NextRequest) {
       if (error) throw new Error(error.message)
       if (!updated || updated.length === 0) continue
 
-      if (appt.gcal_event_id) await deleteEvent(appt.workspace_id, appt.gcal_event_id)
+      // O status já virou cancelado (não há retry): falha ao apagar o evento
+      // vai para errors, mas a equipe ainda precisa ser avisada.
+      if (appt.gcal_event_id) {
+        try {
+          await deleteEvent(appt.workspace_id, appt.gcal_event_id)
+        } catch (err) {
+          errors.push(`${appt.id}: ${err instanceof Error ? err.message : 'erro'}`)
+        }
+      }
       await notifyOutsourcedIssue({
         accountId: appt.account_id,
         workspaceId: appt.workspace_id,
