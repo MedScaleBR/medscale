@@ -7,7 +7,15 @@ export type MembershipRole = 'owner' | 'admin' | 'member'
 export type MembershipStatus = 'pending' | 'active' | 'suspended'
 export type AppointmentType = 'consulta' | 'retorno' | 'avaliacao' | 'procedimento' | 'outro'
 export type AppointmentSource = 'bot' | 'manual' | 'importado'
-export type AppointmentStatus = 'agendado' | 'confirmado' | 'realizado' | 'cancelado' | 'no_show'
+export type AppointmentStatus =
+  | 'agendado'
+  | 'confirmado'
+  | 'realizado'
+  | 'cancelado'
+  | 'no_show'
+  | 'pendente_confirmacao_externa'
+// Agendamento terceirizado: aguardando a clínica parceira confirmar o horário.
+export const PENDING_EXTERNAL_STATUS = 'pendente_confirmacao_externa' as const
 export type ConversationStatus = 'open' | 'resolved' | 'handoff'
 export type MessageRole = 'user' | 'assistant' | 'system'
 export type AvailabilityExceptionType = 'blocked' | 'extra'
@@ -47,6 +55,14 @@ export type HandoffTriggerReason =
   | 'max_turns'
   | 'out_of_hours'
   | 'injection_suspected'
+  | 'clinica_externa_ambiguo'
+  | 'clinica_externa_negacao'
+  | 'clinica_externa_timeout'
+  | 'cancelamento_terceirizado'
+  | 'clinica_externa_falha_envio'
+  | 'clinica_externa_config'
+export type ClinicConfirmationDirection = 'outbound' | 'inbound'
+export type ClinicConfirmationClassification = 'confirmacao' | 'negacao' | 'ambiguo'
 export type TranscriptionStatus =
   | 'pending'
   | 'transcribing'
@@ -126,6 +142,10 @@ export interface Database {
           // Calendário Google desta unidade dentro da conexão única da account
           // (google_tokens é por account). null = calendário "primary".
           gcal_calendar_id: string | null
+          // Agendamento terceirizado: só vale com os dois preenchidos. Telefone
+          // só dígitos com DDI (5571999990000).
+          is_outsourced: boolean
+          external_clinic_phone: string | null
           cnes: string | null
           cnpj: string | null
           legal_name: string | null
@@ -570,6 +590,8 @@ export interface Database {
           authorization_date: string | null
           gcal_event_id: string | null
           reminder_sent: boolean
+          external_requested_at: string | null
+          external_escalated_at: string | null
           created_at: string
           updated_at: string
         }
@@ -1174,7 +1196,7 @@ export interface Database {
           id: string
           workspace_id: string
           conversation_id: string | null
-          patient_phone: string
+          patient_phone: string | null
           trigger_reason: HandoffTriggerReason | null
           handoff_to: string | null
           // Conteúdo descartado por suspeita de injection. Só existe aqui (RLS),
@@ -1182,7 +1204,7 @@ export interface Database {
           flagged_content: string | null
           sent_at: string
         }
-        Insert: Partial<Database['public']['Tables']['handoff_logs']['Row']> & { workspace_id: string; patient_phone: string }
+        Insert: Partial<Database['public']['Tables']['handoff_logs']['Row']> & { workspace_id: string }
         Update: Partial<Database['public']['Tables']['handoff_logs']['Row']>
         Relationships: [
           {
@@ -1195,6 +1217,46 @@ export interface Database {
             foreignKeyName: 'handoff_logs_conversation_id_fkey'
             columns: ['conversation_id']
             referencedRelation: 'conversations'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      clinic_confirmations: {
+        Row: {
+          id: string
+          account_id: string
+          workspace_id: string
+          appointment_id: string | null
+          direction: ClinicConfirmationDirection
+          raw_text: string
+          classification: ClinicConfirmationClassification | null
+          whatsapp_id: string | null
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['clinic_confirmations']['Row']> & {
+          account_id: string
+          workspace_id: string
+          direction: ClinicConfirmationDirection
+          raw_text: string
+        }
+        Update: Partial<Database['public']['Tables']['clinic_confirmations']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'clinic_confirmations_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'clinic_confirmations_workspace_id_fkey'
+            columns: ['workspace_id']
+            referencedRelation: 'workspaces'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'clinic_confirmations_appointment_id_fkey'
+            columns: ['appointment_id']
+            referencedRelation: 'appointments'
             referencedColumns: ['id']
           },
         ]
