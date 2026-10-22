@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { parseProviderFields } from '@/lib/billing/validation'
+import { parseOutsourcedFields } from '@/lib/outsourced/config'
 import type { Database } from '@/types/database'
 
 type WorkspaceUpdate = Database['public']['Tables']['workspaces']['Update']
@@ -51,6 +52,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const provider = parseProviderFields(body)
   if (!provider.ok) return NextResponse.json({ error: provider.error }, { status: 400 })
   Object.assign(update, provider.value)
+
+  // Agendamento terceirizado: valida contra o estado atual da unidade, mas só
+  // consulta o banco quando o body mexe nesses campos.
+  if ('is_outsourced' in body || 'external_clinic_phone' in body) {
+    const { data: current } = await supabase
+      .from('workspaces')
+      .select('is_outsourced, external_clinic_phone')
+      .eq('id', id)
+      .eq('account_id', session.accountId)
+      .maybeSingle()
+    const outsourced = parseOutsourcedFields(body, {
+      is_outsourced: current?.is_outsourced ?? false,
+      external_clinic_phone: current?.external_clinic_phone ?? null,
+    })
+    if (!outsourced.ok) return NextResponse.json({ error: outsourced.error }, { status: 400 })
+    Object.assign(update, outsourced.value)
+  }
 
   const { data, error } = await supabase
     .from('workspaces')

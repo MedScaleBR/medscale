@@ -4,9 +4,12 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Switch } from '@/components/ui/switch'
 import { Textarea } from '@/components/ui/textarea'
 import { lookupCep, maskCep } from '@/lib/cep'
 import { friendlyErrorMessage } from '@/lib/friendly-errors'
+import { parseOutsourcedFields } from '@/lib/outsourced/config'
+import { formatBrazilianPhone } from '@/lib/phone'
 
 export interface UnitDetail {
   id: string
@@ -18,9 +21,11 @@ export interface UnitDetail {
   directions_parking: string | null
   contact_info: string | null
   handoff_number: string | null
+  is_outsourced: boolean
+  external_clinic_phone: string | null
 }
 
-type UnitForm = Record<Exclude<keyof UnitDetail, 'id'>, string>
+type UnitForm = Record<Exclude<keyof UnitDetail, 'id' | 'is_outsourced'>, string>
 
 function toForm(w: UnitDetail): UnitForm {
   return {
@@ -32,6 +37,7 @@ function toForm(w: UnitDetail): UnitForm {
     directions_parking: w.directions_parking ?? '',
     contact_info: w.contact_info ?? '',
     handoff_number: w.handoff_number ?? '',
+    external_clinic_phone: w.external_clinic_phone ? formatBrazilianPhone(w.external_clinic_phone) : '',
   }
 }
 
@@ -44,6 +50,7 @@ export function UnitDetailForm({
   canManage: boolean
 }) {
   const [form, setForm] = useState(() => toForm(workspace))
+  const [isOutsourced, setIsOutsourced] = useState(workspace.is_outsourced)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -66,9 +73,17 @@ export function UnitDetailForm({
 
   const save = async () => {
     if (!form.name.trim()) return
-    setSaving(true)
     setSaved(false)
     setError(null)
+    const outsourced = parseOutsourcedFields(
+      { is_outsourced: isOutsourced, external_clinic_phone: form.external_clinic_phone },
+      { is_outsourced: workspace.is_outsourced, external_clinic_phone: workspace.external_clinic_phone }
+    )
+    if (!outsourced.ok) {
+      setError(outsourced.error)
+      return
+    }
+    setSaving(true)
     try {
       const res = await fetch(`/api/workspaces/${workspace.id}`, {
         method: 'PATCH',
@@ -82,6 +97,8 @@ export function UnitDetailForm({
           directions_parking: form.directions_parking || null,
           contact_info: form.contact_info || null,
           handoff_number: form.handoff_number || null,
+          is_outsourced: isOutsourced,
+          external_clinic_phone: form.external_clinic_phone || null,
         }),
       })
       const data = await res.json()
@@ -170,6 +187,30 @@ export function UnitDetailForm({
               onChange={(e) => setField('handoff_number', e.target.value)}
               placeholder="+5511999999999"
               className="mt-1 font-mono"
+            />
+          </div>
+        </fieldset>
+      </section>
+
+      <section className={card}>
+        <h2 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Agendamento terceirizado</h2>
+        <fieldset disabled={!canManage} className="space-y-4">
+          <label className="flex items-center justify-between gap-4">
+            <span className="text-sm font-medium text-gray-900">Agendamento terceirizado</span>
+            <Switch checked={isOutsourced} onCheckedChange={setIsOutsourced} />
+          </label>
+          <div>
+            <Label htmlFor="external_clinic_phone">WhatsApp da clínica parceira</Label>
+            <p className="mb-1 text-xs text-gray-400">
+              A Clara envia a solicitação para esse número e só confirma ao paciente depois que a clínica parceira responder.
+            </p>
+            <Input
+              id="external_clinic_phone"
+              value={form.external_clinic_phone}
+              onChange={(e) => setField('external_clinic_phone', formatBrazilianPhone(e.target.value))}
+              placeholder="(71) 99999-0000"
+              inputMode="tel"
+              className="mt-1"
             />
           </div>
         </fieldset>
