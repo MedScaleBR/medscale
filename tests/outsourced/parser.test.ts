@@ -35,6 +35,11 @@ describe('parseClinicConfirmation', () => {
     'CONSULTA AGENDADA\nHorário: 08:00\nData: 31/02/2026', // data inexistente
     'CONSULTA AGENDADA\nHorário: 25:00\nData: 16/10/2026', // hora inválida
     'Ainda não deixei a consulta agendada\nHorário: 08:00\nData: 16/10/2026', // cabeçalho não está no início da linha
+    'CONSULTA AGENDADA NÃO CONFIRMADA\nHorário: 08:00\nData: 16/10/2026',
+    'CONSULTA AGENDADA - CANCELADA\nHorário: 08:00\nData: 16/10/2026',
+    'CONSULTA AGENDADA - DESMARCADO\nHorário: 08:00\nData: 16/10/2026',
+    'CONSULTA AGENDADA\nHorário: 08:00\nData: 16/10/2026\n\nCONSULTA AGENDADA\nHorário: 09:00\nData: 17/10/2026', // dois blocos
+    'CONSULTA AGENDADA Horário: 08:00 Data: 16/10/2026', // tudo numa linha
   ])('%s → null', (t) => expect(parseClinicConfirmation(t)).toBeNull())
 })
 

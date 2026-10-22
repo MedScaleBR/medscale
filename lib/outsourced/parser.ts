@@ -21,6 +21,7 @@ const TIME_RE = new RegExp(String.raw`${LEAD}hor[aá]rio\s*:\s*(\d{1,2})\s*[:hH]
 const DOCTOR_RE = new RegExp(String.raw`${LEAD}m[eé]dic[oa]\s*:\s*(.+)$`, 'iu')
 const LABEL_RE = /^[^\p{L}\p{N}]*[\p{L} ]{2,30}:/u
 const NAME_RE = /^\p{L}[\p{L}'’. -]*[\p{L}.]$/u
+const HEADER_VETO_RE = /(?<!\p{L})(n[aã]o|cancelad[ao]|desmarcad[ao])(?!\p{L})/iu
 const NEGATION_RE = /(?<!\p{L})(n[aã]o|sem\s+vaga|indispon[ií]ve(l|is))(?!\p{L})/iu
 
 function buildInstant(d: number, m: number, y: number, hh: number, mm: number): Date | null {
@@ -35,6 +36,9 @@ export function parseClinicConfirmation(text: string): ClinicConfirmation | null
   const lines = (text ?? '').split(/\r?\n/).map((l) => l.trim())
   const headerIdx = lines.findIndex((l) => HEADER_RE.test(l))
   if (headerIdx === -1) return null
+  // Cabeçalho negado/cancelado, ou dois blocos na mesma mensagem: ambíguo, equipe resolve.
+  if (HEADER_VETO_RE.test(lines[headerIdx])) return null
+  if (lines.slice(headerIdx + 1).some((l) => HEADER_RE.test(l))) return null
 
   let date: RegExpMatchArray | null = null
   let time: RegExpMatchArray | null = null

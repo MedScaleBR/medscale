@@ -46,6 +46,7 @@ describe('outsourced config', () => {
 
   it('missingOutsourcedFields', () => {
     expect(missingOutsourcedFields({ fullName: 'Paciente', birthDate: null, insuranceChosen: false })).toEqual(['nome', 'nascimento', 'convenio'])
+    expect(missingOutsourcedFields({ fullName: ' ', birthDate: '1980-05-03', insuranceChosen: true })).toContain('nome')
     expect(missingOutsourcedFields({ fullName: 'Maria Souza', birthDate: '1980-05-03', insuranceChosen: true })).toEqual([])
   })
 })
