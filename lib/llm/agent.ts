@@ -26,6 +26,14 @@ import {
 import type { Database } from '@/types/database'
 import { PENDING_EXTERNAL_STATUS } from '@/types/database'
 import { recordClaudeCost, recordWhatsappConversation } from '@/lib/costs/record'
+import { missingOutsourcedFields } from '@/lib/outsourced/config'
+import {
+  alreadyPendingMessage,
+  missingDataMessage,
+  REQUEST_FAILED_MESSAGE,
+  requestedMessage,
+} from '@/lib/outsourced/messages'
+import { requestExternalConfirmation } from '@/lib/outsourced/request'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
@@ -574,6 +582,10 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   let bookingFailed = false
   let unitRequired = false
   let cancellationFailed = false
+  // Unidade terceirizada: mensagem fixa que substitui a do Claude, e se faltou
+  // dado do paciente (aí nada foi solicitado — a consulta antiga fica).
+  let outsourcedMessage: string | null = null
+  let outsourcedNeedsData = false
   const insuranceChoice = markers.insuranceChoice
   const selectedInsurer = insuranceChoice && insuranceChoice !== 'PARTICULAR'
     ? (insurerRows ?? []).find((i) => i.id.toLowerCase() === insuranceChoice.toLowerCase()) ?? null
@@ -610,101 +622,144 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
         : null
       const snapshotPrice = resolvedProcedure?.price ?? null
 
-      const stillAvailable = await isSlotAvailable(bookingUnitId, scheduledAt, durationMin).catch(() => true)
-
-      if (!stillAvailable) {
-        console.warn(`Slot ${markers.confirmedSlot} não está mais disponível (unidade ${bookingUnitId}) — agendamento não criado.`)
-        bookingFailed = true
-      } else {
-        const { data: appt } = await supabase
-          .from('appointments')
-          .insert({
-            workspace_id: bookingUnitId,
-            account_id: accountId,
-            patient_id: patient?.id,
-            patient_name: patient?.full_name ?? 'Paciente',
-            patient_phone: patientPhone,
-            scheduled_at: scheduledAt.toISOString(),
-            duration_min: durationMin,
-            source: 'bot',
-            status: 'agendado',
-            procedure_id: resolvedProcedure?.id ?? null,
-            procedure_name: resolvedProcedure?.name ?? null,
-            price: snapshotPrice,
-            ...(selectedInsurer ? {
-              billing_type: 'convenio' as const,
-              insurer_id: selectedInsurer.id,
-              health_plan: selectedInsurer.name,
-            } : {}),
-          })
-          .select()
-          .single()
-
-        if (appt) {
-          await supabase
-            .from('conversations')
-            .update({ appointment_id: appt.id, workspace_id: bookingUnitId })
-            .eq('id', conversation.id)
-
-          if (!selectedInsurer) {
-            await createBookingRevenueEntry(supabase, {
-              workspaceId: bookingUnitId,
-              accountId,
-              appointmentId: appt.id,
-              patientId: patient?.id ?? null,
-              procedureId: resolvedProcedure?.id ?? null,
-              procedureName: resolvedProcedure?.name ?? null,
-              amount: snapshotPrice,
-              scheduledAt: scheduledAt.toISOString(),
-              source: 'bot',
-            })
-          }
-
-          // Paciente que estava na lista de espera e acabou de agendar sai da lista.
-          if (patient?.id) {
-            await supabase
-              .from('waitlist')
-              .update({ status: 'scheduled' })
-              .eq('workspace_id', bookingUnitId)
-              .eq('patient_id', patient.id)
-              .eq('status', 'waiting')
-          }
-
-          await trackAppointmentBookedByBot(accountId, {
-            workspace_id: bookingUnitId,
-            account_id: accountId,
-            slot_datetime: scheduledAt.toISOString(),
-          })
-
-          const { connected, email } = await isGoogleConnected(accountId)
-          if (connected && email) {
-            try {
-              const gcalEvent = await createEvent({
-                workspaceId: bookingUnitId,
-                patientName: appt.patient_name,
-                patientPhone: appt.patient_phone,
-                appointmentType: appt.type,
-                startTime: scheduledAt,
-                durationMin,
-                workspaceName: allUnitById.get(bookingUnitId)?.name ?? accountName,
-                doctorEmail: email,
-              })
-              if (gcalEvent.id) {
-                await supabase.from('appointments').update({ gcal_event_id: gcalEvent.id }).eq('id', appt.id)
-              }
-            } catch (gcalErr) {
-              console.error('Google Calendar sync failed (bot booking):', gcalErr)
-            }
-          }
-        } else {
+      const bookingUnit = allUnitById.get(bookingUnitId)
+      if (bookingUnit?.isOutsourced && bookingUnit.externalClinicPhone) {
+        // Unidade terceirizada: a Clara não agenda — pede o horário à clínica
+        // parceira e o paciente recebe uma mensagem fixa (o Claude não promete nada).
+        const fullName = patient?.full_name ?? null
+        const patientBirthDate = patient?.birth_date ?? null
+        const missing = missingOutsourcedFields({
+          fullName,
+          birthDate: patientBirthDate,
+          insuranceChosen: insuranceChoice !== null,
+        })
+        if (missing.length > 0 || !patient || !fullName || !patientBirthDate) {
+          outsourcedMessage = missingDataMessage(missing, bookingUnit.name)
+          outsourcedNeedsData = true
+        } else if (!(await isSlotAvailable(bookingUnitId, scheduledAt, durationMin).catch(() => true))) {
+          console.warn(`Slot ${markers.confirmedSlot} não está mais disponível (unidade ${bookingUnitId}) — solicitação não enviada.`)
           bookingFailed = true
+        } else {
+          const result = await requestExternalConfirmation({
+            supabase,
+            accountId,
+            accountName,
+            unit: { id: bookingUnitId, name: bookingUnit.name, externalClinicPhone: bookingUnit.externalClinicPhone },
+            patient: { id: patient.id, fullName, birthDate: patientBirthDate },
+            patientPhone,
+            conversationId: conversation.id,
+            scheduledAt,
+            durationMin,
+            insurer: selectedInsurer,
+            procedure: resolvedProcedure,
+            replacingAppointmentId: markers.cancelledAppointmentId,
+            phoneNumberId: botConfig.phoneNumberId,
+            metaToken: botConfig.metaToken ? decryptToken(botConfig.metaToken) : null,
+          })
+          outsourcedMessage =
+            result.kind === 'requested'
+              ? requestedMessage({ scheduledAt, unitName: bookingUnit.name })
+              : result.kind === 'already_pending'
+                ? alreadyPendingMessage(bookingUnit.name)
+                : REQUEST_FAILED_MESSAGE
+        }
+      } else {
+        const stillAvailable = await isSlotAvailable(bookingUnitId, scheduledAt, durationMin).catch(() => true)
+
+        if (!stillAvailable) {
+          console.warn(`Slot ${markers.confirmedSlot} não está mais disponível (unidade ${bookingUnitId}) — agendamento não criado.`)
+          bookingFailed = true
+        } else {
+          const { data: appt } = await supabase
+            .from('appointments')
+            .insert({
+              workspace_id: bookingUnitId,
+              account_id: accountId,
+              patient_id: patient?.id,
+              patient_name: patient?.full_name ?? 'Paciente',
+              patient_phone: patientPhone,
+              scheduled_at: scheduledAt.toISOString(),
+              duration_min: durationMin,
+              source: 'bot',
+              status: 'agendado',
+              procedure_id: resolvedProcedure?.id ?? null,
+              procedure_name: resolvedProcedure?.name ?? null,
+              price: snapshotPrice,
+              ...(selectedInsurer ? {
+                billing_type: 'convenio' as const,
+                insurer_id: selectedInsurer.id,
+                health_plan: selectedInsurer.name,
+              } : {}),
+            })
+            .select()
+            .single()
+
+          if (appt) {
+            await supabase
+              .from('conversations')
+              .update({ appointment_id: appt.id, workspace_id: bookingUnitId })
+              .eq('id', conversation.id)
+
+            if (!selectedInsurer) {
+              await createBookingRevenueEntry(supabase, {
+                workspaceId: bookingUnitId,
+                accountId,
+                appointmentId: appt.id,
+                patientId: patient?.id ?? null,
+                procedureId: resolvedProcedure?.id ?? null,
+                procedureName: resolvedProcedure?.name ?? null,
+                amount: snapshotPrice,
+                scheduledAt: scheduledAt.toISOString(),
+                source: 'bot',
+              })
+            }
+
+            // Paciente que estava na lista de espera e acabou de agendar sai da lista.
+            if (patient?.id) {
+              await supabase
+                .from('waitlist')
+                .update({ status: 'scheduled' })
+                .eq('workspace_id', bookingUnitId)
+                .eq('patient_id', patient.id)
+                .eq('status', 'waiting')
+            }
+
+            await trackAppointmentBookedByBot(accountId, {
+              workspace_id: bookingUnitId,
+              account_id: accountId,
+              slot_datetime: scheduledAt.toISOString(),
+            })
+
+            const { connected, email } = await isGoogleConnected(accountId)
+            if (connected && email) {
+              try {
+                const gcalEvent = await createEvent({
+                  workspaceId: bookingUnitId,
+                  patientName: appt.patient_name,
+                  patientPhone: appt.patient_phone,
+                  appointmentType: appt.type,
+                  startTime: scheduledAt,
+                  durationMin,
+                  workspaceName: allUnitById.get(bookingUnitId)?.name ?? accountName,
+                  doctorEmail: email,
+                })
+                if (gcalEvent.id) {
+                  await supabase.from('appointments').update({ gcal_event_id: gcalEvent.id }).eq('id', appt.id)
+                }
+              } catch (gcalErr) {
+                console.error('Google Calendar sync failed (bot booking):', gcalErr)
+              }
+            }
+          } else {
+            bookingFailed = true
+          }
         }
       }
     }
   }
 
   // Cancelamento confirmado — casa por id (copiado do system prompt) + paciente.
-  if (markers.cancelledAppointmentId && patient && !insuranceNeedsClarification) {
+  if (markers.cancelledAppointmentId && patient && !insuranceNeedsClarification && !outsourcedNeedsData) {
     const apptId = markers.cancelledAppointmentId
     const { data: apptToCancel } = await supabase
       .from('appointments')
@@ -817,6 +872,8 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     finalMessage = UNIT_REQUIRED_MESSAGE
   } else if (bookingFailed) {
     finalMessage = BOOKING_FAILED_MESSAGE
+  } else if (outsourcedMessage) {
+    finalMessage = outsourcedMessage
   } else if (cancellationFailed) {
     finalMessage = CANCELLATION_FAILED_MESSAGE
   } else if (discountFlagged) {
