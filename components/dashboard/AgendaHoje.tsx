@@ -8,6 +8,7 @@ const STATUS_LABEL: Record<string, string> = {
   realizado: 'Realizado',
   cancelado: 'Cancelado',
   no_show: 'No-show',
+  pendente_confirmacao_externa: 'Aguardando clínica',
 }
 
 export function AgendaHoje({ items }: { items: TodayAgendaItem[] }) {

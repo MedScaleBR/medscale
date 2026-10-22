@@ -13,6 +13,7 @@ const STATUS_LABEL: Record<string, string> = {
   realizado: 'Realizado',
   cancelado: 'Cancelado',
   no_show: 'No-show',
+  pendente_confirmacao_externa: 'Aguardando clínica',
 }
 
 export default async function PatientDetailPage({ params }: { params: Promise<{ id: string }> }) {

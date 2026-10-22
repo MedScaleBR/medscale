@@ -34,6 +34,13 @@ describe('previsibilidade de receita', () => {
     expect(result).toMatchObject({ total: 250, appointments: 1, insurance: 1, missingPrice: 0 })
   })
 
+  it('exclui consulta pendente de confirmação da clínica parceira', () => {
+    const result = summarizeAppointmentForecast([
+      appointment({ status: 'pendente_confirmacao_externa', price: 300 }),
+    ])
+    expect(result).toMatchObject({ appointments: 0, total: 0 })
+  })
+
   it('distingue preço ausente de gratuidade e usa o tipo sem procedimento', () => {
     const result = summarizeAppointmentForecast([
       appointment({ price: null }),
@@ -75,6 +82,7 @@ describe('busca da previsão mensal', () => {
       ]))
     }
     expect(mock.calls[1].filters).toContainEqual(['range', 1000, 1999])
+    expect(mock.calls[0].filters).toContainEqual(['not', 'status', 'in', '("cancelado","no_show","pendente_confirmacao_externa")'])
   })
 
   it('não apresenta um total parcial quando uma página falha', async () => {

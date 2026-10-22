@@ -11,7 +11,7 @@ export interface FunnelStep {
 }
 
 /** Consulta que chegou a existir na agenda — cancelada e no_show não contam. */
-const BOOKED = new Set(['agendado', 'confirmado', 'realizado'])
+const BOOKED = new Set(['agendado', 'confirmado', 'realizado', 'pendente_confirmacao_externa'])
 
 export function funnelSteps(leads: AttributedLead[]): FunnelStep[] {
   const total = leads.length

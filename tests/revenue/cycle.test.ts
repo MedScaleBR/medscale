@@ -176,6 +176,30 @@ describe('applyAppointmentRevenue', () => {
     expect(supabase.callsTo('revenue_entries', 'update')).toHaveLength(0)
   })
 
+  it('não cria previsão enquanto a consulta aguarda a clínica parceira', async () => {
+    const supabase = mock(revenueCycleOn)
+
+    await applyAppointmentRevenue(supabase.client as never, {
+      booking,
+      previousStatus: null,
+      nextStatus: 'pendente_confirmacao_externa',
+    })
+
+    expect(supabase.callsTo('revenue_entries', 'insert')).toHaveLength(0)
+  })
+
+  it('cria a previsão quando a clínica parceira confirma', async () => {
+    const supabase = mock(revenueCycleOn)
+
+    await applyAppointmentRevenue(supabase.client as never, {
+      booking,
+      previousStatus: 'pendente_confirmacao_externa',
+      nextStatus: 'confirmado',
+    })
+
+    expect(supabase.callsTo('revenue_entries', 'insert')).toHaveLength(1)
+  })
+
   it('não cria entrada ao cancelar — apenas move a existente para "cancelled"', async () => {
     const supabase = mock()
 

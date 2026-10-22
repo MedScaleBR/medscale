@@ -6,7 +6,8 @@ import { requireWorkspaceSession } from '@/lib/session/api'
 import { syncRevenueEntryToAppointmentStatus, applyAppointmentRevenue } from '@/lib/revenue/cycle'
 import { resolveAppointmentBilling } from '@/lib/billing/appointments'
 import { ensureGuideSafely } from '@/lib/billing/guides'
-import type { Database } from '@/types/database'
+import { PENDING_EXTERNAL_STATUS, type Database } from '@/types/database'
+import { PENDING_STATUS_FORBIDDEN_ERROR } from '@/lib/outsourced/config'
 
 type AppointmentUpdate = Database['public']['Tables']['appointments']['Update']
 
@@ -57,6 +58,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (fetchError || !current) {
     return NextResponse.json({ error: fetchError?.message ?? 'Consulta não encontrada' }, { status: 404 })
+  }
+
+  // Só a Clara põe a consulta em "Aguardando clínica"; quem já está nesse
+  // status pode reenviar o mesmo valor sem erro.
+  if (body.status === PENDING_EXTERNAL_STATUS && current.status !== PENDING_EXTERNAL_STATUS) {
+    return NextResponse.json({ error: PENDING_STATUS_FORBIDDEN_ERROR }, { status: 400 })
   }
 
   // Convênio da consulta (nome de um convênio de health_insurers). Consulta por convênio

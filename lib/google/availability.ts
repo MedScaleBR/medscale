@@ -1,6 +1,7 @@
 import { addMinutes, format, parseISO } from 'date-fns'
 import { TZDate } from '@date-fns/tz'
 import { createAdminClient } from '@/lib/supabase/server'
+import { PENDING_EXTERNAL_STATUS, type AppointmentStatus } from '@/types/database'
 import { listEvents } from './calendar'
 
 // Todos os horários são calculados na wall-clock de São Paulo via TZDate,
@@ -10,6 +11,9 @@ import { listEvents } from './calendar'
 const TZ = 'America/Sao_Paulo'
 
 const DEFAULT_SLOT_DURATION = 30
+
+// Consulta pendente de clínica parceira ocupa o slot enquanto espera a resposta.
+export const SLOT_BLOCKING_STATUSES: AppointmentStatus[] = ['agendado', 'confirmado', PENDING_EXTERNAL_STATUS]
 
 export interface TimeSlot {
   start: Date
@@ -122,7 +126,7 @@ export async function getAvailableSlots(workspaceId: string, date: Date): Promis
     .from('appointments')
     .select('scheduled_at, duration_min')
     .eq('workspace_id', workspaceId)
-    .in('status', ['agendado', 'confirmado'])
+    .in('status', SLOT_BLOCKING_STATUSES)
     .gte('scheduled_at', dayStart.toISOString())
     .lte('scheduled_at', dayEnd.toISOString())
 
