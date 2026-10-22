@@ -3,7 +3,7 @@ import { brazilianPhoneKey, normalizeBrazilianPhone } from '@/lib/phone'
 export const PENDING_STATUS_FORBIDDEN_ERROR = 'O status "Aguardando clínica" é definido apenas pela Clara.'
 
 export const OUTSOURCED_PHONE_REQUIRED_ERROR = 'Informe o WhatsApp da clínica parceira com DDD para ativar o agendamento terceirizado.'
-export const OUTSOURCED_PHONE_INVALID_ERROR = 'WhatsApp da clínica parceira inválido. Use DDD + número, ex.: (71) 99999-0000.'
+export const OUTSOURCED_PHONE_INVALID_ERROR = 'Informe um WhatsApp válido para a clínica parceira, com DDD. Ex.: (71) 99999-0000.'
 
 export interface OutsourcedFlags {
   is_outsourced: boolean

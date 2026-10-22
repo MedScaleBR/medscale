@@ -18,11 +18,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const supabase = await createClient()
   const body = await req.json()
 
-  // Só pode existir uma workspace padrão por account — desmarca as outras antes
-  if (body.is_default === true) {
-    await supabase.from('workspaces').update({ is_default: false }).eq('account_id', session.accountId)
-  }
-
   if (body.handoff_number && !/^\+\d{10,15}$/.test(body.handoff_number)) {
     return NextResponse.json(
       { error: 'Número de handoff inválido. Use o formato internacional: +5511999999999' },
@@ -68,6 +63,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     })
     if (!outsourced.ok) return NextResponse.json({ error: outsourced.error }, { status: 400 })
     Object.assign(update, outsourced.value)
+  }
+
+  // Só pode existir uma workspace padrão por account — desmarca as outras.
+  // Fica depois das validações para um 400 não deixar a account sem padrão.
+  if (body.is_default === true) {
+    await supabase.from('workspaces').update({ is_default: false }).eq('account_id', session.accountId)
   }
 
   const { data, error } = await supabase

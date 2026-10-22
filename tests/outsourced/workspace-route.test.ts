@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 import { createSupabaseMock, type SupabaseMock } from '../helpers/supabase-mock'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 import { OUTSOURCED_PHONE_INVALID_ERROR, OUTSOURCED_PHONE_REQUIRED_ERROR } from '@/lib/outsourced/config'
 
 const g = vi.hoisted(() => ({
@@ -77,5 +78,24 @@ describe('PATCH /api/workspaces/[id] — agendamento terceirizado', () => {
     expect(upd.payload).not.toHaveProperty('is_outsourced')
     expect(upd.payload).not.toHaveProperty('external_clinic_phone')
     expect(mock.callsTo('workspaces', 'select')).toHaveLength(0)
+  })
+
+  it('is_default com telefone inválido devolve 400 sem atualizar nenhuma unidade', async () => {
+    const res = await patch({ is_default: true, external_clinic_phone: 'abc' })
+    expect(res.status).toBe(400)
+    expect(mock.callsTo('workspaces', 'update')).toHaveLength(0)
+  })
+
+  it('is_default válido ainda desmarca as outras antes de gravar', async () => {
+    const res = await patch({ is_default: true })
+    expect(res.status).toBe(200)
+    const updates = mock.callsTo('workspaces', 'update')
+    expect(updates[0].payload).toEqual({ is_default: false })
+    expect(updates[1].payload).toEqual({ is_default: true })
+  })
+
+  it('as mensagens de erro chegam ao usuário sem virar o texto genérico', () => {
+    expect(friendlyErrorMessage(OUTSOURCED_PHONE_INVALID_ERROR)).toBe(OUTSOURCED_PHONE_INVALID_ERROR)
+    expect(friendlyErrorMessage(OUTSOURCED_PHONE_REQUIRED_ERROR)).toBe(OUTSOURCED_PHONE_REQUIRED_ERROR)
   })
 })
