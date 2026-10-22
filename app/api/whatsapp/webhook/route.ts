@@ -9,6 +9,9 @@ import { checkRateLimit, RATE_LIMIT_NOTICE_MESSAGE } from '@/lib/rate-limit/webh
 import { sendWhatsAppMessage } from '@/lib/whatsapp/send'
 import { parseReferral, recordAttribution } from '@/lib/whatsapp/referral'
 import { confirmReminderAppointment } from '@/lib/whatsapp/confirm-appointment'
+import { resolveClinicSender, processClinicReplyMessage } from '@/lib/outsourced/clinic-reply'
+import { notifyOutsourcedIssue } from '@/lib/outsourced/notify'
+import type { ClinicSenderMatch } from '@/lib/outsourced/config'
 
 // Valida a assinatura HMAC enviada pela Meta para garantir que o payload
 // realmente veio da Meta e não foi forjado. `secret` é o App Secret do App
@@ -122,6 +125,26 @@ export async function POST(req: NextRequest) {
 
   // A Meta exige resposta em <20s — o processamento roda após a resposta HTTP.
   after(async () => {
+    // Clínica parceira (agendamento terceirizado) — antes de qualquer fluxo de
+    // paciente: a mensagem dela nunca vira paciente/conversa e nunca é respondida.
+    let clinicSender: ClinicSenderMatch = { kind: 'none' }
+    try {
+      clinicSender = await resolveClinicSender(supabase, accountId, from)
+    } catch (err) {
+      console.error('[outsourced] resolveClinicSender failed', err)
+    }
+    if (clinicSender.kind === 'conflict') {
+      console.error(`[outsourced] telefone de clínica parceira em ${clinicSender.workspaceIds.length} unidades da account ${accountId}`)
+      await Promise.all(clinicSender.workspaceIds.map((workspaceId) =>
+        notifyOutsourcedIssue({ accountId, workspaceId, reason: 'clinica_externa_config' })))
+      return
+    }
+    if (clinicSender.kind === 'match') {
+      await processClinicReplyMessage({ accountId, workspaceId: clinicSender.workspaceId, message })
+        .catch((err) => console.error('[outsourced] processClinicReplyMessage failed', err))
+      return
+    }
+
     // Antes do rate limit, de propósito: o `referral` só existe nesta mensagem
     // e a Meta não o devolve depois. Descartar a atribuição junto com uma
     // mensagem barrada perderia para sempre o anúncio que pagou por esse lead.
