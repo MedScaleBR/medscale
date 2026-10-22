@@ -226,6 +226,26 @@ select cron.schedule(
   $$
 );
 
+-- OUTSOURCED-TIMEOUT: agendamento terceirizado — avisa a equipe quando a
+-- clínica parceira não confirma uma solicitação em 4h (uma vez por pendente,
+-- external_escalated_at) e cancela pendentes cujo horário já passou. Não muda
+-- o status por atraso: se a clínica confirmar depois, confirma normalmente.
+-- Ver app/api/cron/outsourced-timeout.
+select cron.schedule(
+  'outsourced-timeout',
+  '20 * * * *',
+  $$
+    select net.http_post(
+      url     := 'https://medscalebr.com/api/cron/outsourced-timeout',
+      headers := jsonb_build_object(
+        'Content-Type',  'application/json',
+        'Authorization', 'Bearer ' || public.cron_secret()
+      ),
+      body    := '{}'::jsonb
+    );
+  $$
+);
+
 -- ============================================================
 -- 3. VERIFICAÇÃO
 -- ============================================================

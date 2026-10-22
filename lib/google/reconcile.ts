@@ -1,7 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/server'
-import { listEvents } from './calendar'
+import { listEvents, createEvent } from './calendar'
 import { isGoogleConnected } from './auth'
-import type { Database, AppointmentStatus } from '@/types/database'
+import { PENDING_EXTERNAL_STATUS, type Database, type AppointmentStatus } from '@/types/database'
 
 export type AppointmentRow = Database['public']['Tables']['appointments']['Row']
 
@@ -59,12 +59,14 @@ export async function reconcileCalendar(workspaceId: string, from: Date, to: Dat
   // A conexão Google é por account; resolvemos a account da unidade uma vez.
   const { data: workspace } = await supabase
     .from('workspaces')
-    .select('account_id')
+    .select('account_id, name')
     .eq('id', workspaceId)
     .single()
   const accountId = workspace?.account_id ?? null
 
-  const { connected } = accountId ? await isGoogleConnected(accountId) : { connected: false }
+  const { connected, email: doctorEmail } = accountId
+    ? await isGoogleConnected(accountId)
+    : { connected: false, email: null }
 
   const fetchSupabaseRows = async () => {
     const { data } = await supabase
@@ -93,6 +95,37 @@ export async function reconcileCalendar(workspaceId: string, from: Date, to: Dat
   const rowsByGcalId = new Map(rows.filter((r) => r.gcal_event_id).map((r) => [r.gcal_event_id as string, r]))
   const resultById = new Map(rows.map((r) => [r.id, r]))
 
+  // Consulta pendente_confirmacao_externa (clínica parceira ainda não
+  // confirmou): o MedScale é dono do horário e o evento tentativo precisa
+  // existir no Google. Se sumiu ou foi cancelado, recria em vez de cancelar.
+  // LGPD: falha só loga o id da consulta.
+  const recreatePendingEvent = async (row: AppointmentRow) => {
+    if (!doctorEmail) return
+    try {
+      const created = await createEvent({
+        workspaceId,
+        patientName: row.patient_name,
+        patientPhone: row.patient_phone,
+        appointmentType: row.type,
+        startTime: new Date(row.scheduled_at),
+        durationMin: row.duration_min,
+        workspaceName: workspace?.name ?? 'Unidade',
+        doctorEmail,
+        pending: true,
+      })
+      if (!created.id) return
+      const { data: updated } = await supabase
+        .from('appointments')
+        .update({ gcal_event_id: created.id })
+        .eq('id', row.id)
+        .select()
+        .single()
+      if (updated) resultById.set(updated.id, updated)
+    } catch {
+      console.error(`reconcileCalendar: não foi possível recriar o evento pendente da consulta ${row.id}`)
+    }
+  }
+
   const medscaleEvents = events.filter(isMedscaleEvent)
   const busyEvents = events.filter((e) => !isMedscaleEvent(e) && e.status !== 'cancelled')
   const seenGcalIds = new Set<string>()
@@ -105,6 +138,11 @@ export async function reconcileCalendar(workspaceId: string, from: Date, to: Dat
     const eventEnd = event.end?.dateTime ? new Date(event.end.dateTime) : null
     const cancelledOnGoogle = event.status === 'cancelled'
     const match = rowsByGcalId.get(event.id)
+
+    if (match?.status === PENDING_EXTERNAL_STATUS) {
+      if (cancelledOnGoogle) await recreatePendingEvent(match)
+      continue
+    }
 
     if (match) {
       const patch: Partial<AppointmentRow> = {}
@@ -157,6 +195,10 @@ export async function reconcileCalendar(workspaceId: string, from: Date, to: Dat
     if (!row.gcal_event_id) continue
     if (seenGcalIds.has(row.gcal_event_id)) continue
     if (TERMINAL_STATUSES.includes(row.status)) continue
+    if (row.status === PENDING_EXTERNAL_STATUS) {
+      await recreatePendingEvent(row)
+      continue
+    }
     const { data: updated } = await supabase
       .from('appointments')
       .update({ status: 'cancelado' })
