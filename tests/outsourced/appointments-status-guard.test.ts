@@ -32,7 +32,8 @@ vi.mock('@/lib/billing/guides', () => ({ ensureGuideSafely: vi.fn() }))
 
 import { POST } from '@/app/api/appointments/route'
 import { PATCH } from '@/app/api/appointments/[id]/route'
-import { PENDING_STATUS_FORBIDDEN_ERROR } from '@/lib/outsourced/config'
+import { PENDING_STATUS_FORBIDDEN_ERROR, PENDING_TRANSITION_FORBIDDEN_ERROR } from '@/lib/outsourced/config'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 function setup(config: SupabaseMockConfig = {}) {
   g.supabase = createSupabaseMock(config)
@@ -86,5 +87,51 @@ describe('status pendente_confirmacao_externa é só da Clara', () => {
     expect(res.status).toBe(400)
     expect((await res.json()).error).toBe(PENDING_STATUS_FORBIDDEN_ERROR)
     expect(g.supabase.callsTo('appointments', 'update')).toHaveLength(0)
+  })
+
+  it.each(['agendado', 'realizado', 'no_show'])(
+    'PATCH de consulta pendente para %s → 400 e nada gravado (só confirmar ou cancelar)',
+    async (status) => {
+      setup({
+        appointments: {
+          select: {
+            data: {
+              id: 'a1', workspace_id: 'w1', account_id: 'acc1', patient_id: 'pat1',
+              status: 'pendente_confirmacao_externa', gcal_event_id: null, health_plan: null, procedure_id: null,
+              duration_min: 30, scheduled_at: '2026-10-30T13:00:00Z',
+            },
+          },
+        },
+      })
+
+      const res = await PATCH(request('PATCH', { status }), { params: Promise.resolve({ id: 'a1' }) })
+
+      expect(res.status).toBe(400)
+      expect((await res.json()).error).toBe(PENDING_TRANSITION_FORBIDDEN_ERROR)
+      expect(g.supabase.callsTo('appointments', 'update')).toHaveLength(0)
+    }
+  )
+
+  it('PATCH de consulta pendente sem status (só observações) segue normal', async () => {
+    setup({
+      appointments: {
+        select: {
+          data: {
+            id: 'a1', workspace_id: 'w1', account_id: 'acc1', patient_id: 'pat1',
+            status: 'pendente_confirmacao_externa', gcal_event_id: null, health_plan: null, procedure_id: null,
+            duration_min: 30, scheduled_at: '2026-10-30T13:00:00Z',
+          },
+        },
+        update: { data: { id: 'a1', status: 'pendente_confirmacao_externa', billing_type: null } },
+      },
+    })
+
+    const res = await PATCH(request('PATCH', { notes: 'ligar antes' }), { params: Promise.resolve({ id: 'a1' }) })
+
+    expect(res.status).not.toBe(400)
+  })
+
+  it('a mensagem de transição chega ao usuário sem virar o texto genérico', () => {
+    expect(friendlyErrorMessage(PENDING_TRANSITION_FORBIDDEN_ERROR)).toBe(PENDING_TRANSITION_FORBIDDEN_ERROR)
   })
 })

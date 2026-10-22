@@ -260,4 +260,14 @@ describe('evento pendente (agendamento terceirizado)', () => {
       })
     )
   })
+
+  it('markEventConfirmed sem título no evento só confirma (não apaga o summary)', async () => {
+    g.events.get.mockResolvedValueOnce({ data: { id: 'gcal-1' } })
+
+    await markEventConfirmed('w1', 'gcal-1')
+
+    expect(g.events.patch).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: 'gcal-1', requestBody: { status: 'confirmed' } })
+    )
+  })
 })

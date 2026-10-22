@@ -2,8 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { parseProviderFields } from '@/lib/billing/validation'
-import { parseOutsourcedFields } from '@/lib/outsourced/config'
-import type { Database } from '@/types/database'
+import {
+  isOutsourcedWorkspace,
+  OUTSOURCED_DISABLE_WITH_PENDING_ERROR,
+  parseOutsourcedFields,
+} from '@/lib/outsourced/config'
+import { PENDING_EXTERNAL_STATUS, type Database } from '@/types/database'
 
 type WorkspaceUpdate = Database['public']['Tables']['workspaces']['Update']
 
@@ -57,11 +61,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       .eq('id', id)
       .eq('account_id', session.accountId)
       .maybeSingle()
-    const outsourced = parseOutsourcedFields(body, {
+    const currentFlags = {
       is_outsourced: current?.is_outsourced ?? false,
       external_clinic_phone: current?.external_clinic_phone ?? null,
-    })
+    }
+    const outsourced = parseOutsourcedFields(body, currentFlags)
     if (!outsourced.ok) return NextResponse.json({ error: outsourced.error }, { status: 400 })
+
+    // Desligar com solicitações aguardando a clínica deixaria essas consultas
+    // sem dono (a resposta da clínica não seria mais reconhecida).
+    if (isOutsourcedWorkspace(currentFlags) && !isOutsourcedWorkspace({ ...currentFlags, ...outsourced.value })) {
+      const { data: pending, error: pendingError } = await supabase
+        .from('appointments')
+        .select('id')
+        .eq('workspace_id', id)
+        .eq('status', PENDING_EXTERNAL_STATUS)
+        .limit(1)
+      if (pendingError) return NextResponse.json({ error: pendingError.message }, { status: 500 })
+      if ((pending ?? []).length > 0) {
+        return NextResponse.json({ error: OUTSOURCED_DISABLE_WITH_PENDING_ERROR }, { status: 400 })
+      }
+    }
     Object.assign(update, outsourced.value)
   }
 

@@ -127,11 +127,21 @@ export async function POST(req: NextRequest) {
   after(async () => {
     // Clínica parceira (agendamento terceirizado) — antes de qualquer fluxo de
     // paciente: a mensagem dela nunca vira paciente/conversa e nunca é respondida.
-    let clinicSender: ClinicSenderMatch = { kind: 'none' }
+    // Fail-closed: sem saber se é a clínica parceira, a mensagem não pode cair
+    // no fluxo de paciente (viraria paciente/conversa e a Clara responderia).
+    let clinicSender: ClinicSenderMatch
     try {
       clinicSender = await resolveClinicSender(supabase, accountId, from)
     } catch (err) {
-      console.error('[outsourced] resolveClinicSender failed', err)
+      console.error(`[outsourced] resolveClinicSender failed account=${accountId}`)
+      if (webhookLog) {
+        const { error: updateError } = await supabase
+          .from('webhook_logs')
+          .update({ error: String(err) })
+          .eq('id', webhookLog.id)
+        if (updateError) console.error('failed to persist webhook_logs.error', updateError)
+      }
+      return
     }
     if (clinicSender.kind === 'conflict') {
       console.error(`[outsourced] telefone de clínica parceira em ${clinicSender.workspaceIds.length} unidades da account ${accountId}`)

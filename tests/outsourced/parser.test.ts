@@ -64,4 +64,21 @@ describe('pickPendingMatch', () => {
     expect(pickPendingMatch([a, b], 'jose souza')).toBe('b')
     expect(pickPendingMatch([a, { id: 'c', patient_name: 'marilene ribeiro' }], 'Marilene Ribeiro')).toBeNull()
   })
+
+  it('1 candidato com nome diferente do template → null (nunca confirma o paciente errado)', () => {
+    const a = { id: 'a', patient_name: 'Marilene Ribeiro' }
+    expect(pickPendingMatch([a], 'Outra Pessoa')).toBeNull()
+    expect(pickPendingMatch([a], 'Marilene Souza')).toBeNull()
+    expect(pickPendingMatch([a], 'Marilene Ribeiro')).toBe('a')
+    expect(pickPendingMatch([a], 'MARILENE RIBEIRÓ')).toBe('a')
+  })
+
+  it('casa quando os tokens de um nome estão todos no outro', () => {
+    const a = { id: 'a', patient_name: 'Marilene Ribeiro Santos' }
+    const b = { id: 'b', patient_name: 'José Souza' }
+    expect(pickPendingMatch([a], 'Marilene Ribeiro')).toBe('a')
+    expect(pickPendingMatch([{ id: 'a', patient_name: 'Marilene Ribeiro' }], 'Marilene Ribeiro Santos')).toBe('a')
+    expect(pickPendingMatch([a, b], 'Marilene Santos')).toBe('a')
+    expect(pickPendingMatch([a, b], 'Marilene Lima')).toBeNull()
+  })
 })

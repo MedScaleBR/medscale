@@ -4,6 +4,10 @@ export const PENDING_STATUS_FORBIDDEN_ERROR = 'O status "Aguardando clínica" é
 
 export const OUTSOURCED_PHONE_REQUIRED_ERROR = 'Informe o WhatsApp da clínica parceira com DDD para ativar o agendamento terceirizado.'
 export const OUTSOURCED_PHONE_INVALID_ERROR = 'Informe um WhatsApp válido para a clínica parceira, com DDD. Ex.: (71) 99999-0000.'
+export const OUTSOURCED_DISABLE_WITH_PENDING_ERROR =
+  'Não é possível desligar: existem solicitações aguardando a clínica parceira nesta unidade. Confirme ou cancele antes de desligar.'
+export const PENDING_TRANSITION_FORBIDDEN_ERROR =
+  'A consulta está aguardando a clínica parceira: só é possível confirmar ou cancelar.'
 
 export interface OutsourcedFlags {
   is_outsourced: boolean

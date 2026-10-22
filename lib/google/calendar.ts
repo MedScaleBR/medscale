@@ -164,15 +164,18 @@ export async function updateEvent(
 export async function markEventConfirmed(workspaceId: string, eventId: string): Promise<void> {
   const { cal, calendarId } = await getWorkspaceCalendar(workspaceId)
   const { data } = await cal.events.get({ calendarId, eventId })
-  const summary = data.summary ?? ''
+  const summary = data.summary
+  // Sem título no evento, não manda summary — um '' apagaria o que houver.
   await cal.events.patch({
     calendarId,
     eventId,
     sendUpdates: 'none',
-    requestBody: {
-      summary: summary.startsWith(PENDING_EVENT_PREFIX) ? summary.slice(PENDING_EVENT_PREFIX.length) : summary,
-      status: 'confirmed',
-    },
+    requestBody: summary
+      ? {
+          summary: summary.startsWith(PENDING_EVENT_PREFIX) ? summary.slice(PENDING_EVENT_PREFIX.length) : summary,
+          status: 'confirmed',
+        }
+      : { status: 'confirmed' },
   })
 }
 

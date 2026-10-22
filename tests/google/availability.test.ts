@@ -147,9 +147,9 @@ describe('getAvailableSlots — cálculo de disponibilidade', () => {
     expect(call.filters).toContainEqual(['in', 'status', ['agendado', 'confirmado', 'pendente_confirmacao_externa']])
   })
 
-  it('deve remover o slot das 10:00 quando a consulta pendente de clínica parceira o ocupa', async () => {
-    // O mock devolve a linha independentemente do filtro; o filtro em si é
-    // coberto pelo teste acima. Aqui garantimos que a linha vira busy.
+  it('getAvailableSlots deve marcar como indisponível o slot das 10:00 ocupado por uma consulta retornada', async () => {
+    // O mock devolve a linha independentemente do status — que a pendente de
+    // clínica parceira entra na busca é coberto pelo filtro `in status` acima.
     setup({
       rules: MANHA,
       appointments: [{ scheduled_at: '2025-09-15T10:00:00-03:00', duration_min: 30 }],

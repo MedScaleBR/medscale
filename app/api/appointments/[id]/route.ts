@@ -7,7 +7,11 @@ import { syncRevenueEntryToAppointmentStatus, applyAppointmentRevenue } from '@/
 import { resolveAppointmentBilling } from '@/lib/billing/appointments'
 import { ensureGuideSafely } from '@/lib/billing/guides'
 import { PENDING_EXTERNAL_STATUS, type Database } from '@/types/database'
-import { PENDING_STATUS_FORBIDDEN_ERROR, isOutsourcedWorkspace } from '@/lib/outsourced/config'
+import {
+  PENDING_STATUS_FORBIDDEN_ERROR,
+  PENDING_TRANSITION_FORBIDDEN_ERROR,
+  isOutsourcedWorkspace,
+} from '@/lib/outsourced/config'
 import { confirmOutsourcedAppointment } from '@/lib/outsourced/confirm'
 
 // Unidade terceirizada: o evento no Google é só um espaço reservado, então
@@ -81,6 +85,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // status pode reenviar o mesmo valor sem erro.
   if (body.status === PENDING_EXTERNAL_STATUS && current.status !== PENDING_EXTERNAL_STATUS) {
     return NextResponse.json({ error: PENDING_STATUS_FORBIDDEN_ERROR }, { status: 400 })
+  }
+
+  // Consulta aguardando a clínica parceira só sai desse status confirmando ou
+  // cancelando — "agendado"/"realizado" pulariam o fluxo da clínica.
+  if (
+    current.status === PENDING_EXTERNAL_STATUS &&
+    'status' in body &&
+    ![PENDING_EXTERNAL_STATUS, 'confirmado', 'cancelado'].includes(body.status)
+  ) {
+    return NextResponse.json({ error: PENDING_TRANSITION_FORBIDDEN_ERROR }, { status: 400 })
   }
 
   // Pendente → confirmado pelo painel reusa o fluxo da clínica parceira

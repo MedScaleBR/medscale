@@ -114,7 +114,7 @@ describe('processIncomingMessage — agendamento em unidade terceirizada', () =>
     expect(savedAssistantMessages(supabase)).not.toContain('Consulta confirmada!')
   })
 
-  it('sem escolha de convênio numa clínica sem convênios que aceita particular: pergunta o convênio', async () => {
+  it('sem escolha de convênio numa clínica sem convênios que aceita particular: pede como particular', async () => {
     outsourced()
     const supabase = completePatient()
     state.claudeResponses = [`Consulta confirmada!\nAGENDAMENTO_CONFIRMADO: ${SLOT}`]
@@ -122,8 +122,25 @@ describe('processIncomingMessage — agendamento em unidade terceirizada', () =>
     await processIncomingMessage(PARAMS)
 
     expect(supabase.callsTo('appointments', 'insert')).toHaveLength(0)
+    expect(requestExternalConfirmation).toHaveBeenCalledTimes(1)
+    expect(requestExternalConfirmation).toHaveBeenCalledWith(expect.objectContaining({ insurer: null }))
+    expect(lastSentMessage()).toBe(requestedMessage({ scheduledAt: new Date(SLOT), unitName: 'IAD Pituba' }))
+  })
+
+  it('sem escolha de convênio numa clínica com convênios: pergunta o convênio e nada é pedido', async () => {
+    outsourced()
+    const supabase = mergeSupabaseConfig({
+      patients: { select: { data: { ...COMPLETE_PATIENT } }, update: { data: null } },
+      appointments: { select: { data: [] }, insert: { data: APPT }, update: { data: null } },
+      health_insurers: { select: { data: [{ id: '11111111-1111-4111-8111-111111111111', name: 'Unimed' }] } },
+    })
+    state.claudeResponses = [`Consulta confirmada!\nAGENDAMENTO_CONFIRMADO: ${SLOT}`]
+
+    await processIncomingMessage(PARAMS)
+
+    expect(supabase.callsTo('appointments', 'insert')).toHaveLength(0)
     expect(requestExternalConfirmation).not.toHaveBeenCalled()
-    expect(lastSentMessage()).toBe(missingDataMessage(['convenio'], 'IAD Pituba'))
+    expect(lastSentMessage()).toMatch(/convênio/)
   })
 
   it('dados completos: pede à clínica parceira e manda a mensagem fixa no lugar da do Claude', async () => {

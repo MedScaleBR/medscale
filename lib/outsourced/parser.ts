@@ -81,15 +81,25 @@ export function normalizePersonName(name: string): string {
     .trim()
 }
 
-// Exatamente 1 candidato confirma; com 2+, o nome do template desempata.
-// Qualquer outro caso → null (equipe resolve).
+// Mesmo paciente: nomes iguais ou todos os tokens de um contidos no outro
+// ("Marilene Ribeiro" × "Marilene Ribeiro Santos").
+function samePerson(a: string, b: string): boolean {
+  const ta = normalizePersonName(a).split(' ').filter(Boolean)
+  const tb = normalizePersonName(b).split(' ').filter(Boolean)
+  if (ta.length === 0 || tb.length === 0) return false
+  const [short, long] = ta.length <= tb.length ? [ta, new Set(tb)] : [tb, new Set(ta)]
+  return short.every((t) => long.has(t))
+}
+
+// Sem nome no template, só confirma com exatamente 1 candidato. Com nome, ele
+// precisa casar com exatamente 1 candidato — inclusive quando só há um (nunca
+// confirma o paciente errado). Qualquer outro caso → null (equipe resolve).
 export function pickPendingMatch(
   candidates: { id: string; patient_name: string }[],
   parsedName: string | null
 ): string | null {
-  if (candidates.length === 1) return candidates[0].id
-  if (candidates.length === 0 || !parsedName) return null
-  const target = normalizePersonName(parsedName)
-  const named = candidates.filter((c) => normalizePersonName(c.patient_name) === target)
+  if (candidates.length === 0) return null
+  if (!parsedName) return candidates.length === 1 ? candidates[0].id : null
+  const named = candidates.filter((c) => samePerson(c.patient_name, parsedName))
   return named.length === 1 ? named[0].id : null
 }

@@ -633,7 +633,10 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
         const missing = missingOutsourcedFields({
           fullName,
           birthDate: patientBirthDate,
-          insuranceChosen: insuranceChoice !== null,
+          // Mesma regra do fluxo nativo: chegar aqui já significa convênio
+          // resolvido — inclusive sem CONVENIO_ID numa clínica sem convênios
+          // que aceita particular (vira particular, insurer null).
+          insuranceChosen: !insuranceNeedsClarification,
         })
         // `missing` vazio já garante paciente, nome e nascimento — os outros
         // testes só estreitam os tipos e nunca disparam com `missing` vazio.

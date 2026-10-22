@@ -137,8 +137,21 @@ describe('processClinicReplyMessage', () => {
     expectNoPatientSideEffects()
   })
 
-  it('template com nome e 1 pendente no horário → confirma e registra', async () => {
+  it('template com nome de outro paciente e 1 pendente no horário → ambiguo + aviso, nada confirmado', async () => {
     setup({ appointments: { select: { data: [{ id: 'ap1', patient_name: 'Outra Pessoa' }] } } })
+
+    await run(text(COM_NOME))
+
+    expect(m.confirmOutsourcedAppointment).not.toHaveBeenCalled()
+    expect(classificationUpdate().payload).toEqual({ classification: 'ambiguo' })
+    expect(m.notifyOutsourcedIssue).toHaveBeenCalledWith(
+      expect.objectContaining({ workspaceId: 'w1', reason: 'clinica_externa_ambiguo', rawText: COM_NOME })
+    )
+    expectNoPatientSideEffects()
+  })
+
+  it('template com nome e 1 pendente do mesmo paciente (nome completo no cadastro) → confirma e registra', async () => {
+    setup({ appointments: { select: { data: [{ id: 'ap1', patient_name: 'Marilene Ribeiro Santos' }] } } })
 
     await run(text(COM_NOME))
 
@@ -222,6 +235,21 @@ describe('processClinicReplyMessage', () => {
     expect(m.notifyOutsourcedIssue).toHaveBeenCalledWith(expect.objectContaining({ reason: 'clinica_externa_ambiguo' }))
   })
 
+  it('isolamento: resposta da unidade pituba só busca e confirma pendentes da pituba', async () => {
+    setup({ appointments: { select: { data: [{ id: 'ap-pituba', patient_name: 'Marilene Ribeiro' }] } } })
+    m.confirmOutsourcedAppointment.mockResolvedValue({ ok: true, appointmentId: 'ap-pituba' })
+
+    await processClinicReplyMessage({ accountId: 'acc1', workspaceId: 'pituba', message: text(COM_NOME) })
+
+    const selects = supabase.callsTo('appointments', 'select')
+    expect(selects).toHaveLength(1)
+    expect(filterValue(selects[0], 'eq', 'workspace_id')).toBe('pituba')
+    expect(supabase.callsTo('clinic_confirmations', 'insert')[0].payload).toMatchObject({ workspace_id: 'pituba' })
+    expect(m.confirmOutsourcedAppointment).toHaveBeenCalledTimes(1)
+    expect(m.confirmOutsourcedAppointment).toHaveBeenCalledWith('ap-pituba')
+    expect(classificationUpdate().payload).toEqual({ appointment_id: 'ap-pituba', classification: 'confirmacao' })
+  })
+
   it('loga só workspace, classificação e número de candidatos', async () => {
     setup({ appointments: { select: { data: [{ id: 'ap1', patient_name: 'Marilene Ribeiro' }] } } })
 
@@ -259,7 +287,7 @@ describe('resolveClinicSender', () => {
     await expect(resolveClinicSender(sb.client as never, 'acc1', '5571988887777')).resolves.toEqual({ kind: 'none' })
   })
 
-  it('erro na consulta → lança (o webhook segue o fluxo de paciente)', async () => {
+  it('erro na consulta → lança (o webhook descarta a mensagem, fail-closed)', async () => {
     const sb = createSupabaseMock({ workspaces: { select: { data: null, error: { message: 'boom' } } } })
 
     await expect(resolveClinicSender(sb.client as never, 'acc1', '5571988887777')).rejects.toThrow()

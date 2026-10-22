@@ -169,13 +169,43 @@ describe('POST /api/whatsapp/webhook — mensagem da clínica parceira', () => {
     )
   })
 
-  it('falha ao checar a clínica parceira → loga e segue o fluxo de paciente', async () => {
-    g.resolveClinicSender.mockRejectedValue(new Error('db down'))
+  it('falha ao checar a clínica parceira → loga só ids, grava o erro no webhook_logs e não roda o fluxo de paciente', async () => {
+    g.resolveClinicSender.mockRejectedValue(new Error('busca de unidades terceirizadas falhou account=acc1'))
 
-    await deliver({ ...TEXT_MSG, from: '5571988887777', text: { body: 'Oi' } })
+    const res = await deliver({ ...TEXT_MSG, from: '5571988887777', text: { body: 'Oi' } })
 
-    expect(console.error).toHaveBeenCalledWith('[outsourced] resolveClinicSender failed', expect.any(Error))
+    expect(res.status).toBe(200)
+    expect(console.error).toHaveBeenCalledWith('[outsourced] resolveClinicSender failed account=acc1')
+    expect(JSON.stringify(vi.mocked(console.error).mock.calls)).not.toMatch(/5571988887777|Oi/)
+    const logUpdates = g.supabase.callsTo('webhook_logs', 'update')
+    expect(logUpdates).toHaveLength(1)
+    expect(logUpdates[0].payload).toEqual({ error: 'Error: busca de unidades terceirizadas falhou account=acc1' })
+    expect(logUpdates[0].filters).toContainEqual(['eq', 'id', 'log-1'])
     expect(g.processClinicReplyMessage).not.toHaveBeenCalled()
-    expect(g.processIncomingMessage).toHaveBeenCalledTimes(1)
+    expect(g.notifyOutsourcedIssue).not.toHaveBeenCalled()
+    expectPatientFlowSkipped()
+  })
+
+  it('isolamento: remetente com o telefone da Pituba vai para a Pituba, não para outra unidade', async () => {
+    const actual = await vi.importActual<typeof import('@/lib/outsourced/clinic-reply')>('@/lib/outsourced/clinic-reply')
+    g.resolveClinicSender.mockImplementation(actual.resolveClinicSender)
+    g.supabase = createSupabaseMock({
+      webhook_logs: { insert: { data: { id: 'log-1' } } },
+      bot_config: { select: { data: { account_id: 'acc1', phone_number_id: PHONE_NUMBER_ID, meta_token: 'enc:tok' } } },
+      workspaces: {
+        select: {
+          data: [
+            { id: 'ws-barra', is_outsourced: true, external_clinic_phone: '5571911112222' },
+            { id: 'ws-pituba', is_outsourced: true, external_clinic_phone: CLINIC_PHONE },
+          ],
+        },
+      },
+    })
+
+    await deliver(TEXT_MSG)
+
+    expect(g.processClinicReplyMessage).toHaveBeenCalledTimes(1)
+    expect(g.processClinicReplyMessage).toHaveBeenCalledWith({ accountId: 'acc1', workspaceId: 'ws-pituba', message: TEXT_MSG })
+    expectPatientFlowSkipped()
   })
 })
