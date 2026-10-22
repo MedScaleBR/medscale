@@ -52,6 +52,13 @@ describe('funnelSteps', () => {
     expect(steps[2].value).toBe(0)
   })
 
+  it('pendente de confirmação da clínica parceira conta como agendamento', () => {
+    const steps = funnelSteps([lead(['pendente_confirmacao_externa'])])
+
+    expect(steps[1].value).toBe(1)
+    expect(steps[2].value).toBe(0)
+  })
+
   it('rotula as quatro etapas na ordem do funil', () => {
     expect(funnelSteps([]).map((s) => s.label)).toEqual([
       'Leads',

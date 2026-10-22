@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatBrazilianPhone, normalizeBrazilianPhone } from '../lib/phone'
+import { brazilianPhoneKey, formatBrazilianPhone, normalizeBrazilianPhone } from '../lib/phone'
 
 describe('Brazilian patient phones', () => {
   it.each(['11987654321', '(11) 98765-4321', '5511987654321', '+55 (11) 98765-4321'])('displays %s without DDI', (phone) => {
@@ -19,4 +19,12 @@ describe('Brazilian patient phones', () => {
     expect(normalizeBrazilianPhone('')).toBeNull()
     expect(normalizeBrazilianPhone('4411987654321')).toBeNull()
   })
+})
+
+describe('brazilianPhoneKey', () => {
+  it('ignora o nono dígito e a formatação', () => {
+    for (const p of ['5571999990000', '557199990000', '(71) 99999-0000', '+55 71 9999-0000', '71999990000'])
+      expect(brazilianPhoneKey(p)).toBe('557199990000')
+  })
+  it('separa DDDs diferentes', () => expect(brazilianPhoneKey('5511999990000')).not.toBe(brazilianPhoneKey('5571999990000')))
 })

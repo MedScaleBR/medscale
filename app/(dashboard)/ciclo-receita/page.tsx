@@ -65,7 +65,7 @@ export default async function CicloReceitaPage({
     .select('id, scheduled_at, patient_name, health_plan')
     .eq('workspace_id', session.workspaceId)
     .not('health_plan', 'is', null)
-    .neq('status', 'cancelado')
+    .not('status', 'in', '("cancelado","pendente_confirmacao_externa")')
     .order('scheduled_at', { ascending: false })
 
   if (period.schedFromIso) planQuery = planQuery.gte('scheduled_at', period.schedFromIso)

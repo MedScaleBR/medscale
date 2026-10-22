@@ -1,3 +1,4 @@
+import { TZDate } from '@date-fns/tz'
 import type { BotConfig } from './config'
 
 // Heurísticas locais contra prompt injection. Tudo aqui é regex/string puro:
@@ -21,7 +22,7 @@ export interface InjectionSignal {
 // exigem o payload completo (uuid, data ISO); aqui basta o paciente ESCREVER
 // o nome do marcador para virar sinal.
 const CONTROL_TOKENS =
-  /(AGENDAMENTO_CONFIRMADO|CANCELAMENTO_CONFIRMADO|NOME_PACIENTE|PROCEDIMENTO_ID|UNIDADE_ID|CONVENIO_ID|LISTA_ESPERA)\s*:|\[HANDOFF\]|<\/?\s*(mensagem_paciente|transcricao_consulta)\s*>/i
+  /(AGENDAMENTO_CONFIRMADO|CANCELAMENTO_CONFIRMADO|NOME_PACIENTE|NASCIMENTO_PACIENTE|PROCEDIMENTO_ID|UNIDADE_ID|CONVENIO_ID|LISTA_ESPERA)\s*:|\[HANDOFF\]|<\/?\s*(mensagem_paciente|transcricao_consulta)\s*>/i
 
 // "ignore/esqueça ... as instruções/regras" — o objeto é obrigatório. É o que
 // separa "ignore as instruções anteriores" (injection) de "posso ignorar o
@@ -69,6 +70,33 @@ const MAX_NAME_LEN = 60
 // assim; uma injection que escapou para dentro do NOME_PACIENTE, sim.
 const LEADING_IMPERATIVE =
   /^(?:ignore|ignora|esque[çc]a|esquece|desconsidere|diga|diz|fale|fala|responda|responde|mostre|mostra|repita|repete|escreva|escreve|envie|envia|mande|manda|crie|cria|apague|apaga|delete|confirme|confirma|cancele|cancela|agende|agenda|aja|finja|atue|execute|liste|lista)\b/i
+
+const MAX_PATIENT_AGE_YEARS = 120
+
+/**
+ * Valida o NASCIMENTO_PACIENTE (DD/MM/AAAA) e devolve AAAA-MM-DD, ou null.
+ * Aceita só data real, estritamente no passado (fuso de São Paulo) e com idade
+ * de até 120 anos. O valor nunca vai a log — quem chama registra só o descarte.
+ */
+export function parseBirthDate(raw: string, now: Date = new Date()): string | null {
+  const m = raw.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+  if (!m) return null
+  const day = Number(m[1])
+  const month = Number(m[2])
+  const year = Number(m[3])
+  // Round-trip pelo Date.UTC rejeita 31/02 e afins sem depender do fuso.
+  const probe = new Date(Date.UTC(year, month - 1, day))
+  if (probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) return null
+
+  const iso = `${m[3]}-${m[2]}-${m[1]}`
+  const today = new TZDate(now, 'America/Sao_Paulo')
+  const pad = (n: number) => String(n).padStart(2, '0')
+  const todayIso = `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
+  if (iso >= todayIso) return null
+  const oldest = `${today.getFullYear() - MAX_PATIENT_AGE_YEARS}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
+  if (iso < oldest) return null
+  return iso
+}
 
 export function sanitizePatientName(raw: string): string | null {
   const name = raw.trim()

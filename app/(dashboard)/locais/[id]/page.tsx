@@ -14,7 +14,7 @@ export default async function UnitPage({ params }: { params: Promise<{ id: strin
   const supabase = await createClient()
   const { data: workspace } = await supabase
     .from('workspaces')
-    .select('id, name, address, city, state, zip_code, directions_parking, contact_info, handoff_number')
+    .select('id, name, address, city, state, zip_code, directions_parking, contact_info, handoff_number, is_outsourced, external_clinic_phone')
     .eq('id', id)
     .eq('account_id', session.accountId)
     .maybeSingle()

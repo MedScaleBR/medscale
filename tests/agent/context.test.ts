@@ -33,6 +33,7 @@ const broadcastToWorkspace = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/realtime/broadcast', () => ({ broadcastToWorkspace }))
 
 import { processIncomingMessage, handleUnsupportedMessage } from '@/lib/llm/agent'
+import { filterValue } from '../helpers/supabase-mock'
 import {
   resetAgentHarness,
   mergeSupabaseConfig,
@@ -40,6 +41,7 @@ import {
   claudeCreate,
   sendWhatsAppMessage,
   PARAMS,
+  PATIENT,
   UNIT,
   UNIT_ID,
   DEFAULT_BOT_CONFIG,
@@ -100,6 +102,49 @@ describe('processIncomingMessage — montagem de contexto', () => {
     ] } } })
     await processIncomingMessage(PARAMS)
     expect(systemPrompt()).toContain('3 de outubro de 2099 às 11:00 — status: agendada')
+  })
+
+  it('grava o nascimento validado quando NASCIMENTO_PACIENTE aparece na resposta', async () => {
+    const supabase = mergeSupabaseConfig({})
+    state.claudeResponses = ['Anotado!\nNASCIMENTO_PACIENTE: 03/05/1980']
+
+    await processIncomingMessage(PARAMS)
+
+    const update = supabase.callsTo('patients', 'update')[0]
+    expect(update?.payload).toEqual({ birth_date: '1980-05-03' })
+    expect(update?.filters).toContainEqual(['eq', 'id', PATIENT.id])
+    expect(lastSentMessage()).toBe('Anotado!')
+  })
+
+  it('descarta nascimento inválido sem gravar e sem vazar a data no log', async () => {
+    const supabase = mergeSupabaseConfig({})
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    state.claudeResponses = ['Anotado!\nNASCIMENTO_PACIENTE: 31/02/1980']
+
+    await processIncomingMessage(PARAMS)
+
+    expect(supabase.callsTo('patients', 'update')).toHaveLength(0)
+    expect(warn).toHaveBeenCalled()
+    expect(JSON.stringify(warn.mock.calls)).not.toContain('1980')
+    warn.mockRestore()
+  })
+
+  it('consulta também as solicitações pendentes da clínica parceira', async () => {
+    const supabase = mergeSupabaseConfig({})
+    await processIncomingMessage(PARAMS)
+    expect(filterValue(supabase.callsTo('appointments', 'select')[0], 'in', 'status')).toEqual([
+      'agendado',
+      'confirmado',
+      'pendente_confirmacao_externa',
+    ])
+  })
+
+  it('rotula a solicitação pendente com a unidade, mesmo numa conta de uma unidade só', async () => {
+    mergeSupabaseConfig({ appointments: { select: { data: [
+      { id: 'a-pend', scheduled_at: '2099-10-03T14:00:00Z', workspace_id: UNIT_ID, status: 'pendente_confirmacao_externa' },
+    ] } } })
+    await processIncomingMessage(PARAMS)
+    expect(systemPrompt()).toContain(`às 11:00 — ${UNIT.name} — AGUARDANDO CONFIRMAÇÃO DA CLÍNICA (id: a-pend)`)
   })
 
   it('deve informar à Clara os convênios ativos cadastrados em Convênios', async () => {

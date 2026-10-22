@@ -18,6 +18,9 @@ export async function POST(req: NextRequest) {
   const { data: appointments, error } = await supabase
     .from('appointments')
     .select('id')
+    // Lista explícita: `pendente_confirmacao_externa` (aguardando clínica parceira)
+    // fica de fora de propósito — vira `cancelado` pelo cron outsourced-timeout,
+    // nunca no_show.
     .in('status', ['agendado', 'confirmado'])
     .lt('scheduled_at', cutoff)
 

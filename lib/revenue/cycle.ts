@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { PENDING_EXTERNAL_STATUS } from '@/types/database'
 import type {
   Database,
   AppointmentStatus,
@@ -274,7 +275,8 @@ export async function applyAppointmentRevenue(
     return
   }
 
-  if (nextStatus !== 'cancelado' && booking.amount != null && booking.amount > 0) {
+  // Pendente de clínica parceira não gera previsão; ela nasce quando a clínica confirma.
+  if (nextStatus !== 'cancelado' && nextStatus !== PENDING_EXTERNAL_STATUS && booking.amount != null && booking.amount > 0) {
     await createBookingRevenueEntry(supabase, booking)
   }
   if (previousStatus !== nextStatus) {

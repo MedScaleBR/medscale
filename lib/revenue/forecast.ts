@@ -1,4 +1,4 @@
-import type { AppointmentType, Database } from '@/types/database'
+import { PENDING_EXTERNAL_STATUS, type AppointmentType, type Database } from '@/types/database'
 
 export type ForecastAppointment = Pick<Database['public']['Tables']['appointments']['Row'],
   'type' | 'status' | 'procedure_id' | 'procedure_name' | 'price' | 'health_plan'>
@@ -24,7 +24,8 @@ export function summarizeAppointmentForecast(appointments: ForecastAppointment[]
   let insurance = 0
   let quantity = 0
   for (const appointment of appointments) {
-    if (appointment.status === 'cancelado' || appointment.status === 'no_show') continue
+    // Pendente de clínica parceira ainda não é consulta confirmada: fica fora da previsão.
+    if (appointment.status === 'cancelado' || appointment.status === 'no_show' || appointment.status === PENDING_EXTERNAL_STATUS) continue
     if (appointment.health_plan?.trim()) {
       insurance++
       continue

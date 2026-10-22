@@ -144,7 +144,18 @@ describe('getAvailableSlots — cálculo de disponibilidade', () => {
     const supabase = setup({ rules: MANHA })
     await getAvailableSlots(WORKSPACE, MONDAY)
     const call = supabase.callsTo('appointments', 'select')[0]
-    expect(call.filters).toContainEqual(['in', 'status', ['agendado', 'confirmado']])
+    expect(call.filters).toContainEqual(['in', 'status', ['agendado', 'confirmado', 'pendente_confirmacao_externa']])
+  })
+
+  it('getAvailableSlots deve marcar como indisponível o slot das 10:00 ocupado por uma consulta retornada', async () => {
+    // O mock devolve a linha independentemente do status — que a pendente de
+    // clínica parceira entra na busca é coberto pelo filtro `in status` acima.
+    setup({
+      rules: MANHA,
+      appointments: [{ scheduled_at: '2025-09-15T10:00:00-03:00', duration_min: 30 }],
+    })
+    const slots = await getAvailableSlots(WORKSPACE, MONDAY)
+    expect(slots.find((s) => s.start.getHours() === 10 && s.start.getMinutes() === 0)?.available).toBe(false)
   })
 
   it('deve degradar para as availability_rules quando o Google Calendar retorna 401', async () => {

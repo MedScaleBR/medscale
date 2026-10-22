@@ -49,6 +49,16 @@ const SLOT = '2025-09-15T10:00-03:00'
 const APPT_UUID = '3f7c1a90-2b4d-4c1e-9f80-1234567890ab'
 
 describe('parseMarkers — parsing puro dos marcadores de controle', () => {
+  it('extrai o nascimento cru e oculta a linha do paciente', () => {
+    const parsed = parseMarkers('Ok!\nNASCIMENTO_PACIENTE: 03/05/1980')
+    expect(parsed.patientBirthDate).toBe('03/05/1980')
+    expect(parsed.messageForPatient).toBe('Ok!')
+  })
+
+  it('não tem nascimento quando o marcador não aparece', () => {
+    expect(parseMarkers('Ok!').patientBirthDate).toBeNull()
+  })
+
   it.each([APPT_UUID, 'PARTICULAR'])('extrai a escolha de atendimento %s e oculta o marcador', (choice) => {
     const parsed = parseMarkers(`Confirmado!\nCONVENIO_ID: ${choice}`)
     expect(parsed.insuranceChoice).toBe(choice)
