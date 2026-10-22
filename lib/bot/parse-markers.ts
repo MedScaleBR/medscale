@@ -12,6 +12,9 @@ export const CONFIRMATION_MARKER = /AGENDAMENTO_CONFIRMADO:\s*(\d{4}-\d{2}-\d{2}
 export const CANCELLATION_MARKER =
   /CANCELAMENTO_CONFIRMADO:\s*([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})/
 export const PATIENT_NAME_MARKER = /NOME_PACIENTE:\s*(.+)/
+// Data de nascimento (DD/MM/AAAA cru) — só nas unidades com confirmação da
+// clínica parceira. A validação (data real, passado, idade) vive em security.ts.
+export const BIRTH_DATE_MARKER = /NASCIMENTO_PACIENTE:\s*(\d{2}\/\d{2}\/\d{4})/
 // Procedimento escolhido, para o ciclo de receita — id copiado da lista de
 // procedimentos no system prompt. Opcional: só aparece quando a clínica tem
 // catálogo de procedimentos cadastrado. Linha própria, não altera o
@@ -54,6 +57,8 @@ export interface ParsedMarkers {
   insuranceChoice: string | null
   /** Nome completo informado pelo paciente, já com trim, ou null. */
   patientName: string | null
+  /** Nascimento como a Clara escreveu (DD/MM/AAAA), ainda sem validar, ou null. */
+  patientBirthDate: string | null
   /** Dia (e horário, se o paciente nomeou um) que o paciente quer esperar, ou null. */
   waitlistDesired: { date: string; time: string | null } | null
   /** O Claude sinalizou transferência para atendimento humano. */
@@ -76,6 +81,7 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
   const insuranceMatches = [...rawMessage.matchAll(INSURANCE_CHOICE_MARKER)]
   const nameMatch = rawMessage.match(PATIENT_NAME_MARKER)
   const waitlistMatch = rawMessage.match(WAITLIST_MARKER)
+  const birthMatch = rawMessage.match(BIRTH_DATE_MARKER)
 
   const confirmedSlot = confirmMatch?.[1] ?? null
   const confirmedDate = confirmedSlot ? new Date(confirmedSlot) : null
@@ -89,6 +95,7 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
     .replace(UNIT_ID_MARKER, '')
     .replace(INSURANCE_CHOICE_MARKER, '')
     .replace(PATIENT_NAME_MARKER, '')
+    .replace(BIRTH_DATE_MARKER, '')
     .replace(WAITLIST_MARKER, '')
     .trim()
 
@@ -100,6 +107,7 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
     unitId: unitMatch?.[1] ?? null,
     insuranceChoice: insuranceMatches.length === 1 ? insuranceMatches[0][1].trim() : insuranceMatches.length > 1 ? '' : null,
     patientName,
+    patientBirthDate: birthMatch?.[1] ?? null,
     waitlistDesired: waitlistMatch ? { date: waitlistMatch[1], time: waitlistMatch[2] ?? null } : null,
     handoffRequested: cleanedMessage.includes(HANDOFF_MARKER),
     cleanedMessage,

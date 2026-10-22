@@ -11,6 +11,8 @@ export const UNIT: UnitContext = {
   directionsParking: null,
   contactInfo: null,
   handoffNumber: '+5511999998888',
+  isOutsourced: false,
+  externalClinicPhone: null,
 }
 
 // Estado compartilhado entre o arquivo de teste e as factories de vi.mock.

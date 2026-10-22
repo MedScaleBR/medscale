@@ -10,7 +10,7 @@ import { isGoogleConnected } from '@/lib/google/auth'
 import { cancelEvent, createEvent } from '@/lib/google/calendar'
 import { getBotConfig, getAccountUnits } from '@/lib/bot/config'
 import { buildDynamicSystemPrompt, wrapPatientMessage } from '@/lib/bot/prompt-builder'
-import { containsUnconfiguredDiscount, detectInjectionAttempt, sanitizePatientName, type InjectionSignal } from '@/lib/bot/security'
+import { containsUnconfiguredDiscount, detectInjectionAttempt, sanitizePatientName, parseBirthDate, type InjectionSignal } from '@/lib/bot/security'
 import { detectHandoffIntent, executeHandoff, isHandoffAvailableNow, logHandoffUnavailable } from '@/lib/bot/handoff'
 import { broadcastToWorkspace } from '@/lib/realtime/broadcast'
 import { parseMarkers } from '@/lib/bot/parse-markers'
@@ -24,6 +24,7 @@ import {
   trackWaitlistPatientAddedByBot,
 } from '@/lib/analytics/posthog-server'
 import type { Database } from '@/types/database'
+import { PENDING_EXTERNAL_STATUS } from '@/types/database'
 import { recordClaudeCost, recordWhatsappConversation } from '@/lib/costs/record'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -53,7 +54,7 @@ type SupabaseAdmin = SupabaseClient<Database>
 async function getOrCreatePatient(supabase: SupabaseAdmin, accountId: string, patientPhone: string) {
   const { data: patient, error: selectError } = await supabase
     .from('patients')
-    .select('id, full_name')
+    .select('id, full_name, birth_date')
     .eq('account_id', accountId)
     .eq('phone', patientPhone)
     .maybeSingle()
@@ -64,7 +65,7 @@ async function getOrCreatePatient(supabase: SupabaseAdmin, accountId: string, pa
   const { data: newPatient, error: insertError } = await supabase
     .from('patients')
     .insert({ account_id: accountId, phone: patientPhone, full_name: 'Paciente' })
-    .select('id, full_name')
+    .select('id, full_name, birth_date')
     .single()
 
   if (insertError) {
@@ -73,7 +74,7 @@ async function getOrCreatePatient(supabase: SupabaseAdmin, accountId: string, pa
     if (insertError.code === '23505') {
       const { data: existing, error: refetchError } = await supabase
         .from('patients')
-        .select('id, full_name')
+        .select('id, full_name, birth_date')
         .eq('account_id', accountId)
         .eq('phone', patientPhone)
         .single()
@@ -373,7 +374,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
         .select('id, scheduled_at, workspace_id, status')
         .eq('account_id', accountId)
         .eq('patient_id', patient.id)
-        .in('status', ['agendado', 'confirmado'])
+        .in('status', ['agendado', 'confirmado', PENDING_EXTERNAL_STATUS])
         .gte('scheduled_at', contextNow.toISOString())
         .order('scheduled_at', { ascending: true })
         .limit(5)
@@ -384,6 +385,9 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     const dateLabel = zoned.toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
     const timeLabel = format(zoned, 'HH:mm')
     const unitName = row.workspace_id ? allUnitById.get(row.workspace_id)?.name : null
+    if (row.status === PENDING_EXTERNAL_STATUS) {
+      return { id: row.id, label: `${dateLabel} às ${timeLabel} — ${unitName ?? 'unidade'} — AGUARDANDO CONFIRMAÇÃO DA CLÍNICA` }
+    }
     return {
       id: row.id,
       label: `${dateLabel} às ${timeLabel}${multiUnit && unitName ? ` — ${unitName}` : ''} — status: ${row.status === 'confirmado' ? 'confirmada' : 'agendada'}`,
@@ -429,6 +433,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
       businessHours: u.businessHours,
       directionsParking: u.directionsParking,
       contactInfo: u.contactInfo,
+      isOutsourced: u.isOutsourced,
     })),
     freeSlotsByUnit,
     procedureCatalogByUnit,
@@ -534,6 +539,17 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   if (patient && patientName && patientName !== patient.full_name) {
     await supabase.from('patients').update({ full_name: patientName }).eq('id', patient.id)
     patient.full_name = patientName
+  }
+
+  // Nascimento (só unidades terceirizadas): data inválida é descartada sem
+  // falhar o fluxo. O log leva só o id da conversa — nunca o valor (LGPD).
+  const birthDate = markers.patientBirthDate ? parseBirthDate(markers.patientBirthDate, contextNow) : null
+  if (markers.patientBirthDate && !birthDate) {
+    console.warn(`[security] NASCIMENTO_PACIENTE rejeitado conversation=${conversation.id}`)
+  }
+  if (patient && birthDate && birthDate !== patient.birth_date) {
+    await supabase.from('patients').update({ birth_date: birthDate }).eq('id', patient.id)
+    patient.birth_date = birthDate
   }
 
   // 7.5 Unidade corrente: a Clara emite UNIDADE_ID quando o paciente indica a
