@@ -7,7 +7,7 @@ import { sendWhatsAppMessage } from '@/lib/whatsapp/send'
 import { decryptToken } from '@/lib/crypto'
 import { getFreeSlotsForBot, isSlotAvailable } from '@/lib/google/availability'
 import { isGoogleConnected } from '@/lib/google/auth'
-import { cancelEvent, createEvent } from '@/lib/google/calendar'
+import { cancelEvent, createEvent, deleteEvent } from '@/lib/google/calendar'
 import { getBotConfig, getAccountUnits } from '@/lib/bot/config'
 import { buildDynamicSystemPrompt, wrapPatientMessage } from '@/lib/bot/prompt-builder'
 import { containsUnconfiguredDiscount, detectInjectionAttempt, sanitizePatientName, parseBirthDate, type InjectionSignal } from '@/lib/bot/security'
@@ -33,6 +33,7 @@ import {
   REQUEST_FAILED_MESSAGE,
   requestedMessage,
 } from '@/lib/outsourced/messages'
+import { notifyOutsourcedIssue } from '@/lib/outsourced/notify'
 import { requestExternalConfirmation } from '@/lib/outsourced/request'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
@@ -771,18 +772,29 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
       .eq('id', apptId)
       .eq('account_id', accountId)
       .eq('patient_id', patient.id)
-      .in('status', ['agendado', 'confirmado'])
+      .in('status', ['agendado', 'confirmado', PENDING_EXTERNAL_STATUS])
       .maybeSingle()
 
     if (apptToCancel) {
+      const outsourced = allUnitById.get(apptToCancel.workspace_id ?? '')?.isOutsourced === true
       await supabase.from('appointments').update({ status: 'cancelado' }).eq('id', apptToCancel.id)
 
       if (apptToCancel.gcal_event_id && apptToCancel.workspace_id) {
         try {
-          await cancelEvent(apptToCancel.workspace_id, apptToCancel.gcal_event_id)
+          // Terceirizada: o evento é só o espelho do pedido — apaga em vez de marcar cancelado.
+          await (outsourced ? deleteEvent : cancelEvent)(apptToCancel.workspace_id, apptToCancel.gcal_event_id)
         } catch (gcalErr) {
           console.error('Google Calendar cancel failed (bot cancellation):', gcalErr)
         }
+      }
+
+      if (outsourced && apptToCancel.workspace_id) {
+        await notifyOutsourcedIssue({
+          accountId,
+          workspaceId: apptToCancel.workspace_id,
+          appointmentId: apptToCancel.id,
+          reason: 'cancelamento_terceirizado',
+        })
       }
     } else {
       console.warn(`Cancelamento (id ${apptId}) não encontrou consulta para paciente ${patient.id} na account ${accountId}.`)

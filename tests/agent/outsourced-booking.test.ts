@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 
 const requestExternalConfirmation = vi.hoisted(() => vi.fn())
+const notifyOutsourcedIssue = vi.hoisted(() => vi.fn(async () => undefined))
 
 vi.mock('@/lib/supabase/server', async () => {
   const h = await import('../helpers/agent-harness')
@@ -33,6 +34,7 @@ vi.mock('@anthropic-ai/sdk', async () => {
 })
 vi.mock('@/lib/realtime/broadcast', () => ({ broadcastToWorkspace: vi.fn(), workspaceChannel: (id: string) => `handoff-toast:${id}` }))
 vi.mock('@/lib/outsourced/request', () => ({ requestExternalConfirmation }))
+vi.mock('@/lib/outsourced/notify', () => ({ notifyOutsourcedIssue }))
 
 import { processIncomingMessage } from '@/lib/llm/agent'
 import {
@@ -42,6 +44,8 @@ import {
   UNIT,
   isSlotAvailable,
   sendWhatsAppMessage,
+  cancelEvent,
+  deleteEvent,
   PARAMS,
   lastSentMessage,
 } from '../helpers/agent-harness'
@@ -301,5 +305,90 @@ CANCELAMENTO_CONFIRMADO: ${OLD_APPT}`]
     const destinations = (sendWhatsAppMessage.mock.calls as unknown as Array<[{ to: string }]>).map((c) => c[0].to)
     expect(destinations.length).toBeGreaterThan(0)
     expect(destinations).not.toContain(CLINIC_PHONE)
+  })
+})
+
+describe('processIncomingMessage — cancelamento em unidade terceirizada', () => {
+  const CANCEL_MSG = `Cancelado.
+CANCELAMENTO_CONFIRMADO: ${OLD_APPT}`
+
+  beforeEach(() => {
+    resetAgentHarness()
+    requestExternalConfirmation.mockReset().mockResolvedValue({ kind: 'requested', appointmentId: 'ext-1' })
+    notifyOutsourcedIssue.mockClear()
+  })
+
+  function cancelSetup() {
+    return mergeSupabaseConfig({
+      appointments: {
+        select: [{ data: [] }, { data: { id: OLD_APPT, gcal_event_id: 'ev1', workspace_id: 'w1' } }],
+        update: { data: null },
+      },
+    })
+  }
+
+  function cancelUpdates(supabase: ReturnType<typeof mergeSupabaseConfig>) {
+    return supabase.callsTo('appointments', 'update').filter((c) => (c.payload as { status?: string }).status === 'cancelado')
+  }
+
+  it('a busca da consulta a cancelar inclui as pendentes de confirmação externa', async () => {
+    outsourced()
+    const supabase = cancelSetup()
+    state.claudeResponses = [CANCEL_MSG]
+
+    await processIncomingMessage(PARAMS)
+
+    expect(JSON.stringify(supabase.callsTo('appointments', 'select'))).toContain('pendente_confirmacao_externa')
+  })
+
+  it.each(['pendente', 'confirmada'])('consulta %s em unidade terceirizada: cancela, apaga o evento e avisa a equipe', async () => {
+    outsourced()
+    const supabase = cancelSetup()
+    state.claudeResponses = [CANCEL_MSG]
+
+    await processIncomingMessage(PARAMS)
+
+    expect(cancelUpdates(supabase)).toHaveLength(1)
+    expect(deleteEvent).toHaveBeenCalledWith('w1', 'ev1')
+    expect(cancelEvent).not.toHaveBeenCalled()
+    expect(notifyOutsourcedIssue).toHaveBeenCalledWith({
+      accountId: PARAMS.accountId,
+      workspaceId: 'w1',
+      appointmentId: OLD_APPT,
+      reason: 'cancelamento_terceirizado',
+    })
+    expect(lastSentMessage()).toBe('Cancelado.')
+    const destinations = (sendWhatsAppMessage.mock.calls as unknown as Array<[{ to: string }]>).map((c) => c[0].to)
+    expect(destinations).not.toContain(CLINIC_PHONE)
+  })
+
+  it('unidade nativa: cancelEvent como antes e nenhum aviso', async () => {
+    const supabase = cancelSetup()
+    state.claudeResponses = [CANCEL_MSG]
+
+    await processIncomingMessage(PARAMS)
+
+    expect(cancelUpdates(supabase)).toHaveLength(1)
+    expect(cancelEvent).toHaveBeenCalledWith('w1', 'ev1')
+    expect(deleteEvent).not.toHaveBeenCalled()
+    expect(notifyOutsourcedIssue).not.toHaveBeenCalled()
+  })
+
+  it('remarcação de consulta pendente com pedido feito cancela a pendente antiga', async () => {
+    outsourced()
+    const supabase = mergeSupabaseConfig({
+      patients: { select: { data: { ...COMPLETE_PATIENT } }, update: { data: null } },
+      appointments: {
+        select: [{ data: [] }, { data: { id: OLD_APPT, gcal_event_id: 'ev1', workspace_id: 'w1' } }],
+        update: { data: null },
+      },
+    })
+    state.claudeResponses = [`${CLAUDE_OK}
+CANCELAMENTO_CONFIRMADO: ${OLD_APPT}`]
+
+    await processIncomingMessage(PARAMS)
+
+    expect(cancelUpdates(supabase)).toHaveLength(1)
+    expect(deleteEvent).toHaveBeenCalledWith('w1', 'ev1')
   })
 })
