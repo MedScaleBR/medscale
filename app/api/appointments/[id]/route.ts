@@ -1,13 +1,30 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { normalizeBrazilianPhone } from '@/lib/phone'
 import { createClient, createAdminClient } from '@/lib/supabase/server'
-import { cancelEvent, updateEvent } from '@/lib/google/calendar'
+import { cancelEvent, deleteEvent, updateEvent } from '@/lib/google/calendar'
 import { requireWorkspaceSession } from '@/lib/session/api'
 import { syncRevenueEntryToAppointmentStatus, applyAppointmentRevenue } from '@/lib/revenue/cycle'
 import { resolveAppointmentBilling } from '@/lib/billing/appointments'
 import { ensureGuideSafely } from '@/lib/billing/guides'
 import { PENDING_EXTERNAL_STATUS, type Database } from '@/types/database'
-import { PENDING_STATUS_FORBIDDEN_ERROR } from '@/lib/outsourced/config'
+import { PENDING_STATUS_FORBIDDEN_ERROR, isOutsourcedWorkspace } from '@/lib/outsourced/config'
+import { confirmOutsourcedAppointment } from '@/lib/outsourced/confirm'
+
+// Unidade terceirizada: o evento no Google é só um espaço reservado, então
+// cancelar apaga o evento (cancelEvent o deixaria riscado na agenda do médico).
+async function removeGoogleEvent(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  workspaceId: string,
+  eventId: string
+) {
+  const { data: ws } = await supabase
+    .from('workspaces')
+    .select('is_outsourced, external_clinic_phone')
+    .eq('id', workspaceId)
+    .maybeSingle()
+  if (ws && isOutsourcedWorkspace(ws)) await deleteEvent(workspaceId, eventId)
+  else await cancelEvent(workspaceId, eventId)
+}
 
 type AppointmentUpdate = Database['public']['Tables']['appointments']['Update']
 
@@ -66,6 +83,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: PENDING_STATUS_FORBIDDEN_ERROR }, { status: 400 })
   }
 
+  // Pendente → confirmado pelo painel reusa o fluxo da clínica parceira
+  // (aviso ao paciente, Google, receita): o status não vai no update normal,
+  // senão o update condicional do confirm não acharia mais a consulta pendente.
+  const confirmingPending = current.status === PENDING_EXTERNAL_STATUS && body.status === 'confirmado'
+  if (confirmingPending) delete update.status
+
   // Convênio da consulta (nome de um convênio de health_insurers). Consulta por convênio
   // fica fora do ciclo de receita: limpa preço/procedimento na mesma gravação
   // e não cria entrada. body.health_plan ausente = não mexeu; '' = particular.
@@ -121,7 +144,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
     try {
       if (cancelling) {
-        await cancelEvent(session.workspaceId, current.gcal_event_id)
+        await removeGoogleEvent(supabase, session.workspaceId, current.gcal_event_id)
       } else if (timeChanged || notesChanged) {
         await updateEvent(session.workspaceId, current.gcal_event_id, {
           startTime: newStart ?? undefined,
@@ -140,15 +163,46 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     }
   }
 
-  const { data, error } = await supabase
-    .from('appointments')
-    .update(update)
-    .eq('id', id)
-    .eq('workspace_id', session.workspaceId)
-    .select()
-    .single()
+  // Só confirmar (sem outros campos) não tem o que gravar: update vazio é pulado.
+  const skipUpdate = confirmingPending && Object.keys(update).length === 0
+  let data: typeof current | null = current
+  if (!skipUpdate) {
+    const { data: updated, error } = await supabase
+      .from('appointments')
+      .update(update)
+      .eq('id', id)
+      .eq('workspace_id', session.workspaceId)
+      .select()
+      .single()
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    data = updated
+  }
+
+  if (confirmingPending) {
+    // O confirm já aplica a receita; a rota não repete. Ele lança em erro de
+    // banco — responde genérico, sem detalhes.
+    let confirmed
+    try {
+      confirmed = await confirmOutsourcedAppointment(id)
+    } catch {
+      console.error('Confirmação da consulta terceirizada falhou appointment=' + id)
+      return NextResponse.json({ error: 'Não foi possível confirmar a consulta.' }, { status: 500 })
+    }
+    if (!confirmed.ok) {
+      return NextResponse.json({ error: 'Esta consulta já não está aguardando a clínica parceira.' }, { status: 409 })
+    }
+    const { data: reread, error: rereadError } = await supabase
+      .from('appointments')
+      .select()
+      .eq('id', id)
+      .eq('workspace_id', session.workspaceId)
+      .single()
+    if (rereadError || !reread) {
+      return NextResponse.json({ error: 'Não foi possível confirmar a consulta.' }, { status: 500 })
+    }
+    return NextResponse.json(reread)
+  }
 
   // Ciclo de receita: cria a previsão (caso a consulta tenha ganhado um
   // preço/procedimento nesta edição) e move a entrada conforme o novo status —
@@ -203,7 +257,7 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   if (current.gcal_event_id && current.status !== 'cancelado') {
     try {
-      await cancelEvent(session.workspaceId, current.gcal_event_id)
+      await removeGoogleEvent(supabase, session.workspaceId, current.gcal_event_id)
     } catch (gcalErr) {
       console.error('Google Calendar cancel failed:', gcalErr)
       return NextResponse.json(
