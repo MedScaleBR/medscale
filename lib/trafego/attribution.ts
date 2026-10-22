@@ -4,6 +4,8 @@
 // `lib/trafego/aggregate.ts`. As quatro listas chegam já recortadas pela
 // janela da tela.
 
+import { brazilianPhoneKey } from '@/lib/phone'
+
 const DAY_MS = 86_400_000
 
 /** Quanto tempo depois do clique uma consulta ainda conta como fruto do anúncio. */
@@ -70,27 +72,6 @@ function utcMidnight(date: Date): number {
 function toNumber(value: number | string | null | undefined): number {
   const n = Number(value)
   return Number.isFinite(n) ? n : 0
-}
-
-/**
- * Chave de telefone tolerante a formatação: o webhook grava o número cru que a
- * Meta manda ("5511999999999") e a recepção digita com máscara. Comparar as
- * strings direto perderia a consulta em silêncio, e o lead ficaria para sempre
- * sem conversão.
- *
- * Mesma regra do agente financeiro (`lib/finance/agent.ts`): fica com DDD + os
- * 8 últimos dígitos, o que faz o nono dígito do celular brasileiro deixar de
- * importar. Um número estrangeiro cai no ramo de baixo, sem massagem.
- */
-export function phoneKey(phone: string): string {
-  const digits = phone.replace(/\D/g, '')
-  const withCountry = digits.length <= 11 ? `55${digits}` : digits
-
-  if (withCountry.startsWith('55') && withCountry.length >= 12) {
-    return `55${withCountry.slice(2, 4)}${withCountry.slice(-8)}`
-  }
-
-  return withCountry
 }
 
 export interface CampaignLeads {
@@ -165,7 +146,7 @@ export function buildLeads(input: BuildLeadsInput): AttributedLead[] {
   // Last touch: quem clicou duas vezes pertence ao anúncio mais recente.
   const latestByPhone = new Map<string, AttributionRow>()
   for (const attr of input.attributions) {
-    const key = phoneKey(attr.patient_phone)
+    const key = brazilianPhoneKey(attr.patient_phone)
     const current = latestByPhone.get(key)
     if (!current || Date.parse(attr.occurred_at) > Date.parse(current.occurred_at)) {
       latestByPhone.set(key, attr)
@@ -174,7 +155,7 @@ export function buildLeads(input: BuildLeadsInput): AttributedLead[] {
 
   const appointmentsByPhone = new Map<string, AppointmentRow[]>()
   for (const appt of input.appointments) {
-    const key = phoneKey(appt.patient_phone)
+    const key = brazilianPhoneKey(appt.patient_phone)
     const list = appointmentsByPhone.get(key)
     if (list) list.push(appt)
     else appointmentsByPhone.set(key, [appt])

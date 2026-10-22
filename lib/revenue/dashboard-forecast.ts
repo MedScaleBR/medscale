@@ -17,7 +17,7 @@ export async function getDashboardForecast(
       .in('workspace_id', workspaceIds)
       .gte('scheduled_at', startIso)
       .lt('scheduled_at', endIso)
-      .not('status', 'in', '("cancelado","no_show")')
+      .not('status', 'in', '("cancelado","no_show","pendente_confirmacao_externa")')
       .order('id')
       .range(offset, offset + pageSize - 1)
     if (error || !data) return null

@@ -16,7 +16,8 @@ import {
 import { AppointmentModal, type AppointmentFormValues, type CatalogProcedureOption } from './AppointmentModal'
 import type { InsurerOption } from '@/components/billing/PatientInsurances'
 import type { WorkspaceOption } from './AgendaClient'
-import type { Database } from '@/types/database'
+import { PENDING_EXTERNAL_STATUS, type Database } from '@/types/database'
+import { appointmentEventStyle, PENDING_EVENT_STYLE, PENDING_LEGEND_LABEL } from './event-style'
 import type { BusyBlock } from '@/lib/google/reconcile'
 
 type Appointment = Database['public']['Tables']['appointments']['Row']
@@ -134,10 +135,11 @@ export function CalendarView({
         const start = new Date(a.scheduled_at)
         const end = new Date(start.getTime() + a.duration_min * 60_000)
         const unit = a.workspace_id ? nameByWorkspace[a.workspace_id] : null
+        const baseTitle = multiUnit && unit ? `${a.patient_name} · ${unit}` : a.patient_name
         return {
           kind: 'appointment',
           id: a.id,
-          title: multiUnit && unit ? `${a.patient_name} · ${unit}` : a.patient_name,
+          title: a.status === PENDING_EXTERNAL_STATUS ? `⏳ ${baseTitle}` : baseTitle,
           start,
           end,
           resource: a,
@@ -155,6 +157,11 @@ export function CalendarView({
       }))
     return [...apptEvents, ...busyEvents]
   }, [appointments, busyBlocks, unitFilter, multiUnit, nameByWorkspace])
+
+  const hasPending = useMemo(
+    () => events.some((e) => e.kind === 'appointment' && e.resource.status === PENDING_EXTERNAL_STATUS),
+    [events]
+  )
 
   const handleSelectSlot = useCallback(
     (slot: SlotInfo) => {
@@ -254,6 +261,13 @@ export function CalendarView({
         </div>
       )}
 
+      {hasPending && (
+        <div className="mb-3 flex items-center gap-1.5 text-xs text-gray-500">
+          <span className="inline-block h-2.5 w-4 rounded-sm" style={PENDING_EVENT_STYLE} />
+          {PENDING_LEGEND_LABEL}
+        </div>
+      )}
+
       <Calendar
         localizer={localizer}
         events={events}
@@ -286,19 +300,8 @@ export function CalendarView({
             }
           }
           const a = e.resource
-          // Cor por unidade quando há mais de uma; senão, o realce bot/manual.
           const unitColor = a.workspace_id ? colorByWorkspace[a.workspace_id] : undefined
-          const bg = multiUnit && unitColor ? unitColor : a.source === 'bot' ? 'var(--cyan)' : 'var(--navy)'
-          return {
-            style: {
-              backgroundColor: bg,
-              color: '#fff',
-              border: 'none',
-              borderRadius: 6,
-              // realce sutil para consultas marcadas pela Clara
-              boxShadow: a.source === 'bot' ? 'inset 3px 0 0 rgba(255,255,255,0.7)' : undefined,
-            },
-          }
+          return { style: appointmentEventStyle(a, { multiUnit, unitColor }) }
         }}
       />
 

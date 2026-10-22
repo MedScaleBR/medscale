@@ -1,4 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
+import { isOutsourcedWorkspace } from '@/lib/outsourced/config'
 import type { NumberSource } from '@/types/database'
 
 // Configuração da Clara — uma por account, vale para todas as unidades.
@@ -41,6 +42,9 @@ export interface UnitContext {
   directionsParking: string | null
   contactInfo: string | null
   handoffNumber: string | null
+  // Agendamento terceirizado: a clínica parceira confirma o horário (ver lib/outsourced).
+  isOutsourced: boolean
+  externalClinicPhone: string | null
 }
 
 // Cache simples em memória (por processo) — evita query ao banco em cada mensagem.
@@ -89,7 +93,7 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
   const { data } = await supabase
     .from('workspaces')
     .select(
-      'id, name, address, directions_parking, contact_info, handoff_number, display_order'
+      'id, name, address, directions_parking, contact_info, handoff_number, display_order, is_outsourced, external_clinic_phone'
     )
     .eq('account_id', accountId)
     .eq('is_active', true)
@@ -128,6 +132,8 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
     directionsParking: w.directions_parking,
     contactInfo: w.contact_info,
     handoffNumber: w.handoff_number,
+    isOutsourced: isOutsourcedWorkspace(w),
+    externalClinicPhone: w.external_clinic_phone,
   }))
 }
 

@@ -425,6 +425,9 @@ function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenCh
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
+                {initialValues?.status === 'pendente_confirmacao_externa' && (
+                  <SelectItem value="pendente_confirmacao_externa">Aguardando clínica</SelectItem>
+                )}
                 <SelectItem value="agendado">Agendado</SelectItem>
                 <SelectItem value="confirmado">Confirmado</SelectItem>
                 <SelectItem value="realizado">Realizado</SelectItem>

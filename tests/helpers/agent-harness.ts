@@ -11,6 +11,8 @@ export const UNIT: UnitContext = {
   directionsParking: null,
   contactInfo: null,
   handoffNumber: '+5511999998888',
+  isOutsourced: false,
+  externalClinicPhone: null,
 }
 
 // Estado compartilhado entre o arquivo de teste e as factories de vi.mock.
@@ -36,6 +38,7 @@ export const createEvent = vi.fn(async () => {
   return { id: 'gcal-event-1' }
 })
 export const cancelEvent = vi.fn(async () => undefined)
+export const deleteEvent = vi.fn(async () => undefined)
 export const isSlotAvailable = vi.fn(async () => state.slotAvailable)
 export const getFreeSlotsForBot = vi.fn(async (_workspaceId: string, date: Date) => {
   const key = date.toISOString().slice(0, 10)
@@ -103,6 +106,7 @@ export function resetAgentHarness(config: SupabaseMockConfig = defaultSupabaseCo
   sendWhatsAppMessage.mockClear()
   createEvent.mockClear()
   cancelEvent.mockClear()
+  deleteEvent.mockClear()
   isSlotAvailable.mockClear()
   getFreeSlotsForBot.mockClear()
   claudeCreate.mockClear()

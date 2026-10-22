@@ -8,6 +8,8 @@ import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
 import { applyAppointmentRevenue } from '@/lib/revenue/cycle'
 import { resolveAppointmentBilling } from '@/lib/billing/appointments'
 import { ensureGuideSafely } from '@/lib/billing/guides'
+import { PENDING_EXTERNAL_STATUS } from '@/types/database'
+import { PENDING_STATUS_FORBIDDEN_ERROR } from '@/lib/outsourced/config'
 
 export async function GET(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
@@ -35,6 +37,10 @@ export async function POST(req: NextRequest) {
 
   const supabase = await createClient()
   const body = await req.json()
+  // Só a Clara cria consulta pendente de clínica parceira — nunca pela API manual.
+  if (body.status === PENDING_EXTERNAL_STATUS) {
+    return NextResponse.json({ error: PENDING_STATUS_FORBIDDEN_ERROR }, { status: 400 })
+  }
   const phone = normalizeBrazilianPhone(body.patient_phone)
   if (!phone) return NextResponse.json({ error: 'Informe um telefone válido com DDD.' }, { status: 400 })
   body.patient_phone = phone

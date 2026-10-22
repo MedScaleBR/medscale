@@ -42,6 +42,9 @@ export async function listEvents(workspaceId: string, timeMin: Date, timeMax: Da
   return data.items ?? []
 }
 
+// Prefixo do título enquanto a clínica parceira ainda não confirmou o horário.
+export const PENDING_EVENT_PREFIX = '[PENDENTE] '
+
 // ── Criar evento com convite para o paciente ────────────────────────────────
 export interface CreateEventParams {
   workspaceId: string
@@ -54,6 +57,8 @@ export interface CreateEventParams {
   notes?: string
   workspaceName: string
   doctorEmail: string // e-mail Google de quem conectou o calendário da account
+  // Agendamento terceirizado: evento tentativo até a clínica parceira confirmar.
+  pending?: boolean
 }
 
 export async function createEvent(params: CreateEventParams): Promise<calendar_v3.Schema$Event> {
@@ -68,6 +73,7 @@ export async function createEvent(params: CreateEventParams): Promise<calendar_v
     notes,
     workspaceName,
     doctorEmail,
+    pending,
   } = params
 
   const endTime = new Date(startTime.getTime() + durationMin * 60_000)
@@ -84,7 +90,8 @@ export async function createEvent(params: CreateEventParams): Promise<calendar_v
     calendarId,
     sendUpdates: patientEmail ? 'all' : 'none',
     requestBody: {
-      summary: `${appointmentType} — ${patientName}`,
+      summary: `${pending ? PENDING_EVENT_PREFIX : ''}${appointmentType} — ${patientName}`,
+      ...(pending ? { status: 'tentative' } : {}),
       description: [
         `Paciente: ${patientName}`,
         `Telefone: ${patientPhone}`,
@@ -151,6 +158,25 @@ export async function updateEvent(
   })
 
   return data
+}
+
+// ── Confirmar evento pendente (tira o prefixo e vira 'confirmed') ───────────
+export async function markEventConfirmed(workspaceId: string, eventId: string): Promise<void> {
+  const { cal, calendarId } = await getWorkspaceCalendar(workspaceId)
+  const { data } = await cal.events.get({ calendarId, eventId })
+  const summary = data.summary
+  // Sem título no evento, não manda summary — um '' apagaria o que houver.
+  await cal.events.patch({
+    calendarId,
+    eventId,
+    sendUpdates: 'none',
+    requestBody: summary
+      ? {
+          summary: summary.startsWith(PENDING_EVENT_PREFIX) ? summary.slice(PENDING_EVENT_PREFIX.length) : summary,
+          status: 'confirmed',
+        }
+      : { status: 'confirmed' },
+  })
 }
 
 // ── Cancelar evento (marca como cancelled e notifica participantes) ────────

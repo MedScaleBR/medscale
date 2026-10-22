@@ -5,6 +5,7 @@ import type { MockFn } from '../helpers/types'
 const g = vi.hoisted(() => ({
   supabase: null as unknown as SupabaseMock,
   listEvents: null as unknown as MockFn,
+  createEvent: null as unknown as MockFn,
   googleConnected: true,
 }))
 
@@ -12,7 +13,10 @@ vi.mock('@/lib/supabase/server', () => ({
   createAdminClient: () => g.supabase.client,
   createClient: async () => g.supabase.client,
 }))
-vi.mock('@/lib/google/calendar', () => ({ listEvents: (...args: unknown[]) => g.listEvents(...args) }))
+vi.mock('@/lib/google/calendar', () => ({
+  listEvents: (...args: unknown[]) => g.listEvents(...args),
+  createEvent: (...args: unknown[]) => g.createEvent(...args),
+}))
 vi.mock('@/lib/google/auth', () => ({
   isGoogleConnected: async () => ({ connected: g.googleConnected, email: 'medico@clinica.com' }),
 }))
@@ -72,7 +76,7 @@ function setup(rows: unknown[], events: unknown[], config: SupabaseMockConfig = 
       update: { data: null },
       upsert: { data: null },
     },
-    workspaces: { select: { data: { account_id: 'acc1' } } },
+    workspaces: { select: { data: { account_id: 'acc1', name: 'Unidade Centro' } } },
     ...config,
   })
   g.listEvents = vi.fn(async () => events)
@@ -82,6 +86,7 @@ function setup(rows: unknown[], events: unknown[], config: SupabaseMockConfig = 
 describe('reconcileCalendar — sincronização inversa Google → Supabase', () => {
   beforeEach(() => {
     g.googleConnected = true
+    g.createEvent = vi.fn(async () => ({ id: 'gcal-novo' }))
   })
 
   it('deve ignorar evento do Google sem a marca extendedProperties.private.medscale', async () => {
@@ -232,5 +237,81 @@ describe('reconcileCalendar — sincronização inversa Google → Supabase', ()
     expect(select.filters).toContainEqual(['gte', 'scheduled_at', FROM.toISOString()])
     expect(select.filters).toContainEqual(['lte', 'scheduled_at', TO.toISOString()])
     expect(select.filters).toContainEqual(['eq', 'workspace_id', 'w1'])
+  })
+
+  describe('consulta pendente_confirmacao_externa (clínica parceira)', () => {
+    const pendingRow = (over: Record<string, unknown> = {}) =>
+      appointmentRow({ status: 'pendente_confirmacao_externa', ...over })
+
+    function expectRecreated(supabase: ReturnType<typeof setup>) {
+      expect(g.createEvent).toHaveBeenCalledWith({
+        workspaceId: 'w1',
+        patientName: 'João Silva',
+        patientPhone: '5511988887777',
+        appointmentType: 'consulta',
+        startTime: new Date('2025-09-15T13:00:00.000Z'),
+        durationMin: 30,
+        workspaceName: 'Unidade Centro',
+        doctorEmail: 'medico@clinica.com',
+        pending: true,
+      })
+      const updates = supabase.callsTo('appointments', 'update')
+      expect(updates).toHaveLength(1)
+      expect(updates[0].payload).toEqual({ gcal_event_id: 'gcal-novo' })
+      expect(updates[0].filters).toContainEqual(['eq', 'id', 'appt-1'])
+    }
+
+    it('evento cancelled no Google: mantém pendente e recria o evento como pendente', async () => {
+      const supabase = setup([pendingRow()], [medscaleEvent({ status: 'cancelled' })])
+      await reconcileCalendar('w1', FROM, TO)
+
+      expectRecreated(supabase)
+    })
+
+    it('evento sumiu da busca: recria em vez de cancelar', async () => {
+      const supabase = setup([pendingRow()], [])
+      await reconcileCalendar('w1', FROM, TO)
+
+      expectRecreated(supabase)
+    })
+
+    it('horário diferente no Google: nenhum patch (a MedScale é dona do horário)', async () => {
+      const supabase = setup(
+        [pendingRow()],
+        [
+          medscaleEvent({
+            start: { dateTime: '2025-09-15T15:00:00-03:00' },
+            end: { dateTime: '2025-09-15T16:00:00-03:00' },
+          }),
+        ]
+      )
+      await reconcileCalendar('w1', FROM, TO)
+
+      expect(supabase.callsTo('appointments', 'update')).toHaveLength(0)
+      expect(g.createEvent).not.toHaveBeenCalled()
+    })
+
+    it('falha ao recriar o evento só loga o id (sem PII) e não derruba o reconcile', async () => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+      setup([pendingRow()], [])
+      g.createEvent = vi.fn(async () => {
+        throw new Error('google fora')
+      })
+      const result = await reconcileCalendar('w1', FROM, TO)
+
+      expect(result.appointments).toHaveLength(1)
+      const logged = JSON.stringify(errorSpy.mock.calls.map((c) => c.filter((a) => typeof a === 'string')))
+      expect(logged).toContain('appt-1')
+      expect(logged).not.toContain('João')
+      expect(logged).not.toContain('5511988887777')
+      errorSpy.mockRestore()
+    })
+  })
+
+  it('linha agendado com evento cancelado continua virando cancelado (não recria)', async () => {
+    setup([appointmentRow()], [medscaleEvent({ status: 'cancelled' })])
+    await reconcileCalendar('w1', FROM, TO)
+
+    expect(g.createEvent).not.toHaveBeenCalled()
   })
 })

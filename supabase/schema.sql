@@ -36,6 +36,7 @@ drop table if exists
   public.push_subscriptions,
   public.handoff_hours,
   public.account_handoff_hours,
+  public.clinic_confirmations,
   public.handoff_logs,
   public.rate_limit_log,
   public.webhook_logs,
@@ -149,6 +150,11 @@ create table public.workspaces (
   -- Calendário Google desta unidade dentro da conexão única da account
   -- (google_tokens é por account). NULL = usar o calendário "primary".
   gcal_calendar_id        text,
+  -- Agendamento terceirizado: a unidade depende de uma clínica parceira para
+  -- confirmar o horário. Só vale com os dois campos preenchidos. Telefone só
+  -- com dígitos e DDI (5571999990000).
+  is_outsourced           boolean not null default false,
+  external_clinic_phone   text check (external_clinic_phone is null or external_clinic_phone ~ '^55\d{10,11}$'),
   -- Identificação do prestador no faturamento TISS (módulo "billing").
   cnes            text check (cnes is null or cnes ~ '^\d{7}$'),
   cnpj            text check (cnpj is null or cnpj ~ '^\d{14}$'),
@@ -657,7 +663,7 @@ create table public.appointments (
   source          text not null default 'manual'
                   check (source in ('bot','manual','importado')),
   status          text not null default 'agendado'
-                  check (status in ('agendado','confirmado','realizado','cancelado','no_show')),
+                  check (status in ('agendado','confirmado','realizado','cancelado','no_show','pendente_confirmacao_externa')),
   notes           text,
   -- procedure_id + snapshots de nome/preço no momento do agendamento. O
   -- snapshot é imutável: mudar o preço do procedimento depois não altera
@@ -681,6 +687,10 @@ create table public.appointments (
   authorization_date   date,
   gcal_event_id   text,
   reminder_sent   boolean default false,
+  -- Agendamento terceirizado: quando a solicitação foi enviada à clínica
+  -- parceira e quando a equipe foi avisada do atraso.
+  external_requested_at timestamptz,
+  external_escalated_at timestamptz,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
@@ -1026,11 +1036,27 @@ create table public.handoff_logs (
   id              uuid default uuid_generate_v4() primary key,
   workspace_id    uuid references public.workspaces(id) on delete cascade not null,
   conversation_id uuid references public.conversations(id) on delete set null,
-  patient_phone   text not null,
+  patient_phone   text,        -- NULL nos avisos operacionais da clínica parceira (sem paciente)
   trigger_reason  text,        -- 'user_request' | 'bot_uncertain' | 'max_turns' | 'out_of_hours' | 'injection_suspected'
+                               -- | 'clinica_externa_ambiguo' | 'clinica_externa_negacao' | 'clinica_externa_timeout'
+                               -- | 'cancelamento_terceirizado' | 'clinica_externa_falha_envio' | 'clinica_externa_config'
   handoff_to      text,
   flagged_content text,        -- resposta descartada por suspeita de injection; só aqui (RLS), nunca em log externo
   sent_at         timestamptz not null default now()
+);
+
+-- Auditoria da troca com a clínica parceira (agendamento terceirizado). Escrita
+-- só por service role (webhook/agent/cron) — sem policy de insert/update.
+create table public.clinic_confirmations (
+  id              uuid primary key default gen_random_uuid(),
+  account_id      uuid not null references public.accounts(id) on delete cascade,
+  workspace_id    uuid not null references public.workspaces(id) on delete cascade,
+  appointment_id  uuid references public.appointments(id) on delete set null,
+  direction       text not null check (direction in ('outbound', 'inbound')),
+  raw_text        text not null,
+  classification  text check (classification in ('confirmacao', 'negacao', 'ambiguo')),
+  whatsapp_id     text unique,
+  created_at      timestamptz not null default now()
 );
 
 -- Horário de atendimento humano (handoff) — independente de availability_rules
@@ -1084,6 +1110,7 @@ create index idx_workspaces_account          on public.workspaces(account_id);
 create index idx_patients_account            on public.patients(account_id, phone);
 create index idx_appointments_workspace      on public.appointments(workspace_id, scheduled_at);
 create index idx_appointments_doctor         on public.appointments(doctor_id, scheduled_at);
+create index idx_appointments_pending_external on public.appointments(workspace_id, status) where status = 'pendente_confirmacao_externa';
 create index idx_appointments_health_plan    on public.appointments(workspace_id, health_plan) where health_plan is not null;
 create index idx_appointments_billing        on public.appointments(account_id, status, scheduled_at) where billing_type = 'convenio';
 create index idx_patient_insurances_patient  on public.patient_insurances(patient_id);
@@ -1107,6 +1134,8 @@ create index idx_ad_campaigns_workspace      on public.ad_campaigns(workspace_id
 create index idx_webhook_logs_workspace      on public.webhook_logs(workspace_id, received_at desc);
 create index idx_rate_limit_account_phone    on public.rate_limit_log(account_id, phone);
 create index idx_handoff_logs_workspace      on public.handoff_logs(workspace_id, sent_at desc);
+create index idx_clinic_conf_workspace        on public.clinic_confirmations(workspace_id, created_at desc);
+create index idx_clinic_conf_appointment      on public.clinic_confirmations(appointment_id);
 create index idx_handoff_hours_workspace     on public.handoff_hours(workspace_id, day_of_week);
 create index idx_push_subscriptions_workspace on public.push_subscriptions(workspace_id);
 create index idx_push_subscriptions_user      on public.push_subscriptions(user_id);
@@ -1838,6 +1867,7 @@ alter table public.webhook_logs           enable row level security;
 alter table public.rate_limit_log         enable row level security;
 alter table public.handoff_logs           enable row level security;
 alter table public.handoff_hours          enable row level security;
+alter table public.clinic_confirmations   enable row level security;
 alter table public.account_handoff_hours  enable row level security;
 alter table public.push_subscriptions     enable row level security;
 alter table public.transcriptions         enable row level security;
@@ -1983,6 +2013,9 @@ create policy "webhook_logs: workspace members" on public.webhook_logs
 
 create policy "handoff_logs: workspace members" on public.handoff_logs
   for all using (workspace_id = any(public.my_workspace_ids()));
+
+create policy "clinic_confirmations: workspace members read" on public.clinic_confirmations
+  for select using (workspace_id = any(public.my_workspace_ids()));
 
 create policy "handoff_hours: workspace members" on public.handoff_hours
   for all using (workspace_id = any(public.my_workspace_ids()));

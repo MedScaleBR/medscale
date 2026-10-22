@@ -6,6 +6,7 @@ const g = vi.hoisted(() => ({
   supabase: null as unknown as SupabaseMock,
   events: {
     list: null as unknown as MockFn,
+    get: null as unknown as MockFn,
     insert: null as unknown as MockFn,
     patch: null as unknown as MockFn,
     delete: null as unknown as MockFn,
@@ -35,7 +36,7 @@ vi.mock('googleapis', () => ({
   },
 }))
 
-import { listEvents, createEvent, cancelEvent, updateEvent } from '@/lib/google/calendar'
+import { listEvents, createEvent, cancelEvent, updateEvent, markEventConfirmed, PENDING_EVENT_PREFIX } from '@/lib/google/calendar'
 import { isGoogleConnected, getAuthenticatedClient } from '@/lib/google/auth'
 
 const TOKEN_ROW = {
@@ -54,6 +55,7 @@ function setup(config: SupabaseMockConfig = {}) {
   })
   g.events = {
     list: vi.fn(async () => ({ data: { items: [] } })),
+    get: vi.fn(async () => ({ data: { id: 'gcal-1', summary: '[PENDENTE] consulta — Maria' } })),
     insert: vi.fn(async () => ({ data: { id: 'gcal-novo' } })),
     patch: vi.fn(async () => ({ data: { id: 'gcal-1' } })),
     delete: vi.fn(async () => ({ data: null })),
@@ -202,5 +204,70 @@ describe('cancelEvent / updateEvent — alterações no Google', () => {
     )[0].requestBody
     expect(body.start.dateTime).toBe('2025-09-15T18:00:00.000Z')
     expect(body.end.dateTime).toBe('2025-09-15T19:00:00.000Z')
+  })
+})
+
+describe('evento pendente (agendamento terceirizado)', () => {
+  beforeEach(() => setup())
+
+  const params = {
+    workspaceId: 'w1',
+    patientName: 'Maria',
+    patientPhone: '5511988887777',
+    appointmentType: 'consulta',
+    startTime: new Date('2025-09-15T13:00:00.000Z'),
+    durationMin: 30,
+    workspaceName: 'Clínica Teste',
+    doctorEmail: 'medico@clinica.com',
+  }
+
+  it('deve criar o evento tentativo com prefixo [PENDENTE] e as mesmas extendedProperties', async () => {
+    await createEvent({ ...params, pending: true })
+
+    const body = (
+      g.events.insert.mock.calls[0] as unknown as [
+        { requestBody: { summary: string; status: string; extendedProperties: { private: Record<string, string> } } },
+      ]
+    )[0].requestBody
+    expect(PENDING_EVENT_PREFIX).toBe('[PENDENTE] ')
+    expect(body.summary).toBe('[PENDENTE] consulta — Maria')
+    expect(body.status).toBe('tentative')
+    expect(body.extendedProperties.private).toEqual({
+      medscale: 'true',
+      workspace_id: 'w1',
+      patientPhone: '5511988887777',
+    })
+  })
+
+  it('não deve enviar status quando o evento não é pendente', async () => {
+    await createEvent(params)
+
+    const body = (g.events.insert.mock.calls[0] as unknown as [{ requestBody: Record<string, unknown> }])[0]
+      .requestBody
+    expect(body).not.toHaveProperty('status')
+    expect(body.summary).toBe('consulta — Maria')
+  })
+
+  it('markEventConfirmed deve tirar o prefixo e confirmar sem avisar participantes', async () => {
+    await markEventConfirmed('w1', 'gcal-1')
+
+    expect(g.events.get).toHaveBeenCalledWith(expect.objectContaining({ calendarId: 'primary', eventId: 'gcal-1' }))
+    expect(g.events.patch).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventId: 'gcal-1',
+        sendUpdates: 'none',
+        requestBody: { summary: 'consulta — Maria', status: 'confirmed' },
+      })
+    )
+  })
+
+  it('markEventConfirmed sem título no evento só confirma (não apaga o summary)', async () => {
+    g.events.get.mockResolvedValueOnce({ data: { id: 'gcal-1' } })
+
+    await markEventConfirmed('w1', 'gcal-1')
+
+    expect(g.events.patch).toHaveBeenCalledWith(
+      expect.objectContaining({ eventId: 'gcal-1', requestBody: { status: 'confirmed' } })
+    )
   })
 })
