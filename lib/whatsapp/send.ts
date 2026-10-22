@@ -1,4 +1,6 @@
 import { toWhatsAppMarkup } from '@/lib/bot/rich-text'
+import { graphUrl } from '@/lib/meta/graph'
+import { TEMPLATE_LANGUAGE } from '@/lib/outsourced/templates'
 
 interface SendMessageParams {
   to: string // formato E.164: +5511999999999
@@ -203,6 +205,39 @@ export async function sendWaitlistSpecificTemplate({
     const error = await response.json()
     throw new Error(`WhatsApp API error: ${JSON.stringify(error)}`)
   }
+
+  return response.json()
+}
+
+interface SendTemplateParams {
+  to: string
+  phoneNumberId: string
+  token: string
+  templateName: string
+  parameters: string[]
+}
+
+/** Envia um template de corpo com parâmetros de texto. O erro não ecoa a resposta: ela pode trazer dado de paciente. */
+export async function sendTemplateMessage({ to, phoneNumberId, token, templateName, parameters }: SendTemplateParams): Promise<{ messages?: { id: string }[] }> {
+  const response = await fetch(graphUrl(`/${phoneNumberId}/messages`), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      messaging_product: 'whatsapp',
+      to,
+      type: 'template',
+      template: {
+        name: templateName,
+        language: { code: TEMPLATE_LANGUAGE },
+        components: [{ type: 'body', parameters: parameters.map((text) => ({ type: 'text', text })) }],
+      },
+    }),
+  })
+
+  if (!response.ok) throw new Error(`WhatsApp API error: ${response.status}`)
 
   return response.json()
 }

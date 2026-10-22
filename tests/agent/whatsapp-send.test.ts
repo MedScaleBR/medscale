@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { sendReminderTemplate, sendWhatsAppMessage } from '@/lib/whatsapp/send'
+import { sendReminderTemplate, sendTemplateMessage, sendWhatsAppMessage } from '@/lib/whatsapp/send'
 
 function lastSentBody(fetchMock: ReturnType<typeof vi.fn>): { text: { body: string } } {
   return JSON.parse(fetchMock.mock.calls.at(-1)![1].body)
@@ -36,5 +36,33 @@ describe('sendWhatsAppMessage', () => {
   it('entrega texto sem marcação inalterado', async () => {
     await sendWhatsAppMessage({ ...params, message: 'Qual você escolhe?' })
     expect(lastSentBody(fetchMock).text.body).toBe('Qual você escolhe?')
+  })
+})
+
+describe('sendTemplateMessage', () => {
+  const fetchMock = vi.fn()
+  const base = { to: '5571999990000', phoneNumberId: '123', token: 't', templateName: 'solicitacao_agendamento', parameters: ['16/10'] }
+
+  beforeEach(() => {
+    fetchMock.mockReset()
+    vi.stubGlobal('fetch', fetchMock)
+  })
+  afterEach(() => vi.unstubAllGlobals())
+
+  it('envia o template na versão do Graph com idioma pt_BR', async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ messages: [{ id: 'wamid.1' }] }) })
+    const result = await sendTemplateMessage(base)
+    expect(fetchMock.mock.calls[0][0]).toBe('https://graph.facebook.com/v22.0/123/messages')
+    const body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(body.template.language).toEqual({ code: 'pt_BR' })
+    expect(body.template.components[0].parameters[0]).toEqual({ type: 'text', text: '16/10' })
+    expect(result.messages?.[0].id).toBe('wamid.1')
+  })
+
+  it('erro não ecoa corpo nem parâmetros', async () => {
+    fetchMock.mockResolvedValue({ ok: false, status: 400, json: async () => ({ error: { message: 'bad 16/10' } }) })
+    const err = await sendTemplateMessage(base).catch((e) => e as Error)
+    expect((err as Error).message).toBe('WhatsApp API error: 400')
+    expect((err as Error).message).not.toContain('16/10')
   })
 })
