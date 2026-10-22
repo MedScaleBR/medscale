@@ -28,8 +28,8 @@ export function Sidebar({ session, accounts }: SidebarProps) {
       {accounts.length > 1 && <AccountSwitcher accounts={accounts} activeId={accountId} />}
       {allWorkspaces.length > 1 && <WorkspaceSwitcher workspaces={allWorkspaces} activeId={workspaceId} />}
 
-      <NavLinks userModules={userModules} role={role} className="flex-1 space-y-1 px-3 py-4" />
-
+      <NavLinks userModules={userModules} role={role} className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3 py-4" />
+1L@:  
       <div className="px-3 pb-2">
         <SidebarFeedbackButton />
       </div>
