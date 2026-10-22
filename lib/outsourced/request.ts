@@ -90,24 +90,11 @@ export async function requestExternalConfirmation(input: ExternalRequestInput): 
     return insertFailed(input)
   }
 
-  // 3. Conversa, lista de espera e analytics — mesmo efeito do agendamento nativo.
+  // 3. Conversa passa a apontar para a consulta (mesmo efeito do agendamento nativo).
   await supabase
     .from('conversations')
     .update({ appointment_id: appt.id, workspace_id: unit.id })
     .eq('id', input.conversationId)
-
-  await supabase
-    .from('waitlist')
-    .update({ status: 'scheduled' })
-    .eq('workspace_id', unit.id)
-    .eq('patient_id', patient.id)
-    .eq('status', 'waiting')
-
-  await trackAppointmentBookedByBot(accountId, {
-    workspace_id: unit.id,
-    account_id: accountId,
-    slot_datetime: scheduledAt.toISOString(),
-  })
 
   // 4. Evento provisório no Google — best-effort, não segura a solicitação.
   let gcalEventId: string | null = null
@@ -156,7 +143,8 @@ export async function requestExternalConfirmation(input: ExternalRequestInput): 
     whatsappId = res.messages?.[0]?.id ?? null
   } catch {
     console.error(`[outsourced] envio da solicitação falhou appointment=${appt.id} workspace=${unit.id}`)
-    await supabase.from('appointments').update({ status: 'cancelado' }).eq('id', appt.id)
+    const { error: cancelError } = await supabase.from('appointments').update({ status: 'cancelado' }).eq('id', appt.id)
+    if (cancelError) console.error(`[outsourced] cancel after send failure failed appointment=${appt.id}`)
     if (gcalEventId) {
       try {
         await deleteEvent(unit.id, gcalEventId)
@@ -173,7 +161,21 @@ export async function requestExternalConfirmation(input: ExternalRequestInput): 
     return { kind: 'send_failed', appointmentId: appt.id }
   }
 
-  // 6. Histórico do que foi enviado. Falha aqui só loga — o pedido já saiu.
+  // 6. Pedido saiu: lista de espera e analytics, como no agendamento nativo.
+  await supabase
+    .from('waitlist')
+    .update({ status: 'scheduled' })
+    .eq('workspace_id', unit.id)
+    .eq('patient_id', patient.id)
+    .eq('status', 'waiting')
+
+  await trackAppointmentBookedByBot(accountId, {
+    workspace_id: unit.id,
+    account_id: accountId,
+    slot_datetime: scheduledAt.toISOString(),
+  })
+
+  // 7. Histórico do que foi enviado. Falha aqui só loga — o pedido já saiu.
   const { error: logError } = await supabase.from('clinic_confirmations').insert({
     account_id: accountId,
     workspace_id: unit.id,

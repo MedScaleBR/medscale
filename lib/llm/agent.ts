@@ -582,10 +582,11 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   let bookingFailed = false
   let unitRequired = false
   let cancellationFailed = false
-  // Unidade terceirizada: mensagem fixa que substitui a do Claude, e se faltou
-  // dado do paciente (aí nada foi solicitado — a consulta antiga fica).
+  // Unidade terceirizada: mensagem fixa que substitui a do Claude, e se nada
+  // foi solicitado à clínica (faltou dado, já havia pendente ou o pedido
+  // falhou) — numa remarcação, aí a consulta antiga fica.
   let outsourcedMessage: string | null = null
-  let outsourcedNeedsData = false
+  let outsourcedNotRequested = false
   const insuranceChoice = markers.insuranceChoice
   const selectedInsurer = insuranceChoice && insuranceChoice !== 'PARTICULAR'
     ? (insurerRows ?? []).find((i) => i.id.toLowerCase() === insuranceChoice.toLowerCase()) ?? null
@@ -633,9 +634,11 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
           birthDate: patientBirthDate,
           insuranceChosen: insuranceChoice !== null,
         })
+        // `missing` vazio já garante paciente, nome e nascimento — os outros
+        // testes só estreitam os tipos e nunca disparam com `missing` vazio.
         if (missing.length > 0 || !patient || !fullName || !patientBirthDate) {
           outsourcedMessage = missingDataMessage(missing, bookingUnit.name)
-          outsourcedNeedsData = true
+          outsourcedNotRequested = true
         } else if (!(await isSlotAvailable(bookingUnitId, scheduledAt, durationMin).catch(() => true))) {
           console.warn(`Slot ${markers.confirmedSlot} não está mais disponível (unidade ${bookingUnitId}) — solicitação não enviada.`)
           bookingFailed = true
@@ -656,6 +659,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
             phoneNumberId: botConfig.phoneNumberId,
             metaToken: botConfig.metaToken ? decryptToken(botConfig.metaToken) : null,
           })
+          outsourcedNotRequested = result.kind !== 'requested'
           outsourcedMessage =
             result.kind === 'requested'
               ? requestedMessage({ scheduledAt, unitName: bookingUnit.name })
@@ -759,7 +763,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   }
 
   // Cancelamento confirmado — casa por id (copiado do system prompt) + paciente.
-  if (markers.cancelledAppointmentId && patient && !insuranceNeedsClarification && !outsourcedNeedsData) {
+  if (markers.cancelledAppointmentId && patient && !insuranceNeedsClarification && !outsourcedNotRequested) {
     const apptId = markers.cancelledAppointmentId
     const { data: apptToCancel } = await supabase
       .from('appointments')

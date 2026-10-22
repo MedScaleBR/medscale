@@ -237,6 +237,19 @@ describe('requestExternalConfirmation', () => {
       reason: 'clinica_externa_falha_envio',
     })
     expect(supabase.callsTo('clinic_confirmations', 'insert')).toHaveLength(0)
+    // Pedido não saiu: paciente continua na lista de espera e nada vai para o analytics.
+    expect(supabase.callsTo('waitlist', 'update')).toHaveLength(0)
+    expect(m.trackAppointmentBookedByBot).not.toHaveBeenCalled()
+  })
+
+  it('loga só o id quando o cancelamento após falha de envio também falha', async () => {
+    setup({ appointments: { select: { data: null }, insert: { data: { ...APPT } }, update: { data: null, error: { message: 'boom' } } } })
+    m.sendTemplateMessage.mockRejectedValueOnce(new Error('WhatsApp API error: 400'))
+
+    const res = await requestExternalConfirmation(input())
+
+    expect(res).toEqual({ kind: 'send_failed', appointmentId: 'ap-new' })
+    expect(consoleSpies.error).toHaveBeenCalledWith('[outsourced] cancel after send failure failed appointment=ap-new')
   })
 
   it.each([
@@ -254,6 +267,8 @@ describe('requestExternalConfirmation', () => {
     expect(m.notifyOutsourcedIssue).toHaveBeenCalledWith(
       expect.objectContaining({ reason: 'clinica_externa_falha_envio', appointmentId: 'ap-new' })
     )
+    expect(supabase.callsTo('waitlist', 'update')).toHaveLength(0)
+    expect(m.trackAppointmentBookedByBot).not.toHaveBeenCalled()
   })
 
   it('insert do appointment sem retorno → insert_failed, nada enviado', async () => {

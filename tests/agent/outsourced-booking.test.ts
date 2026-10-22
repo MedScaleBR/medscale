@@ -232,6 +232,65 @@ describe('processIncomingMessage — agendamento em unidade terceirizada', () =>
     expect(lastSentMessage()).toBe(missingDataMessage(['nome', 'nascimento'], 'IAD Pituba'))
   })
 
+  it.each([
+    { kind: 'already_pending' },
+    { kind: 'send_failed', appointmentId: 'ext-1' },
+    { kind: 'insert_failed' },
+  ])('remarcação sem pedido feito ($kind): preserva a consulta antiga', async (result) => {
+    outsourced()
+    const supabase = mergeSupabaseConfig({
+      patients: { select: { data: { ...COMPLETE_PATIENT } }, update: { data: null } },
+      appointments: {
+        select: [{ data: [] }, { data: { id: OLD_APPT, gcal_event_id: null, workspace_id: 'w1' } }],
+        update: { data: null },
+      },
+    })
+    requestExternalConfirmation.mockResolvedValueOnce(result)
+    state.claudeResponses = [`${CLAUDE_OK}
+CANCELAMENTO_CONFIRMADO: ${OLD_APPT}`]
+
+    await processIncomingMessage(PARAMS)
+
+    expect(supabase.callsTo('appointments', 'update')).toHaveLength(0)
+  })
+
+  it('remarcação com pedido feito cancela a consulta antiga', async () => {
+    outsourced()
+    const supabase = mergeSupabaseConfig({
+      patients: { select: { data: { ...COMPLETE_PATIENT } }, update: { data: null } },
+      appointments: {
+        select: [{ data: [] }, { data: { id: OLD_APPT, gcal_event_id: null, workspace_id: 'w1' } }],
+        update: { data: null },
+      },
+    })
+    state.claudeResponses = [`${CLAUDE_OK}
+CANCELAMENTO_CONFIRMADO: ${OLD_APPT}`]
+
+    await processIncomingMessage(PARAMS)
+
+    const cancel = supabase.callsTo('appointments', 'update').find((c) => (c.payload as { status?: string }).status === 'cancelado')
+    expect(cancel).toBeDefined()
+  })
+
+  it('cancelamento simples (sem agendamento) em unidade terceirizada continua cancelando', async () => {
+    outsourced()
+    const supabase = mergeSupabaseConfig({
+      appointments: {
+        select: [{ data: [] }, { data: { id: OLD_APPT, gcal_event_id: null, workspace_id: 'w1' } }],
+        update: { data: null },
+      },
+    })
+    state.claudeResponses = [`Cancelado.
+CANCELAMENTO_CONFIRMADO: ${OLD_APPT}`]
+
+    await processIncomingMessage(PARAMS)
+
+    expect(requestExternalConfirmation).not.toHaveBeenCalled()
+    const cancel = supabase.callsTo('appointments', 'update').find((c) => (c.payload as { status?: string }).status === 'cancelado')
+    expect(cancel).toBeDefined()
+    expect(lastSentMessage()).toBe('Cancelado.')
+  })
+
   it('nenhuma mensagem de texto livre sai para o WhatsApp da clínica parceira', async () => {
     outsourced()
     completePatient()
