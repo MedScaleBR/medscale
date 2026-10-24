@@ -1,14 +1,11 @@
-import { TZDate } from '@date-fns/tz'
-import { format } from 'date-fns'
-import { el, serialize } from '../xml'
+import { el } from '../xml'
 import { validateAgainstSchemas } from '../validate'
-import { epilogueHash } from './hash'
+import { VERSION, cabecalho, mensagemTISS } from './envelope'
 import { buildConsultaGuide } from './guide-consulta'
 import { buildSpSadtGuide } from './guide-sp-sadt'
 import type { BatchInput, BuiltBatch, TissVersionModule } from '@/lib/billing/types'
 
-export const VERSION = '4.03.00'
-const TZ = 'America/Sao_Paulo'
+export { VERSION }
 
 // guiasTISS é um <choice> com maxOccurs="100": um lote tem um único tipo de
 // guia e no máximo 100 delas.
@@ -32,21 +29,15 @@ export function buildBatch(input: BatchInput): BuiltBatch {
   if (input.guides.length > MAX_GUIDES_PER_BATCH) throw new Error('lote acima de 100 guias')
   if (input.guides.some((g) => g.guide_type !== input.guideType)) throw new Error('lote com tipos de guia misturados')
 
-  const now = new TZDate(input.now, TZ)
   const buildGuide = input.guideType === 'consulta' ? buildConsultaGuide : buildSpSadtGuide
   const batchNumber = String(input.batchNumber)
 
-  const cabecalho = el('cabecalho', [
-    el('identificacaoTransacao', [
-      el('tipoTransacao', 'ENVIO_LOTE_GUIAS'),
-      el('sequencialTransacao', batchNumber),
-      el('dataRegistroTransacao', format(now, 'yyyy-MM-dd')),
-      el('horaRegistroTransacao', format(now, 'HH:mm:ss')),
-    ]),
-    el('origem', [el('identificacaoPrestador', [el('codigoPrestadorNaOperadora', input.insurer.provider_code)])]),
-    el('destino', [el('registroANS', input.insurer.ans_registry)]),
-    el('Padrao', VERSION),
-  ])
+  const head = cabecalho({
+    tipoTransacao: 'ENVIO_LOTE_GUIAS',
+    sequencialTransacao: batchNumber,
+    now: input.now,
+    insurer: input.insurer,
+  })
 
   const body = el('prestadorParaOperadora', [
     el('loteGuias', [
@@ -58,9 +49,7 @@ export function buildBatch(input: BatchInput): BuiltBatch {
     ]),
   ])
 
-  const hash = epilogueHash([cabecalho, body])
-  const xml = serialize(el('mensagemTISS', [cabecalho, body, el('epilogo', [el('hash', hash)])]))
-  return { xml, hash }
+  return mensagemTISS(head, body)
 }
 
 export function validate(xml: Uint8Array) {
