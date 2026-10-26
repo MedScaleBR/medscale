@@ -107,6 +107,11 @@ export function TaskCardBody({ item, today }: { item: BoardItem; today: string }
         >
           {cardTitle(item)}
         </p>
+        {item.type === 'task' && item.task.description?.trim() && (
+          <p className="mt-1 line-clamp-2 text-xs whitespace-pre-line break-words text-gray-500">
+            {item.task.description}
+          </p>
+        )}
         <p className="mt-1 truncate text-xs text-gray-400">{accountName}</p>
       </div>
       <div className="flex min-h-6 items-center justify-between gap-2">
