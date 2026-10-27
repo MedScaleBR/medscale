@@ -191,6 +191,7 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
             onNotesSaved={handleNotesSaved}
             onScheduled={handleScheduled}
             onBack={() => setMobilePane('list')}
+            externalRequest={selected.external_request ?? null}
           />
         ) : (
           <div className="flex h-full items-center justify-center text-sm text-gray-400">

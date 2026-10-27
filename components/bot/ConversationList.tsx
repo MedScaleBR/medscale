@@ -18,6 +18,7 @@ import {
   type InboxSort,
 } from '@/lib/bot/inbox'
 import { InitialsAvatar } from './InitialsAvatar'
+import type { ExternalRequestView } from './ExternalRequestCard'
 
 export interface ConversationListItem {
   id: string
@@ -35,6 +36,8 @@ export interface ConversationListItem {
   last_message: string | null
   last_message_at: string | null
   unread: boolean
+  // Solicitação de agendamento mais recente (unidade com agenda externa).
+  external_request?: ExternalRequestView | null
 }
 
 interface ConversationListProps {

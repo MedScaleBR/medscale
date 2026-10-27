@@ -10,7 +10,33 @@ import { isGoogleConnected } from '@/lib/google/auth'
 import { cancelEvent, createEvent, deleteEvent } from '@/lib/google/calendar'
 import { getBotConfig, getAccountUnits } from '@/lib/bot/config'
 import { buildDynamicSystemPrompt, wrapPatientMessage } from '@/lib/bot/prompt-builder'
-import { containsUnconfiguredDiscount, detectInjectionAttempt, sanitizePatientName, parseBirthDate, type InjectionSignal } from '@/lib/bot/security'
+import {
+  containsUnconfiguredDiscount,
+  detectInjectionAttempt,
+  sanitizePatientName,
+  parseBirthDate,
+  parseIsoBirthDate,
+  parseCardNumber,
+  parseCpf,
+  parseEmail,
+  sanitizeShortText,
+  type InjectionSignal,
+} from '@/lib/bot/security'
+import {
+  EXTERNAL_BOOKING_BLOCKED_MESSAGE,
+  externalRequestInHoursMessage,
+  externalRequestOutOfHoursMessage,
+  intakeMissingMessage,
+  missingIntakeFields,
+  type IntakeField,
+} from '@/lib/bot/unit-settings'
+import {
+  closeSupersededExternalRequests,
+  EXTERNAL_REQUEST_PUSH_TITLE,
+  EXTERNAL_REQUEST_REASON,
+  externalRequestPushBody,
+  recordPendingExternalRequest,
+} from '@/lib/bot/external-request'
 import { detectHandoffIntent, executeHandoff, isHandoffAvailableNow, logHandoffUnavailable } from '@/lib/bot/handoff'
 import { broadcastToWorkspace } from '@/lib/realtime/broadcast'
 import { parseMarkers } from '@/lib/bot/parse-markers'
@@ -23,7 +49,7 @@ import {
   trackUnsupportedMessageReceived,
   trackWaitlistPatientAddedByBot,
 } from '@/lib/analytics/posthog-server'
-import type { Database } from '@/types/database'
+import type { Database, ExternalRequestSummary } from '@/types/database'
 import { PENDING_EXTERNAL_STATUS } from '@/types/database'
 import { recordClaudeCost, recordWhatsappConversation } from '@/lib/costs/record'
 import { missingOutsourcedFields } from '@/lib/outsourced/config'
@@ -266,6 +292,67 @@ async function collectFreeSlots(unitId: string, maxDays = 4): Promise<Record<str
   return byDay
 }
 
+// Dados da coleta por unidade já validados: o que veio nesta resposta, ou o que
+// o paciente já tinha salvo. Motivo e preferência valem só para esta resposta
+// (ficam na consulta / na solicitação, não no paciente).
+interface IntakeSnapshot {
+  cardNumber: string | null
+  cpf: string | null
+  email: string | null
+  reason: string | null
+  preference: string | null
+}
+
+const MAX_INTAKE_TEXT = 200
+
+async function collectIntakeData(input: {
+  supabase: SupabaseAdmin
+  markers: ReturnType<typeof parseMarkers>
+  patient: { id: string } | null
+  collected: ReadonlySet<IntakeField>
+  conversationId: string
+}): Promise<IntakeSnapshot> {
+  const { supabase, markers, patient, collected, conversationId } = input
+  const empty: IntakeSnapshot = { cardNumber: null, cpf: null, email: null, reason: null, preference: null }
+  // Account sem nenhuma unidade configurada: nenhuma query a mais.
+  if (collected.size === 0 || !patient) return empty
+
+  const parse = (field: IntakeField, raw: string | null, fn: (v: string) => string | null): string | null => {
+    if (!collected.has(field) || !raw) return null
+    const value = fn(raw)
+    if (!value) console.warn(`[intake] valor rejeitado field=${field} conversation=${conversationId}`)
+    return value
+  }
+  const card = parse('insurance', markers.cardNumber, parseCardNumber)
+  const cpf = parse('cpf', markers.cpf, parseCpf)
+  const email = parse('email', markers.email, parseEmail)
+  const reason = parse('reason', markers.reason, (v) => sanitizeShortText(v, MAX_INTAKE_TEXT))
+  const preference = parse('preference', markers.preference, (v) => sanitizeShortText(v, MAX_INTAKE_TEXT))
+
+  const { data: stored } = await supabase
+    .from('patients')
+    .select('cpf, email, insurance_card_number')
+    .eq('id', patient.id)
+    .maybeSingle()
+
+  const update: Database['public']['Tables']['patients']['Update'] = {}
+  if (card && card !== stored?.insurance_card_number) update.insurance_card_number = card
+  if (cpf && cpf !== stored?.cpf) update.cpf = cpf
+  if (email && email !== stored?.email) update.email = email
+  if (Object.keys(update).length > 0) {
+    const { error } = await supabase.from('patients').update(update).eq('id', patient.id)
+    if (error) console.error(`[intake] gravação do paciente falhou conversation=${conversationId}`)
+  }
+
+  return {
+    cardNumber: card ?? stored?.insurance_card_number ?? null,
+    cpf: cpf ?? stored?.cpf ?? null,
+    email: email ?? stored?.email ?? null,
+    reason,
+    preference,
+  }
+}
+
 // O bot conversa e agenda 24/7 — nunca fica "fechado". Só o handoff para um
 // humano tem horário próprio (handoff_hours), checado no passo 10.
 export async function processIncomingMessage(params: ProcessMessageParams) {
@@ -294,6 +381,10 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   const units = allUnits
   const allUnitById = new Map(units.map((u) => [u.id, u]))
   const multiUnit = units.length > 1
+  // Dados que alguma unidade coleta (vazio = account no padrão).
+  const collectedFieldsAnywhere = new Set(units.flatMap((u) => u.botSettings?.intakeFields ?? []))
+  const isExternal = (unitId: string | null | undefined) =>
+    !!unitId && allUnitById.get(unitId)?.botSettings?.schedulingMode === 'external'
 
   // 2. Paciente (por account).
   const patient = await getOrCreatePatient(supabase, accountId, patientPhone)
@@ -369,7 +460,10 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   const isFirstMessage = (history?.length ?? 0) <= 1
 
   // 6. Horários livres reais por unidade (availability_rules + Google Calendar).
-  const slotsPerUnit = await Promise.all(units.map((u) => collectFreeSlots(u.id)))
+  // Unidade com agenda externa não tem horários na MedScale (nem precisa de expediente).
+  const slotsPerUnit = await Promise.all(
+    units.map((u) => (isExternal(u.id) ? Promise.resolve({}) : collectFreeSlots(u.id)))
+  )
   const freeSlotsByUnit: Record<string, Record<string, string[]>> = {}
   units.forEach((u, i) => {
     freeSlotsByUnit[u.id] = slotsPerUnit[i]
@@ -443,6 +537,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
       directionsParking: u.directionsParking,
       contactInfo: u.contactInfo,
       isOutsourced: u.isOutsourced,
+      botSettings: u.botSettings,
     })),
     freeSlotsByUnit,
     procedureCatalogByUnit,
@@ -552,14 +647,29 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
 
   // Nascimento (só unidades terceirizadas): data inválida é descartada sem
   // falhar o fluxo. O log leva só o id da conversa — nunca o valor (LGPD).
-  const birthDate = markers.patientBirthDate ? parseBirthDate(markers.patientBirthDate, contextNow) : null
-  if (markers.patientBirthDate && !birthDate) {
-    console.warn(`[security] NASCIMENTO_PACIENTE rejeitado conversation=${conversation.id}`)
+  // DATA_NASCIMENTO (AAAA-MM-DD) é o formato da coleta por unidade; o
+  // NASCIMENTO_PACIENTE (DD/MM/AAAA) segue valendo para as terceirizadas.
+  const birthDate =
+    (markers.patientBirthDate ? parseBirthDate(markers.patientBirthDate, contextNow) : null) ??
+    (markers.isoBirthDate ? parseIsoBirthDate(markers.isoBirthDate, contextNow) : null)
+  if ((markers.patientBirthDate || markers.isoBirthDate) && !birthDate) {
+    console.warn(`[security] data de nascimento rejeitada conversation=${conversation.id}`)
   }
   if (patient && birthDate && birthDate !== patient.birth_date) {
     await supabase.from('patients').update({ birth_date: birthDate }).eq('id', patient.id)
     patient.birth_date = birthDate
   }
+
+  // Dados da coleta por unidade (workspaces.intake_fields). Só grava o que
+  // alguma unidade da account pede — CPF nunca é guardado sem unidade com 'cpf'.
+  // Inválido é descartado; o log leva só o nome do campo (LGPD).
+  const intake = await collectIntakeData({
+    supabase,
+    markers,
+    patient,
+    collected: collectedFieldsAnywhere,
+    conversationId: conversation.id,
+  })
 
   // 7.5 Unidade corrente: a Clara emite UNIDADE_ID quando o paciente indica a
   // unidade. Grava na conversa (é o que faz o chat aparecer no /conversa
@@ -588,11 +698,27 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   // falhou) — numa remarcação, aí a consulta antiga fica.
   let outsourcedMessage: string | null = null
   let outsourcedNotRequested = false
+  // Coleta por unidade: dados que faltam antes de agendar (unidade 'internal')
+  // ou de transferir (unidade 'external'). null = nada recusado.
+  let intakeMissing: IntakeField[] | null = null
+
+  // A Clara nunca marca consulta em unidade com agenda externa: o prompt
+  // proíbe e aqui o marcador é descartado. O log leva só o fato e a unidade.
+  const requestedBookingUnitId =
+    (markers.unitId && allUnitById.has(markers.unitId) ? markers.unitId : null) ??
+    currentUnitId ??
+    (units.length === 1 ? units[0].id : null)
+  const externalBookingBlocked = markers.confirmedDate !== null && isExternal(requestedBookingUnitId)
+  if (externalBookingBlocked) {
+    console.warn(`[intake] AGENDAMENTO_CONFIRMADO ignorado em unidade externa workspace=${requestedBookingUnitId}`)
+  }
+  const confirmedDate = externalBookingBlocked ? null : markers.confirmedDate
+
   const insuranceChoice = markers.insuranceChoice
   const selectedInsurer = insuranceChoice && insuranceChoice !== 'PARTICULAR'
     ? (insurerRows ?? []).find((i) => i.id.toLowerCase() === insuranceChoice.toLowerCase()) ?? null
     : null
-  const insuranceNeedsClarification = markers.confirmedDate !== null && (
+  const insuranceNeedsClarification = confirmedDate !== null && (
     Boolean(insurersError) || (insuranceChoice === null
       ? (insurerRows ?? []).length > 0 || !botConfig.acceptsPrivate
       : insuranceChoice === 'PARTICULAR' ? !botConfig.acceptsPrivate : !selectedInsurer)
@@ -601,7 +727,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   // usada também pelo handoff mais abaixo.
   let resolvedUnitId: string | null = conversation.workspace_id ?? (units.length === 1 ? units[0].id : null)
 
-  if (markers.confirmedDate && !insuranceNeedsClarification) {
+  if (confirmedDate && !insuranceNeedsClarification) {
     const bookingUnitId =
       (markers.unitId && allUnitById.has(markers.unitId) ? markers.unitId : null) ??
       currentUnitId ??
@@ -613,7 +739,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
       unitRequired = true
     } else {
       resolvedUnitId = bookingUnitId
-      const scheduledAt = markers.confirmedDate
+      const scheduledAt = confirmedDate
       const durationMin = 30
 
       const unitCatalog = procedureCatalogByUnit[bookingUnitId] ?? []
@@ -625,7 +751,26 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
       const snapshotPrice = resolvedProcedure?.price ?? null
 
       const bookingUnit = allUnitById.get(bookingUnitId)
-      if (bookingUnit?.isOutsourced && bookingUnit.externalClinicPhone) {
+      // Unidade 'internal' com dados a coletar: o backend confere antes de
+      // agendar, sem confiar só no prompt.
+      const bookingIntakeFields = bookingUnit?.botSettings?.intakeFields ?? []
+      const bookingMissing = bookingIntakeFields.length > 0
+        ? missingIntakeFields(bookingIntakeFields, {
+            fullName: patient?.full_name ?? null,
+            birthDate: patient?.birth_date ?? null,
+            insuranceResolved: true, // chegar aqui já é convênio resolvido
+            particular: !selectedInsurer,
+            cardNumber: intake.cardNumber,
+            cpf: intake.cpf,
+            email: intake.email,
+            reason: intake.reason,
+            preference: null,
+          })
+        : []
+      if (bookingMissing.length > 0) {
+        console.warn(`[intake] missing_fields=${bookingMissing.join(',')} trigger_reason=booking workspace=${bookingUnitId}`)
+        intakeMissing = bookingMissing
+      } else if (bookingUnit?.isOutsourced && bookingUnit.externalClinicPhone) {
         // Unidade terceirizada: a Clara não agenda — pede o horário à clínica
         // parceira e o paciente recebe uma mensagem fixa (o Claude não promete nada).
         const fullName = patient?.full_name ?? null
@@ -698,6 +843,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
                 insurer_id: selectedInsurer.id,
                 health_plan: selectedInsurer.name,
               } : {}),
+              ...(intake.reason && bookingIntakeFields.includes('reason') ? { reason: intake.reason } : {}),
             })
             .select()
             .single()
@@ -767,7 +913,15 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   }
 
   // Cancelamento confirmado — casa por id (copiado do system prompt) + paciente.
-  if (markers.cancelledAppointmentId && patient && !insuranceNeedsClarification && !outsourcedNotRequested) {
+  // Remarcação que não agendou (dado faltando, unidade externa) mantém a antiga.
+  if (
+    markers.cancelledAppointmentId &&
+    patient &&
+    !insuranceNeedsClarification &&
+    !outsourcedNotRequested &&
+    !externalBookingBlocked &&
+    intakeMissing === null
+  ) {
     const apptId = markers.cancelledAppointmentId
     const { data: apptToCancel } = await supabase
       .from('appointments')
@@ -858,12 +1012,79 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     }
   }
 
+  // 8.5 Solicitação de agendamento (unidade com agenda externa). Só vale numa
+  // unidade 'external' e com todos os dados que ela coleta; senão o marcador é
+  // descartado. Os logs levam só metadados (campos faltantes, unidade).
+  let externalRequest: { unitId: string; unitName: string; summary: ExternalRequestSummary } | null = null
+  let externalRequestUnitRequired = false
+  if (markers.schedulingRequested && !discountFlagged) {
+    const requestUnitId =
+      (markers.unitId && allUnitById.has(markers.unitId) ? markers.unitId : null) ??
+      conversation.workspace_id ??
+      (units.length === 1 ? units[0].id : null)
+    const requestUnit = requestUnitId ? allUnitById.get(requestUnitId) : undefined
+
+    if (!requestUnit) {
+      console.warn(`[intake] SOLICITACAO_AGENDAMENTO sem unidade conversation=${conversation.id}`)
+      externalRequestUnitRequired = multiUnit
+    } else if (requestUnit.botSettings?.schedulingMode !== 'external') {
+      console.warn(`[intake] SOLICITACAO_AGENDAMENTO ignorado em unidade internal workspace=${requestUnit.id}`)
+    } else {
+      const fields = requestUnit.botSettings.intakeFields
+      const insurers = insurerRows ?? []
+      const particular =
+        botConfig.acceptsPrivate &&
+        (insuranceChoice === 'PARTICULAR' || (insuranceChoice === null && insurers.length === 0))
+      const missing = missingIntakeFields(fields, {
+        fullName: patient?.full_name ?? null,
+        birthDate: patient?.birth_date ?? null,
+        insuranceResolved: !insurersError && (particular || !!selectedInsurer),
+        particular,
+        cardNumber: intake.cardNumber,
+        cpf: intake.cpf,
+        email: intake.email,
+        reason: intake.reason,
+        preference: intake.preference,
+      })
+
+      if (missing.length > 0) {
+        console.warn(
+          `[intake] missing_fields=${missing.join(',')} trigger_reason=${EXTERNAL_REQUEST_REASON} workspace=${requestUnit.id}`
+        )
+        intakeMissing = missing
+      } else {
+        const summary: ExternalRequestSummary = {
+          workspace_id: requestUnit.id,
+          phone: `+${patientPhone.replace(/\D/g, '')}`,
+        }
+        if (fields.includes('full_name')) summary.full_name = patient!.full_name
+        if (fields.includes('birth_date')) summary.birth_date = patient!.birth_date!
+        if (fields.includes('insurance')) {
+          summary.particular = particular
+          if (!particular && selectedInsurer) {
+            summary.insurance = {
+              convenio_id: selectedInsurer.id,
+              name: selectedInsurer.name,
+              card_number: intake.cardNumber,
+            }
+          }
+        }
+        if (fields.includes('cpf')) summary.cpf = intake.cpf!
+        if (fields.includes('email')) summary.email = intake.email!
+        if (fields.includes('reason')) summary.reason = intake.reason!
+        if (fields.includes('preference')) summary.preference = intake.preference!
+        externalRequest = { unitId: requestUnit.id, unitName: requestUnit.name, summary }
+      }
+    }
+  }
+
   const phoneNumberId = botConfig.phoneNumberId
   const metaToken = botConfig.metaToken ? decryptToken(botConfig.metaToken) : null
 
   const lastAssistantContent = [...(history ?? [])].reverse().find((m) => m.role === 'assistant')?.content
 
   // 9. Handoff — a unidade de contato/horário é a da conversa (ou a única).
+  if (externalRequest) resolvedUnitId = externalRequest.unitId
   const handoffUnitId = resolvedUnitId ?? units[0].id
   const handoffUnit = allUnitById.get(handoffUnitId)
   // Desconto não lastreado força o handoff direto — não depende de acumular
@@ -872,7 +1093,8 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   const handoffCheck = discountFlagged
     ? { needed: true, reason: 'injection_suspected' as const }
     : detectHandoffIntent(cleanedMessage, message, injectionSignals.length)
-  const canAttemptHandoff = handoffCheck.needed && phoneNumberId && metaToken
+  // A solicitação de agendamento tem handoff próprio (passo 13), com resumo.
+  const canAttemptHandoff = !externalRequest && handoffCheck.needed && phoneNumberId && metaToken
 
   console.log(
     `[handoff] needed=${handoffCheck.needed} reason=${handoffCheck.reason ?? '-'} ` +
@@ -883,12 +1105,16 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   // 10. Mensagem final para o paciente. Se o agendamento/cancelamento não bateu
   // no banco, a resposta do Claude é descartada e substituída por algo honesto.
   let finalMessage: string
-  if (insuranceNeedsClarification) {
+  if (externalBookingBlocked) {
+    finalMessage = EXTERNAL_BOOKING_BLOCKED_MESSAGE
+  } else if (insuranceNeedsClarification) {
     finalMessage = botConfig.acceptsPrivate
       ? 'Antes de confirmar o agendamento, pode confirmar qual é o seu convênio ou se prefere atendimento particular?'
       : 'Antes de confirmar o agendamento, pode confirmar qual é o seu convênio? A equipe pode ajudar a verificar o atendimento.'
-  } else if (unitRequired) {
+  } else if (unitRequired || externalRequestUnitRequired) {
     finalMessage = UNIT_REQUIRED_MESSAGE
+  } else if (intakeMissing) {
+    finalMessage = intakeMissingMessage(intakeMissing)
   } else if (bookingFailed) {
     finalMessage = BOOKING_FAILED_MESSAGE
   } else if (outsourcedMessage) {
@@ -904,6 +1130,19 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   }
   let realHandoff = false
 
+  // Solicitação válida: mensagem fixa (o Claude não promete horário). Dentro do
+  // horário de handoff a conversa vai para a equipe; fora, fica pendente e a
+  // Clara segue disponível.
+  let externalRequestInHours = false
+  if (externalRequest) {
+    externalRequestInHours = phoneNumberId && metaToken
+      ? await isHandoffAvailableNow(externalRequest.unitId, accountId).catch(() => true)
+      : false
+    finalMessage = externalRequestInHours
+      ? externalRequestInHoursMessage(externalRequest.unitName)
+      : externalRequestOutOfHoursMessage(externalRequest.unitName)
+  }
+
   if (canAttemptHandoff) {
     const handoffAvailable = await isHandoffAvailableNow(handoffUnitId, accountId).catch(() => true)
     console.log(`[handoff] canAttempt=true handoffAvailableNow=${handoffAvailable}`)
@@ -915,7 +1154,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   }
 
   // 12. Disjuntor de loop — resposta idêntica à última do próprio bot.
-  if (finalMessage && !realHandoff && finalMessage === lastAssistantContent) {
+  if (finalMessage && !realHandoff && !externalRequest && finalMessage === lastAssistantContent) {
     console.log('[handoff] disjuntor de loop acionado (resposta repetida) — escalando para humano')
     const escalationMessage = handoffUnit?.handoffNumber
       ? `Desculpa, não estou conseguindo resolver isso sozinha. Vou te passar para a equipe de ${accountName}: ${handoffUnit.handoffNumber}`
@@ -989,6 +1228,29 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
       })
     }
 
+    if (externalRequest && externalRequestInHours) {
+      console.log(`[handoff] solicitação de agendamento — transferência real workspace=${externalRequest.unitId}`)
+      await closeSupersededExternalRequests(conversation.id)
+      await executeHandoff({
+        workspaceId: externalRequest.unitId,
+        accountId,
+        conversationId: conversation.id,
+        patientPhone,
+        handoffNumber: handoffUnit?.handoffNumber ?? null,
+        handoffMessage: botConfig.handoffMessage,
+        phoneNumberId,
+        metaToken,
+        triggerReason: EXTERNAL_REQUEST_REASON,
+        notifyWorkspaceIds: [externalRequest.unitId],
+        summary: externalRequest.summary,
+        push: {
+          title: EXTERNAL_REQUEST_PUSH_TITLE,
+          body: externalRequestPushBody(externalRequest.summary, externalRequest.unitName),
+        },
+      })
+      return
+    }
+
     if (realHandoff) {
       console.log(`[handoff] executeHandoff() — transferência real (número ${handoffUnit?.handoffNumber ? 'configurado' : 'ausente'})`)
       await executeHandoff({
@@ -1016,5 +1278,19 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
         handoffNumber: handoffUnit?.handoffNumber ?? null,
       })
     }
+  }
+
+  // Fora do horário (ou sem WhatsApp configurado): a solicitação não se perde —
+  // fica pendente no painel e a equipe é avisada. O bot não pausa.
+  if (externalRequest && !externalRequestInHours) {
+    await recordPendingExternalRequest({
+      accountId,
+      workspaceId: externalRequest.unitId,
+      unitName: externalRequest.unitName,
+      conversationId: conversation.id,
+      patientPhone,
+      handoffNumber: handoffUnit?.handoffNumber ?? null,
+      summary: externalRequest.summary,
+    })
   }
 }

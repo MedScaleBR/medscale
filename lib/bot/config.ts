@@ -1,6 +1,7 @@
 import { createAdminClient } from '@/lib/supabase/server'
 import { isOutsourcedWorkspace } from '@/lib/outsourced/config'
-import type { NumberSource } from '@/types/database'
+import { getWorkspaceBotSettings, type WorkspaceBotSettings } from '@/lib/bot/unit-settings'
+import type { Database, NumberSource } from '@/types/database'
 
 // Configuração da Clara — uma por account, vale para todas as unidades.
 // Campos que variam por unidade (endereço, horário, estacionamento, contato,
@@ -45,7 +46,13 @@ export interface UnitContext {
   // Agendamento terceirizado: a clínica parceira confirma o horário (ver lib/outsourced).
   isOutsourced: boolean
   externalClinicPhone: string | null
+  // Clara por unidade (lib/bot/unit-settings.ts) — padrões aplicados.
+  botSettings: WorkspaceBotSettings
 }
+
+const UNIT_COLUMNS =
+  'id, name, address, directions_parking, contact_info, handoff_number, display_order, is_outsourced, external_clinic_phone'
+const BOT_SETTINGS_COLUMNS = 'scheduling_mode, intake_fields, bot_instructions'
 
 // Cache simples em memória (por processo) — evita query ao banco em cada mensagem.
 // Em ambiente serverless cada instância tem seu próprio cache, então o TTL curto
@@ -90,14 +97,29 @@ export async function getBotConfig(accountId: string): Promise<BotConfig | null>
 // Unidades ativas da account, com os campos que a Clara usa por unidade.
 export async function getAccountUnits(accountId: string): Promise<UnitContext[]> {
   const supabase = createAdminClient()
-  const { data } = await supabase
-    .from('workspaces')
-    .select(
-      'id, name, address, directions_parking, contact_info, handoff_number, display_order, is_outsourced, external_clinic_phone'
-    )
-    .eq('account_id', accountId)
-    .eq('is_active', true)
-    .order('display_order')
+  type UnitRow = Pick<
+    Database['public']['Tables']['workspaces']['Row'],
+    'id' | 'name' | 'address' | 'directions_parking' | 'contact_info' | 'handoff_number' | 'is_outsourced' | 'external_clinic_phone'
+  > &
+    Partial<Pick<Database['public']['Tables']['workspaces']['Row'], 'scheduling_mode' | 'intake_fields' | 'bot_instructions'>>
+
+  const query = async (columns: string) => {
+    const res = await supabase
+      .from('workspaces')
+      .select(columns)
+      .eq('account_id', accountId)
+      .eq('is_active', true)
+      .order('display_order')
+    return { data: res.data as unknown as UnitRow[] | null, error: res.error }
+  }
+
+  let { data, error } = await query(`${UNIT_COLUMNS}, ${BOT_SETTINGS_COLUMNS}`)
+  if (error) {
+    // Colunas da Clara por unidade ainda não existem (migration pendente):
+    // segue com o padrão em vez de deixar a Clara sem unidades.
+    console.warn('[bot-config] configuração por unidade indisponível — usando o padrão')
+    ;({ data, error } = await query(UNIT_COLUMNS))
+  }
 
   if (!data?.length) return []
 
@@ -134,6 +156,7 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
     handoffNumber: w.handoff_number,
     isOutsourced: isOutsourcedWorkspace(w),
     externalClinicPhone: w.external_clinic_phone,
+    botSettings: getWorkspaceBotSettings(w),
   }))
 }
 
