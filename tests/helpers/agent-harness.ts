@@ -13,6 +13,7 @@ export const UNIT: UnitContext = {
   handoffNumber: '+5511999998888',
   isOutsourced: false,
   externalClinicPhone: null,
+  botSettings: { schedulingMode: 'internal', intakeFields: [], botInstructions: null },
 }
 
 // Estado compartilhado entre o arquivo de teste e as factories de vi.mock.

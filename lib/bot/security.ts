@@ -20,9 +20,10 @@ export interface InjectionSignal {
 // Nomes dos marcadores de controle e dos delimitadores de sistema. Colados
 // aqui de propósito em vez de importados de parse-markers: lá as regexes
 // exigem o payload completo (uuid, data ISO); aqui basta o paciente ESCREVER
-// o nome do marcador para virar sinal.
+// o nome do marcador para virar sinal. CPF, EMAIL e CARTEIRINHA ficam de fora
+// de propósito: um paciente escrever "CPF: 123..." é resposta, não ataque.
 const CONTROL_TOKENS =
-  /(AGENDAMENTO_CONFIRMADO|CANCELAMENTO_CONFIRMADO|NOME_PACIENTE|NASCIMENTO_PACIENTE|PROCEDIMENTO_ID|UNIDADE_ID|CONVENIO_ID|LISTA_ESPERA)\s*:|\[HANDOFF\]|<\/?\s*(mensagem_paciente|transcricao_consulta)\s*>/i
+  /(AGENDAMENTO_CONFIRMADO|CANCELAMENTO_CONFIRMADO|NOME_PACIENTE|NASCIMENTO_PACIENTE|DATA_NASCIMENTO|MOTIVO_CONSULTA|PREFERENCIA_HORARIO|PROCEDIMENTO_ID|UNIDADE_ID|CONVENIO_ID|LISTA_ESPERA)\s*:|\bSOLICITACAO_AGENDAMENTO\b|\[HANDOFF\]|<\/?\s*(mensagem_paciente|transcricao_consulta)\s*>/i
 
 // "ignore/esqueça ... as instruções/regras" — o objeto é obrigatório. É o que
 // separa "ignore as instruções anteriores" (injection) de "posso ignorar o
@@ -96,6 +97,62 @@ export function parseBirthDate(raw: string, now: Date = new Date()): string | nu
   const oldest = `${today.getFullYear() - MAX_PATIENT_AGE_YEARS}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`
   if (iso < oldest) return null
   return iso
+}
+
+/** DATA_NASCIMENTO (AAAA-MM-DD): mesmas regras do parseBirthDate. Devolve AAAA-MM-DD ou null. */
+export function parseIsoBirthDate(raw: string, now: Date = new Date()): string | null {
+  const m = raw.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!m) return null
+  return parseBirthDate(`${m[3]}/${m[2]}/${m[1]}`, now)
+}
+
+/** CPF com dígitos verificadores válidos. Devolve só os 11 dígitos, ou null. */
+export function parseCpf(raw: string): string | null {
+  if (!/^[\d.\-\s]+$/.test(raw.trim())) return null
+  const digits = raw.replace(/\D/g, '')
+  if (digits.length !== 11 || /^(\d)\1{10}$/.test(digits)) return null
+  const n = digits.split('').map(Number)
+  const check = (len: number) => {
+    let sum = 0
+    for (let i = 0; i < len; i++) sum += n[i] * (len + 1 - i)
+    const r = (sum * 10) % 11
+    return r === 10 ? 0 : r
+  }
+  if (check(9) !== n[9] || check(10) !== n[10]) return null
+  return digits
+}
+
+const MAX_EMAIL_LEN = 120
+
+/** E-mail num formato plausível, em minúsculas, ou null. */
+export function parseEmail(raw: string): string | null {
+  const email = raw.trim().toLowerCase()
+  if (!email || email.length > MAX_EMAIL_LEN) return null
+  if (!/^[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$/.test(email)) return null
+  return email
+}
+
+const MAX_CARD_LEN = 40
+
+/** Número da carteirinha: dígitos, letras, ponto, hífen, barra e espaço. */
+export function parseCardNumber(raw: string): string | null {
+  const card = raw.trim().replace(/\s+/g, ' ')
+  if (!card || card.length > MAX_CARD_LEN) return null
+  if (!/^[\p{L}\d][\p{L}\d.\-/ ]*$/u.test(card)) return null
+  if (!/\d/.test(card)) return null
+  return card
+}
+
+/**
+ * Texto curto que vai para o banco e para o painel (motivo, preferência).
+ * Linha única, sem delimitadores nem marcadores, cortado em `max`.
+ */
+export function sanitizeShortText(raw: string, max: number): string | null {
+  const text = raw.trim().replace(/\s+/g, ' ')
+  if (!text) return null
+  if (/[<>]/.test(text)) return null
+  if (CONTROL_TOKENS.test(text)) return null
+  return text.slice(0, max).trim()
 }
 
 export function sanitizePatientName(raw: string): string | null {

@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { UnitDetailForm } from '@/components/locais/UnitDetailForm'
 import { AvailabilitySettings } from '@/components/configuracoes/AvailabilitySettings'
+import { UnitBotSummary } from '@/components/locais/UnitBotSummary'
+import { getWorkspaceBotSettings } from '@/lib/bot/unit-settings'
 
 export default async function UnitPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -19,11 +21,20 @@ export default async function UnitPage({ params }: { params: Promise<{ id: strin
     .eq('account_id', session.accountId)
     .maybeSingle()
   if (!workspace) notFound()
-  const [{ data: rules }, { data: exceptions }] = await Promise.all([
+  const canManage = session.role === 'owner' || session.role === 'admin'
+  const [{ data: rules }, { data: exceptions }, botSettingsResult] = await Promise.all([
     supabase.from('availability_rules').select('*').eq('workspace_id', id).order('day_of_week').order('start_time'),
     supabase.from('availability_exceptions').select('*').eq('workspace_id', id).order('date'),
+    // Só owner/admin veem o resumo. À parte para a página abrir mesmo antes da
+    // migration da Clara por unidade.
+    canManage
+      ? supabase.from('workspaces').select('scheduling_mode, intake_fields').eq('id', id).maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
   ])
-  const canManage = session.role === 'owner' || session.role === 'admin'
+  const botSettings =
+    canManage && !botSettingsResult.error && botSettingsResult.data
+      ? getWorkspaceBotSettings(botSettingsResult.data)
+      : null
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -39,6 +50,7 @@ export default async function UnitPage({ params }: { params: Promise<{ id: strin
         workspace={workspace}
         canManage={canManage}
       />
+      {botSettings && <UnitBotSummary settings={botSettings} />}
       <section className="rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
         <h2 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Expediente presencial</h2>
         <AvailabilitySettings

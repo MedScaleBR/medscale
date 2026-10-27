@@ -28,6 +28,7 @@ import type { MessageRole, ConversationStatus } from '@/types/database'
 import { InitialsAvatar } from './InitialsAvatar'
 import { ConversationContextBar } from './ConversationContextBar'
 import { ScheduleDialog } from './ScheduleDialog'
+import { ExternalRequestCard, type ExternalRequestView } from './ExternalRequestCard'
 
 export interface DetailMessage {
   id: string
@@ -56,6 +57,7 @@ interface ConversationDetailProps {
   onNotesSaved: (notes: string) => void
   onScheduled: (scheduledAt: string) => void
   onBack?: () => void
+  externalRequest?: ExternalRequestView | null
 }
 
 // Fundo discreto: os anéis são marca, não decoração da conversa — fortes
@@ -124,6 +126,7 @@ export function ConversationDetail({
   onNotesSaved,
   onScheduled,
   onBack,
+  externalRequest = null,
 }: ConversationDetailProps) {
   const [draft, setDraft] = useState('')
   const [sending, setSending] = useState(false)
@@ -276,6 +279,8 @@ export function ConversationDetail({
         notes={patientNotes}
         onNotesSaved={onNotesSaved}
       />
+
+      {externalRequest && <ExternalRequestCard key={externalRequest.id} request={externalRequest} />}
 
       {botPaused && (
         <div className="flex items-center gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2 md:px-5">

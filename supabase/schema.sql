@@ -573,6 +573,9 @@ create table public.patients (
   phone       text not null,               -- formato E.164: +5511999999999
   email       text,
   birth_date  date,
+  -- Dados que a Clara coleta quando a unidade pede (workspaces.intake_fields).
+  insurance_card_number text,
+  cpf         text check (cpf is null or cpf ~ '^\d{11}$'),   -- só dígitos
   notes       text,
   tags        text[] default '{}',
   created_by  uuid references auth.users(id),
@@ -691,6 +694,8 @@ create table public.appointments (
   -- parceira e quando a equipe foi avisada do atraso.
   external_requested_at timestamptz,
   external_escalated_at timestamptz,
+  -- Motivo da consulta coletado pela Clara (intake_fields 'reason').
+  reason          text,
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
@@ -1040,8 +1045,14 @@ create table public.handoff_logs (
   trigger_reason  text,        -- 'user_request' | 'bot_uncertain' | 'max_turns' | 'out_of_hours' | 'injection_suspected'
                                -- | 'clinica_externa_ambiguo' | 'clinica_externa_negacao' | 'clinica_externa_timeout'
                                -- | 'cancelamento_terceirizado' | 'clinica_externa_falha_envio' | 'clinica_externa_config'
+                               -- | 'external_scheduling'
   handoff_to      text,
   flagged_content text,        -- resposta descartada por suspeita de injection; só aqui (RLS), nunca em log externo
+  -- Solicitação de agendamento de unidade com agenda externa ('external_scheduling'):
+  -- dados coletados pela Clara. Pendente enquanto resolved_at for nulo.
+  summary         jsonb,
+  resolved_at     timestamptz,
+  resolved_by     uuid references public.profiles(id) on delete set null,
   sent_at         timestamptz not null default now()
 );
 
@@ -1315,6 +1326,47 @@ create trigger trg_enforce_ws_account before insert or update on public.revenue_
   for each row execute procedure public.enforce_workspace_account();
 create trigger trg_enforce_ws_account before insert or update on public.revenue_settings
   for each row execute procedure public.enforce_workspace_account();
+
+-- ============================================================
+-- 10.1b Clara por unidade: configuração editável só pela equipe MedScale
+-- ============================================================
+-- Colunas aqui (e não no create table) porque referenciam profiles, criada
+-- depois de workspaces.
+alter table public.workspaces
+  add column scheduling_mode text not null default 'internal'
+    check (scheduling_mode in ('internal', 'external')),
+  add column intake_fields text[] not null default '{}'
+    check (intake_fields <@ array['full_name','birth_date','insurance','cpf','email','reason','preference']::text[]),
+  add column bot_instructions text
+    check (bot_instructions is null or char_length(bot_instructions) <= 1000),
+  add column bot_settings_updated_by uuid references public.profiles(id) on delete set null,
+  add column bot_settings_updated_at timestamptz;
+
+-- owner/admin podem dar UPDATE em workspaces, então a RLS não protege estas
+-- colunas. Bloqueia JWT de usuário que não seja staff MedScale; service role e
+-- SQL Editor passam.
+create or replace function public.protect_workspace_bot_settings()
+returns trigger language plpgsql as $$
+begin
+  if (
+       new.scheduling_mode is distinct from old.scheduling_mode
+    or new.intake_fields is distinct from old.intake_fields
+    or new.bot_instructions is distinct from old.bot_instructions
+    or new.bot_settings_updated_by is distinct from old.bot_settings_updated_by
+    or new.bot_settings_updated_at is distinct from old.bot_settings_updated_at
+  )
+  and coalesce(auth.role(), '') in ('authenticated', 'anon')
+  and not public.is_medscale_admin() then
+    raise exception 'Somente a equipe MedScale pode alterar a configuração da Clara.'
+      using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+
+create trigger workspaces_protect_bot_settings
+  before update on public.workspaces
+  for each row execute function public.protect_workspace_bot_settings();
 
 -- ============================================================
 -- 10.2 TRIGGERS: integridade da árvore de finance_categories (Bloco A)

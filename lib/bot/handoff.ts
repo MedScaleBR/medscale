@@ -3,7 +3,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { sendWhatsAppMessage } from '@/lib/whatsapp/send'
 import { trackHandoffTriggered } from '@/lib/analytics/posthog-server'
 import { broadcastToWorkspace } from '@/lib/realtime/broadcast'
-import type { HandoffTriggerReason } from '@/types/database'
+import type { ExternalRequestSummary, HandoffTriggerReason } from '@/types/database'
 
 const TZ = 'America/Sao_Paulo'
 
@@ -28,6 +28,10 @@ interface HandoffParams {
   // por RLS — nunca em console.*, Sentry ou PostHog, porque o scrub do Sentry
   // só redige telefone e deixaria o resto passar.
   flaggedContent?: string | null
+  // Solicitação de agendamento (unidade com agenda externa): resumo dos dados
+  // coletados, gravado em handoff_logs.summary (RLS), e push com esse resumo.
+  summary?: ExternalRequestSummary | null
+  push?: { title: string; body: string }
 }
 
 export async function executeHandoff(params: HandoffParams) {
@@ -66,6 +70,7 @@ export async function executeHandoff(params: HandoffParams) {
     trigger_reason: triggerReason,
     handoff_to: handoffNumber ?? null,
     flagged_content: params.flaggedContent ?? null,
+    ...(params.summary ? { summary: params.summary } : {}),
   })
 
   // 5. Notificar a equipe por Web Push (fire-and-forget — nunca derruba o
@@ -83,8 +88,8 @@ export async function executeHandoff(params: HandoffParams) {
     await Promise.all(
       notifyIds.flatMap((wid) => [
         sendHandoffPush(wid, {
-          title: '🔔 Atendimento solicitado',
-          body: `${patientName} pediu atendimento humano`,
+          title: params.push?.title ?? '🔔 Atendimento solicitado',
+          body: params.push?.body ?? `${patientName} pediu atendimento humano`,
           url: `/bot?c=${conversationId}`,
         }),
         // Par in-app da push: quem está com o sistema aberto vê um toast.

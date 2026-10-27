@@ -61,6 +61,23 @@ export type HandoffTriggerReason =
   | 'cancelamento_terceirizado'
   | 'clinica_externa_falha_envio'
   | 'clinica_externa_config'
+  // Unidade com agenda externa: a Clara coletou os dados e a equipe confirma.
+  | 'external_scheduling'
+export type SchedulingMode = 'internal' | 'external'
+export type IntakeField = 'full_name' | 'birth_date' | 'insurance' | 'cpf' | 'email' | 'reason' | 'preference'
+// handoff_logs.summary — só as chaves dos campos que a unidade coleta.
+export interface ExternalRequestSummary {
+  workspace_id: string
+  phone: string
+  full_name?: string
+  birth_date?: string // AAAA-MM-DD
+  insurance?: { convenio_id: string; name: string; card_number: string | null }
+  particular?: boolean
+  cpf?: string
+  email?: string
+  reason?: string
+  preference?: string
+}
 export type ClinicConfirmationDirection = 'outbound' | 'inbound'
 export type ClinicConfirmationClassification = 'confirmacao' | 'negacao' | 'ambiguo'
 export type TranscriptionStatus =
@@ -146,6 +163,13 @@ export interface Database {
           // só dígitos com DDI (5571999990000).
           is_outsourced: boolean
           external_clinic_phone: string | null
+          // Clara por unidade (ver lib/bot/unit-settings.ts). Editável só pela
+          // equipe MedScale — trigger protect_workspace_bot_settings.
+          scheduling_mode: SchedulingMode
+          intake_fields: IntakeField[]
+          bot_instructions: string | null
+          bot_settings_updated_by: string | null
+          bot_settings_updated_at: string | null
           cnes: string | null
           cnpj: string | null
           legal_name: string | null
@@ -367,6 +391,8 @@ export interface Database {
           phone: string
           email: string | null
           birth_date: string | null
+          insurance_card_number: string | null
+          cpf: string | null // só dígitos
           notes: string | null
           tags: string[]
           created_by: string | null
@@ -592,6 +618,7 @@ export interface Database {
           reminder_sent: boolean
           external_requested_at: string | null
           external_escalated_at: string | null
+          reason: string | null
           created_at: string
           updated_at: string
         }
@@ -1202,6 +1229,10 @@ export interface Database {
           // Conteúdo descartado por suspeita de injection. Só existe aqui (RLS),
           // nunca em log externo. Coluna criada pela migration do hardening.
           flagged_content: string | null
+          // Solicitação de agendamento ('external_scheduling'); pendente com resolved_at nulo.
+          summary: ExternalRequestSummary | null
+          resolved_at: string | null
+          resolved_by: string | null
           sent_at: string
         }
         Insert: Partial<Database['public']['Tables']['handoff_logs']['Row']> & { workspace_id: string }
