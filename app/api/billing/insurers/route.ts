@@ -3,6 +3,12 @@ import { createClient } from '@/lib/supabase/server'
 import { requireInsurerAccess } from '@/lib/billing/access'
 import { parseInsurerInput } from '@/lib/billing/validation'
 import type { Database } from '@/types/database'
+import {
+  INSURER_UNITS_SELECT,
+  parseWorkspaceIds,
+  syncInsurerWorkspaces,
+  withWorkspaceIds,
+} from '@/lib/billing/insurer-units'
 
 type InsurerInsert = Database['public']['Tables']['health_insurers']['Insert']
 
@@ -20,12 +26,18 @@ export async function GET(req: NextRequest) {
 
   const includeInactive = req.nextUrl.searchParams.get('all') === '1' && session.role !== 'member'
   const supabase = await createClient()
-  let query = supabase.from('health_insurers').select(COLUMNS).eq('account_id', session.accountId).order('name')
-  if (!includeInactive) query = query.eq('is_active', true)
-
-  const { data, error } = await query
+  // Com as unidades que aceitam cada convênio (a Agenda filtra por unidade).
+  // Sem a tabela de vínculo (migration pendente), devolve workspace_ids null.
+  const list = (columns: string) => {
+    let query = supabase.from('health_insurers').select(columns).eq('account_id', session.accountId).order('name')
+    if (!includeInactive) query = query.eq('is_active', true)
+    return query
+  }
+  let { data, error } = await list(`${COLUMNS}, ${INSURER_UNITS_SELECT}`)
+  if (error) ({ data, error } = await list(COLUMNS))
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data ?? [])
+  const rows = (data ?? []) as unknown as Array<Record<string, unknown> & { health_insurer_workspaces?: { workspace_id: string }[] | null }>
+  return NextResponse.json(rows.map(withWorkspaceIds))
 }
 
 export async function POST(req: NextRequest) {
@@ -33,8 +45,11 @@ export async function POST(req: NextRequest) {
   if ('error' in result) return result.error
   const { session, billingEnabled } = result
 
-  const parsed = parseInsurerInput(await req.json(), false, { tiss: billingEnabled })
+  const body = await req.json()
+  const parsed = parseInsurerInput(body, false, { tiss: billingEnabled })
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
+  const units = parseWorkspaceIds(body)
+  if (!units.ok) return NextResponse.json({ error: units.error }, { status: 400 })
 
   const supabase = await createClient()
   const { data, error } = await supabase
@@ -49,7 +64,10 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
-  return NextResponse.json(data, { status: 201 })
+  const insurer = data as unknown as { id: string }
+  const linked = await syncInsurerWorkspaces(supabase, session.accountId, insurer.id, units.value ?? [])
+  if (!linked.ok) return NextResponse.json({ error: linked.error }, { status: linked.status })
+  return NextResponse.json({ ...insurer, workspace_ids: linked.value }, { status: 201 })
 }
 
 export async function PATCH(req: NextRequest) {
@@ -61,6 +79,8 @@ export async function PATCH(req: NextRequest) {
   if (typeof body.id !== 'string' || !body.id) return NextResponse.json({ error: 'id é obrigatório' }, { status: 400 })
   const parsed = parseInsurerInput(body, true, { tiss: billingEnabled })
   if (!parsed.ok) return NextResponse.json({ error: parsed.error }, { status: 400 })
+  const units = parseWorkspaceIds(body)
+  if (!units.ok) return NextResponse.json({ error: units.error }, { status: 400 })
 
   const supabase = await createClient()
   const { data, error } = await supabase
@@ -78,5 +98,9 @@ export async function PATCH(req: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 })
   }
   if (!data) return NextResponse.json({ error: 'Operadora não encontrada' }, { status: 404 })
-  return NextResponse.json(data)
+  if (units.value === null) return NextResponse.json(data)
+  const insurer = data as unknown as { id: string }
+  const linked = await syncInsurerWorkspaces(supabase, session.accountId, insurer.id, units.value)
+  if (!linked.ok) return NextResponse.json({ error: linked.error }, { status: linked.status })
+  return NextResponse.json({ ...insurer, workspace_ids: linked.value })
 }

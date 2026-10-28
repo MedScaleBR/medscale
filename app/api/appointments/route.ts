@@ -8,6 +8,7 @@ import { requireWorkspaceSession, requireModule } from '@/lib/session/api'
 import { applyAppointmentRevenue } from '@/lib/revenue/cycle'
 import { resolveAppointmentBilling } from '@/lib/billing/appointments'
 import { ensureGuideSafely } from '@/lib/billing/guides'
+import { unitPaymentProblem } from '@/lib/billing/insurer-units'
 import { PENDING_EXTERNAL_STATUS } from '@/types/database'
 import { PENDING_STATUS_FORBIDDEN_ERROR } from '@/lib/outsourced/config'
 
@@ -82,6 +83,15 @@ export async function POST(req: NextRequest) {
     : typeof body.health_plan === 'string' && body.health_plan.trim()
       ? body.health_plan.trim()
       : null
+
+  // Particular e convênio só nas unidades que aceitam (tela de Convênios).
+  const paymentProblem = await unitPaymentProblem(supabase, {
+    accountId: session.accountId,
+    workspaceId: targetWorkspaceId,
+    insurerId: billing.fields?.insurer_id ?? null,
+    healthPlan,
+  })
+  if (paymentProblem) return NextResponse.json({ error: paymentProblem }, { status: 400 })
 
   // Ciclo de receita: se veio um procedimento do catálogo, tira o snapshot de
   // nome e preço agora (imutável). Um body.price explícito tem prioridade.

@@ -17,6 +17,20 @@ function scheduleLabel(i: InsurerRow): string {
   return `${i.batch_weekdays.map((d) => WEEKDAYS[d]).join(', ')} às ${String(i.batch_hour).padStart(2, '0')}h`
 }
 
+// Em quais unidades o convênio vale. null = vínculo ainda não migrado (vale em todas).
+function UnitsLabel({ insurer, workspaces }: { insurer: InsurerRow; workspaces: ProviderWorkspace[] }) {
+  if (insurer.workspace_ids === null) return null
+  const names = workspaces.filter((w) => insurer.workspace_ids!.includes(w.id)).map((w) => w.name)
+  if (names.length === 0) {
+    return <Badge className="border-none bg-amber-50 text-amber-700">Nenhuma unidade</Badge>
+  }
+  return (
+    <span className="truncate text-xs text-gray-400">
+      {names.length === workspaces.length ? 'Todas as unidades' : names.join(', ')}
+    </span>
+  )
+}
+
 export function InsurersSettings({
   initialInsurers,
   workspaces,
@@ -27,6 +41,7 @@ export function InsurersSettings({
   billingEnabled: boolean
 }) {
   const [insurers, setInsurers] = useState(initialInsurers)
+  const multiUnit = workspaces.length > 1
   const [expanded, setExpanded] = useState<string | null>(initialInsurers[0]?.id ?? null)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<InsurerRow | null>(null)
@@ -88,6 +103,7 @@ export function InsurersSettings({
                       {!i.is_active && (
                         <Badge className="border-none bg-[var(--navy-06)] text-gray-500">Inativa</Badge>
                       )}
+                      {multiUnit && <UnitsLabel insurer={i} workspaces={workspaces} />}
                     </button>
                     {billingEnabled && i.ans_registry && i.provider_code && (
                       <span className="hidden text-xs text-gray-400 sm:inline">
@@ -139,6 +155,7 @@ export function InsurersSettings({
         insurer={editing}
         onSaved={onSaved}
         billingEnabled={billingEnabled}
+        units={workspaces}
       />
     </div>
   )

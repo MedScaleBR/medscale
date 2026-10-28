@@ -22,6 +22,13 @@ export interface InsurerRow {
   batch_hour: number
   max_guides_per_batch: number
   is_active: boolean
+  // Unidades que aceitam o convênio. null = vínculo ainda não migrado (vale em todas).
+  workspace_ids: string[] | null
+}
+
+export interface InsurerUnit {
+  id: string
+  name: string
 }
 
 const WEEKDAYS = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb']
@@ -44,12 +51,14 @@ export function InsurerForm({
   insurer,
   onSaved,
   billingEnabled,
+  units,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   insurer: InsurerRow | null
   onSaved: (insurer: InsurerRow) => void
   billingEnabled: boolean
+  units: InsurerUnit[]
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -59,6 +68,7 @@ export function InsurerForm({
             onSaved={onSaved}
             onOpenChange={onOpenChange}
             billingEnabled={billingEnabled}
+            units={units}
           />}
       </DialogContent>
     </Dialog>
@@ -70,15 +80,19 @@ function InsurerFormBody({
   onSaved,
   onOpenChange,
   billingEnabled,
+  units,
 }: {
   insurer: InsurerRow | null
   onSaved: (insurer: InsurerRow) => void
   onOpenChange: (open: boolean) => void
   billingEnabled: boolean
+  units: InsurerUnit[]
 }) {
   const [form, setForm] = useState(
     insurer ? { ...insurer, ans_registry: insurer.ans_registry ?? '', provider_code: insurer.provider_code ?? '' } : EMPTY,
   )
+  // Convênio novo começa aceito em todas as unidades; a clínica desmarca as que não aceitam.
+  const [unitIds, setUnitIds] = useState<string[]>(() => insurer?.workspace_ids ?? units.map((u) => u.id))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -101,6 +115,8 @@ function InsurerFormBody({
           ...(insurer ? { id: insurer.id } : {}),
           name: form.name,
           is_active: form.is_active,
+          // Com uma unidade só não há escolha: o convênio vale nela.
+          workspace_ids: units.length === 1 ? [units[0].id] : unitIds,
           ...(billingEnabled
             ? {
                 ans_registry: form.ans_registry,
@@ -119,7 +135,7 @@ function InsurerFormBody({
         setError(data.error ?? 'Erro ao salvar.')
         return
       }
-      onSaved(data as InsurerRow)
+      onSaved({ workspace_ids: null, ...data } as InsurerRow)
       onOpenChange(false)
     } finally {
       setSaving(false)
@@ -238,6 +254,29 @@ function InsurerFormBody({
           </div>
         </div>
           </>
+        )}
+        {units.length > 1 && (
+          <div>
+            <Label>Unidades que aceitam</Label>
+            <div className="mt-1 space-y-1.5">
+              {units.map((u) => (
+                <label key={u.id} className="flex items-center gap-2 text-sm text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={unitIds.includes(u.id)}
+                    onChange={(e) =>
+                      setUnitIds((ids) => (e.target.checked ? [...ids, u.id] : ids.filter((id) => id !== u.id)))
+                    }
+                    className="accent-[var(--cyan-dark)]"
+                  />
+                  {u.name}
+                </label>
+              ))}
+            </div>
+            {unitIds.length === 0 && (
+              <p className="mt-1 text-xs text-amber-700">Sem unidade marcada, a Clara e a Agenda não oferecem este convênio.</p>
+            )}
+          </div>
         )}
         <label className="flex items-center justify-between pt-1">
           <span className="text-sm text-gray-700">Ativa</span>

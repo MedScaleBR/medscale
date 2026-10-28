@@ -15,6 +15,10 @@ type Appointment = Database['public']['Tables']['appointments']['Row']
 export interface WorkspaceOption {
   id: string
   name: string
+  // O que a unidade aceita (tela de Convênios). Ausente = sem restrição.
+  accepts_private?: boolean
+  insurer_ids?: string[]
+  health_plans?: string[]
 }
 
 function toIso(datetimeLocal: string) {

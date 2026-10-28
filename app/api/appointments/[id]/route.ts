@@ -13,6 +13,7 @@ import {
   isOutsourcedWorkspace,
 } from '@/lib/outsourced/config'
 import { confirmOutsourcedAppointment } from '@/lib/outsourced/confirm'
+import { unitPaymentProblem } from '@/lib/billing/insurer-units'
 
 // Unidade terceirizada: o evento no Google é só um espaço reservado, então
 // cancelar apaga o evento (cancelEvent o deixaria riscado na agenda do médico).
@@ -124,6 +125,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         ? body.health_plan.trim()
         : null
   if (body.health_plan !== undefined && !billing.fields) update.health_plan = healthPlan
+
+  // Particular e convênio só nas unidades que aceitam — conferido só quando a
+  // forma de atendimento muda, para não travar a edição de consultas antigas.
+  const insurerId = billing.fields ? billing.fields.insurer_id : (current.insurer_id ?? null)
+  if (insurerId !== (current.insurer_id ?? null) || healthPlan !== (current.health_plan ?? null)) {
+    const paymentProblem = await unitPaymentProblem(supabase, {
+      accountId: session.accountId,
+      workspaceId: current.workspace_id,
+      insurerId,
+      healthPlan,
+    })
+    if (paymentProblem) return NextResponse.json({ error: paymentProblem }, { status: 400 })
+  }
   if (healthPlan) {
     update.price = null
     update.procedure_id = null

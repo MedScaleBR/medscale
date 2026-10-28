@@ -38,6 +38,7 @@ export function buildAgentPrompt(ctx: AgentContext): string {
       contactInfo: u.contactInfo,
       isOutsourced: u.isOutsourced,
       botSettings: u.botSettings,
+      coverage: ctx.coverageByUnit[u.id],
     })),
     freeSlotsByUnit: ctx.freeSlotsByUnit,
     procedureCatalogByUnit: ctx.procedureCatalogByUnit,

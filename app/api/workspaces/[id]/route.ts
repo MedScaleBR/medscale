@@ -47,6 +47,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (field in body) update[field] = body[field]
   }
 
+  // Atende particular nesta unidade (tela de Convênios) — Clara e Agenda respeitam.
+  if ('accepts_private' in body) {
+    if (typeof body.accepts_private !== 'boolean') {
+      return NextResponse.json({ error: 'accepts_private deve ser verdadeiro ou falso.' }, { status: 400 })
+    }
+    update.accepts_private = body.accepts_private
+  }
+
   // Faturamento TISS: identificação do prestador (CNES, CNPJ, razão social).
   const provider = parseProviderFields(body)
   if (!provider.ok) return NextResponse.json({ error: provider.error }, { status: 400 })
