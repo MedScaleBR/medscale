@@ -18,6 +18,7 @@ drop trigger if exists on_auth_user_created on auth.users;
 -- `cascade` aqui também remove automaticamente todas as policies, índices e
 -- triggers de cada tabela — não é preciso dropar isso separadamente.
 drop table if exists
+  public.bot_presets,
   public.cost_events,
   public.feedback,
   public.tiss_guides,
@@ -314,6 +315,7 @@ create table public.cost_events (
   workspace_id  uuid references public.workspaces(id) on delete set null,
   provider      text not null check (provider in (
                   'claude_agendamento',
+                  'claude_simulador',
                   'claude_financeiro',
                   'claude_soap',
                   'whisper',
@@ -1330,6 +1332,33 @@ create trigger trg_enforce_ws_account before insert or update on public.revenue_
 -- ============================================================
 -- 10.1b Clara por unidade: configuração editável só pela equipe MedScale
 -- ============================================================
+-- Modelos de configuração da Clara (globais da MedScale, /admin/clara/modelos).
+-- Aplicar um modelo copia os valores para a unidade; bot_preset_id é só referência.
+create table public.bot_presets (
+  id               uuid primary key default gen_random_uuid(),
+  name             text not null unique,
+  description      text,
+  scheduling_mode  text not null default 'internal' check (scheduling_mode in ('internal', 'external')),
+  intake_fields    text[] not null default '{}'
+    check (intake_fields <@ array['full_name','birth_date','insurance','cpf','email','reason','preference']),
+  bot_instructions text check (bot_instructions is null or char_length(bot_instructions) <= 1000),
+  created_by       uuid references public.profiles(id) on delete set null,
+  created_at       timestamptz not null default now(),
+  updated_at       timestamptz not null default now()
+);
+
+create trigger trg_bot_presets_updated_at
+  before update on public.bot_presets
+  for each row execute procedure public.handle_updated_at();
+
+insert into public.bot_presets (name, description, scheduling_mode, intake_fields) values
+  ('Clínica com agenda própria',
+   'A Clara oferece horários e agenda direto pela agenda da MedScale',
+   'internal', '{}'),
+  ('Médico em clínicas terceiras',
+   'O médico atende pela agenda de clínicas parceiras; a Clara coleta os dados e a equipe confirma o horário com a clínica',
+   'external', '{full_name,birth_date,insurance,preference}');
+
 -- Colunas aqui (e não no create table) porque referenciam profiles, criada
 -- depois de workspaces.
 alter table public.workspaces
@@ -1340,7 +1369,8 @@ alter table public.workspaces
   add column bot_instructions text
     check (bot_instructions is null or char_length(bot_instructions) <= 1000),
   add column bot_settings_updated_by uuid references public.profiles(id) on delete set null,
-  add column bot_settings_updated_at timestamptz;
+  add column bot_settings_updated_at timestamptz,
+  add column bot_preset_id uuid references public.bot_presets(id) on delete set null;
 
 -- owner/admin podem dar UPDATE em workspaces, então a RLS não protege estas
 -- colunas. Bloqueia JWT de usuário que não seja staff MedScale; service role e
@@ -1352,6 +1382,7 @@ begin
        new.scheduling_mode is distinct from old.scheduling_mode
     or new.intake_fields is distinct from old.intake_fields
     or new.bot_instructions is distinct from old.bot_instructions
+    or new.bot_preset_id is distinct from old.bot_preset_id
     or new.bot_settings_updated_by is distinct from old.bot_settings_updated_by
     or new.bot_settings_updated_at is distinct from old.bot_settings_updated_at
   )
@@ -1898,6 +1929,7 @@ $$;
 -- ============================================================
 alter table public.accounts               enable row level security;
 alter table public.workspaces             enable row level security;
+alter table public.bot_presets            enable row level security;
 alter table public.memberships            enable row level security;
 alter table public.invites                enable row level security;
 alter table public.medscale_admins        enable row level security;
@@ -2160,6 +2192,10 @@ create policy "finance_sessions: service role only" on public.finance_sessions
 -- bypassa RLS; por isso não existe policy de insert para `authenticated`.
 create policy "cost_events: medscale admin read" on public.cost_events
   for select using (public.is_medscale_admin());
+
+-- bot_presets: modelos da Clara, só a equipe MedScale.
+create policy "medscale admins manage bot presets" on public.bot_presets
+  for all using (public.is_medscale_admin()) with check (public.is_medscale_admin());
 
 -- rate_limit_log: controle de rate limiting do webhook do WhatsApp — só o
 -- webhook (service role, que ignora RLS) acessa; deny-all para todo role

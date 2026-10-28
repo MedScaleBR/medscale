@@ -46,6 +46,7 @@ describe('grupos de provedor', () => {
     expect(
       groupByProviderGroup({
         claude_agendamento: 1,
+        claude_simulador: 0,
         claude_financeiro: 2,
         claude_soap: 3,
         whisper: 4,

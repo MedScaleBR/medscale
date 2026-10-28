@@ -1,7 +1,8 @@
 'use client'
 
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { cn } from '@/lib/utils'
@@ -19,6 +20,7 @@ import {
   type IntakeField,
   type SchedulingMode,
 } from '@/lib/bot/unit-settings'
+import { presetBadge, presetSettings, type BotPreset } from '@/lib/bot/presets'
 
 export type BotSettingsValue = BotSettingsUpdate
 
@@ -26,21 +28,101 @@ interface WorkspaceBotSettingsFormProps {
   /** Usado nos ids dos campos — várias unidades na mesma tela. */
   idPrefix: string
   value: BotSettingsValue
-  /** Recebe a configuração nova; devolve uma mensagem de erro, ou null se salvou. */
-  onSubmit: (next: BotSettingsValue) => Promise<string | null>
+  /**
+   * Recebe a configuração nova e o modelo de onde ela veio (null = nenhum;
+   * undefined = não mudou); devolve uma mensagem de erro, ou null se salvou.
+   */
+  onSubmit: (next: BotSettingsValue, presetId: string | null | undefined) => Promise<string | null>
   /** Ex.: "Última alteração por ..." abaixo do botão. */
   footer?: ReactNode
+  /** Texto do botão de salvar. */
+  submitLabel?: string
+  /** Modelos disponíveis para "Aplicar modelo" e para o "Baseado em". */
+  presets?: BotPreset[]
+  /** Modelo de onde a configuração salva veio (workspaces.bot_preset_id). */
+  presetId?: string | null
+  /** Cria um modelo a partir do formulário; devolve erro, ou null se criou. */
+  onSaveAsPreset?: (name: string, value: BotSettingsValue) => Promise<string | null>
+  /** Avisa a cada mudança (o simulador usa como rascunho, sem salvar). */
+  onChange?: (next: BotSettingsValue) => void
 }
 
 // Formulário da Clara por unidade. Não sabe de rota nem de página: recebe a
 // configuração atual e devolve a nova por callback (reaproveitado no simulador).
-export function WorkspaceBotSettingsForm({ idPrefix, value, onSubmit, footer }: WorkspaceBotSettingsFormProps) {
+export function WorkspaceBotSettingsForm({
+  idPrefix,
+  value,
+  onSubmit,
+  footer,
+  submitLabel = 'Salvar',
+  presets = [],
+  presetId = null,
+  onSaveAsPreset,
+  onChange,
+}: WorkspaceBotSettingsFormProps) {
   const [mode, setMode] = useState<SchedulingMode>(value.scheduling_mode)
   const [fields, setFields] = useState<IntakeField[]>(value.intake_fields)
   const [instructions, setInstructions] = useState(value.bot_instructions ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [saved, setSaved] = useState(false)
+  // Modelo aplicado neste formulário (ainda não salvo); undefined = nenhum.
+  const [appliedPresetId, setAppliedPresetId] = useState<string | undefined>(undefined)
+  const [presetName, setPresetName] = useState('')
+  const [savingPreset, setSavingPreset] = useState<'idle' | 'open' | 'saving'>('idle')
+  const [presetMessage, setPresetMessage] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const current = (): BotSettingsValue => ({
+    scheduling_mode: mode,
+    intake_fields: normalizeIntakeFields(mode, fields),
+    bot_instructions: instructions.trim() || null,
+  })
+
+  // onChange fica numa ref para não reexecutar o efeito quando o pai recria a função.
+  const onChangeRef = useRef(onChange)
+  useEffect(() => {
+    onChangeRef.current = onChange
+  })
+  useEffect(() => {
+    onChangeRef.current?.({
+      scheduling_mode: mode,
+      intake_fields: normalizeIntakeFields(mode, fields),
+      bot_instructions: instructions.trim() || null,
+    })
+  }, [mode, fields, instructions])
+
+  const applyPreset = (id: string) => {
+    const preset = presets.find((p) => p.id === id)
+    if (!preset) return
+    const next = presetSettings(preset)
+    setMode(next.schedulingMode)
+    setFields(next.intakeFields)
+    setInstructions(next.botInstructions ?? '')
+    setAppliedPresetId(preset.id)
+    setSaved(false)
+  }
+
+  const effectivePresetId = appliedPresetId ?? presetId
+  const badge = presetBadge(
+    effectivePresetId,
+    { schedulingMode: mode, intakeFields: normalizeIntakeFields(mode, fields), botInstructions: instructions.trim() || null },
+    presets
+  )
+
+  const handleSaveAsPreset = async () => {
+    if (!onSaveAsPreset || !presetName.trim()) return
+    setSavingPreset('saving')
+    setPresetMessage(null)
+    const problem = await onSaveAsPreset(presetName.trim(), current())
+    if (problem) {
+      setSavingPreset('open')
+      setPresetMessage({ ok: false, text: problem })
+    } else {
+      setSavingPreset('idle')
+      setPresetName('')
+      setPresetMessage({ ok: true, text: 'Modelo criado.' })
+    }
+  }
 
   const changeMode = (next: SchedulingMode) => {
     if (next === mode) return
@@ -63,11 +145,7 @@ export function WorkspaceBotSettingsForm({ idPrefix, value, onSubmit, footer }: 
     setSaving(true)
     setError(null)
     setSaved(false)
-    const problem = await onSubmit({
-      scheduling_mode: mode,
-      intake_fields: normalizeIntakeFields(mode, fields),
-      bot_instructions: trimmed || null,
-    })
+    const problem = await onSubmit(current(), appliedPresetId)
     setSaving(false)
     if (problem) setError(problem)
     else setSaved(true)
@@ -75,6 +153,31 @@ export function WorkspaceBotSettingsForm({ idPrefix, value, onSubmit, footer }: 
 
   return (
     <div className="space-y-5">
+      {(presets.length > 0 || badge) && (
+        <div className="flex flex-wrap items-center gap-3">
+          {presets.length > 0 && (
+            <label className="flex items-center gap-2 text-sm text-gray-700">
+              <span>Aplicar modelo</span>
+              <select
+                aria-label="Aplicar modelo"
+                value=""
+                onChange={(e) => applyPreset(e.target.value)}
+                className="h-8 rounded-md border border-[var(--navy-06)] bg-white px-2 text-sm"
+              >
+                <option value="">Escolher…</option>
+                {presets.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )}
+          {badge && <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-600">{badge}</span>}
+          {appliedPresetId && <span className="text-xs text-gray-400">Clique em salvar para gravar.</span>}
+        </div>
+      )}
+
       <fieldset className="space-y-2">
         <legend className="mb-2 text-sm font-medium text-gray-900">Modo de agenda</legend>
         {SCHEDULING_MODES.map((m) => (
@@ -163,10 +266,44 @@ export function WorkspaceBotSettingsForm({ idPrefix, value, onSubmit, footer }: 
             disabled={saving || !!instructionsProblem}
             className="bg-[var(--cyan)] font-medium text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
           >
-            {saving ? 'Salvando...' : 'Salvar'}
+            {saving ? 'Salvando...' : submitLabel}
           </Button>
           {saved && <span className="text-xs text-gray-500">Salvo.</span>}
+          {onSaveAsPreset && savingPreset === 'idle' && (
+            <Button
+              type="button"
+              variant="outline"
+              disabled={!!instructionsProblem}
+              onClick={() => {
+                setSavingPreset('open')
+                setPresetMessage(null)
+              }}
+            >
+              Salvar como modelo
+            </Button>
+          )}
         </div>
+        {onSaveAsPreset && savingPreset !== 'idle' && (
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              aria-label="Nome do modelo"
+              value={presetName}
+              maxLength={80}
+              onChange={(e) => setPresetName(e.target.value)}
+              placeholder="Nome do modelo"
+              className="h-8 w-64"
+            />
+            <Button type="button" size="sm" disabled={!presetName.trim() || savingPreset === 'saving'} onClick={handleSaveAsPreset}>
+              {savingPreset === 'saving' ? 'Criando...' : 'Criar modelo'}
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setSavingPreset('idle')}>
+              Cancelar
+            </Button>
+          </div>
+        )}
+        {presetMessage && (
+          <p className={cn('text-xs', presetMessage.ok ? 'text-gray-500' : 'text-red-500')}>{presetMessage.text}</p>
+        )}
         {footer}
       </div>
     </div>

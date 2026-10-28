@@ -200,6 +200,9 @@ export function intakeMissingMessage(missing: readonly IntakeField[]): string {
 
 // ── Mensagens fixas da agenda externa (o texto do Claude é descartado) ──────
 
+/** trigger_reason do handoff da solicitação de agendamento. */
+export const EXTERNAL_REQUEST_REASON = 'external_scheduling' as const
+
 /** AGENDAMENTO_CONFIRMADO numa unidade 'external': nada foi marcado. */
 export const EXTERNAL_BOOKING_BLOCKED_MESSAGE =
   'Nesta unidade quem confirma o horário é a equipe, pela agenda da própria clínica. Posso anotar seus dados para eles confirmarem com você por aqui?'

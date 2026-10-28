@@ -5,9 +5,9 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { broadcastToWorkspace } from '@/lib/realtime/broadcast'
 import { trackHandoffTriggered } from '@/lib/analytics/posthog-server'
 import type { ExternalRequestSummary } from '@/types/database'
-import { formatExternalRequestLines } from './unit-settings'
+import { EXTERNAL_REQUEST_REASON, formatExternalRequestLines } from './unit-settings'
 
-export const EXTERNAL_REQUEST_REASON = 'external_scheduling' as const
+export { EXTERNAL_REQUEST_REASON }
 
 export const EXTERNAL_REQUEST_PUSH_TITLE = '📋 Solicitação de agendamento'
 
