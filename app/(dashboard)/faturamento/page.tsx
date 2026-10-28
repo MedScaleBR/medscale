@@ -4,16 +4,43 @@ import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { GuidesTable } from '@/components/billing/GuidesTable'
+import { AuthorizationsTable } from '@/components/billing/authorizations/AuthorizationsTable'
 import { BatchesTable } from '@/components/billing/BatchesTable'
+import { isAuthorizationType } from '@/lib/billing/authorizations/status'
 
-export default async function FaturamentoPage() {
+const TABS = ['autorizacoes', 'guias', 'lotes'] as const
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+// Só strings valem; arrays (?x=1&x=2) e ausentes viram undefined.
+function single(v: string | string[] | undefined): string | undefined {
+  return typeof v === 'string' ? v : undefined
+}
+
+function uuidOrUndefined(v: string | undefined): string | undefined {
+  return v && UUID_RE.test(v) ? v : undefined
+}
+
+export default async function FaturamentoPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>
+}) {
   const session = await resolveActiveSession()
   if (!session) return null
 
-  // Guias e lotes TISS: owner e admin (secretária/gestão). member não.
+  // Convênios / TISS: owner e admin (secretária/gestão). member não.
   if (session.role === 'member' || !session.accountModules.includes('billing')) {
     redirect('/dashboard')
   }
+
+  const params = await searchParams
+  const tab = single(params.tab)
+  const nova = single(params.nova)
+  // OPME nasce do pai (SP/SADT ou internação), nunca direto da URL.
+  const newType = nova && isAuthorizationType(nova) && nova !== 'opme_request' ? nova : undefined
+  const appointmentId = uuidOrUndefined(single(params.appointment_id))
+  const openId = uuidOrUndefined(single(params.autorizacao))
 
   const supabase = await createClient()
   const { data: insurers } = await supabase
@@ -25,9 +52,10 @@ export default async function FaturamentoPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-xl font-medium text-gray-900">Faturamento</h1>
+        <h1 className="text-xl font-medium text-gray-900">Convênios / TISS</h1>
         <p className="text-sm text-gray-400">
-          Guias TISS das consultas de convênio e lotes XML para enviar às operadoras.
+          Autorizações prévias (SP/SADT, internação e OPME), guias TISS das consultas de convênio e
+          lotes XML para as operadoras.
         </p>
       </div>
 
@@ -40,15 +68,19 @@ export default async function FaturamentoPage() {
           para começar a faturar.
         </div>
       ) : (
-        <Tabs defaultValue="guides">
+        <Tabs defaultValue={TABS.find((t) => t === tab) ?? 'autorizacoes'}>
           <TabsList>
-            <TabsTrigger value="guides">Guias</TabsTrigger>
-            <TabsTrigger value="batches">Lotes</TabsTrigger>
+            <TabsTrigger value="autorizacoes">Autorizações</TabsTrigger>
+            <TabsTrigger value="guias">Guias</TabsTrigger>
+            <TabsTrigger value="lotes">Lotes</TabsTrigger>
           </TabsList>
-          <TabsContent value="guides" className="pt-4">
+          <TabsContent value="autorizacoes" className="pt-4">
+            <AuthorizationsTable insurers={insurers} initial={{ newType, appointmentId, openId }} />
+          </TabsContent>
+          <TabsContent value="guias" className="pt-4">
             <GuidesTable insurers={insurers} />
           </TabsContent>
-          <TabsContent value="batches" className="pt-4">
+          <TabsContent value="lotes" className="pt-4">
             <BatchesTable insurers={insurers} />
           </TabsContent>
         </Tabs>

@@ -70,4 +70,9 @@ describe('MODULE_ROUTES', () => {
     expect(MODULE_ROUTES.conversations).toEqual({ href: '/bot', label: 'Conversas' })
     expect(MODULE_ROUTES.revenue_cycle).toEqual({ href: '/ciclo-receita', label: 'Ciclo de receita' })
   })
+  it('billing se chama "Convênios / TISS" e continua fora do alcance de member', () => {
+    expect(MODULE_ROUTES.billing).toEqual({ href: '/faturamento', label: 'Convênios / TISS' })
+    expect(moduleTitleFromPath('/faturamento')).toBe('Convênios / TISS')
+    expect(isModuleVisible('billing', ['billing'], 'member')).toBe(false)
+  })
 })

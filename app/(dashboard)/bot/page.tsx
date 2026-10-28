@@ -2,6 +2,9 @@ import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { BotInboxClient, type ConversationWithMessages } from '@/components/bot/BotInboxClient'
 import { isUnread, summarizeVisits } from '@/lib/bot/inbox'
+import { formatExternalRequestLines } from '@/lib/bot/unit-settings'
+import type { ExternalRequestView } from '@/components/bot/ExternalRequestCard'
+import type { ExternalRequestSummary } from '@/types/database'
 
 export default async function BotPage() {
   const session = await resolveActiveSession()
@@ -33,6 +36,30 @@ export default async function BotPage() {
 
   const visits = summarizeVisits(appointments ?? [])
 
+  // Solicitação de agendamento mais recente de cada conversa (unidade com
+  // agenda externa). Erro (ex.: migration pendente) = nenhuma, sem quebrar a tela.
+  const conversationIds = (conversations ?? []).map((c) => c.id)
+  const { data: requestRows, error: requestsError } = conversationIds.length
+    ? await supabase
+        .from('handoff_logs')
+        .select('id, conversation_id, summary, sent_at, resolved_at, workspaces(name)')
+        .in('conversation_id', conversationIds)
+        .eq('trigger_reason', 'external_scheduling')
+        .not('summary', 'is', null)
+        .order('sent_at', { ascending: false })
+    : { data: [], error: null }
+  const requestByConversation = new Map<string, ExternalRequestView>()
+  for (const r of requestsError ? [] : (requestRows ?? [])) {
+    if (!r.conversation_id || requestByConversation.has(r.conversation_id)) continue
+    const unitName = (r.workspaces as unknown as { name: string } | null)?.name ?? 'Unidade'
+    requestByConversation.set(r.conversation_id, {
+      id: r.id,
+      lines: formatExternalRequestLines(r.summary as ExternalRequestSummary, unitName),
+      sentAt: r.sent_at,
+      resolvedAt: r.resolved_at,
+    })
+  }
+
   const items: ConversationWithMessages[] = (conversations ?? []).map((c) => {
     const messages = [...(c.messages ?? [])].sort(
       (a, b) => new Date(a.sent_at).getTime() - new Date(b.sent_at).getTime()
@@ -57,6 +84,7 @@ export default async function BotPage() {
       last_message: messages.at(-1)?.content ?? null,
       last_message_at: messages.at(-1)?.sent_at ?? null,
       unread: isUnread(messages.at(-1)?.role, c.status),
+      external_request: requestByConversation.get(c.id) ?? null,
       messages,
     }
   })

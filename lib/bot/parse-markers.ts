@@ -40,7 +40,26 @@ export const INSURANCE_CHOICE_MARKER = /^[\t ]*CONVENIO_ID:[\t ]*([^\r\n]*)\r?$/
 export const WAITLIST_MARKER =
   /LISTA_ESPERA:\s*(\d{4}-\d{2}-\d{2})(?:T(\d{2}:\d{2})(?::\d{2})?-03:00)?/
 
+// Dados que a unidade coleta (workspaces.intake_fields). Uma linha cada,
+// ancoradas no começo da linha (flag m) para não pegar texto corrido como
+// "seu CPF: ..." no meio de uma frase. O valor cru é validado em security.ts.
+export const ISO_BIRTH_DATE_MARKER = /^[\t ]*DATA_NASCIMENTO:[\t ]*([^\r\n]*)\r?$/gm
+export const CARD_NUMBER_MARKER = /^[\t ]*CARTEIRINHA:[\t ]*([^\r\n]*)\r?$/gm
+export const CPF_MARKER = /^[\t ]*CPF:[\t ]*([^\r\n]*)\r?$/gm
+export const EMAIL_MARKER = /^[\t ]*EMAIL:[\t ]*([^\r\n]*)\r?$/gm
+export const REASON_MARKER = /^[\t ]*MOTIVO_CONSULTA:[\t ]*([^\r\n]*)\r?$/gm
+export const PREFERENCE_MARKER = /^[\t ]*PREFERENCIA_HORARIO:[\t ]*([^\r\n]*)\r?$/gm
+// Unidade com agenda externa: fecha a coleta e dispara o handoff da solicitação.
+export const SCHEDULING_REQUEST_MARKER = /^[\t ]*SOLICITACAO_AGENDAMENTO[\t ]*\r?$/gm
+
 export const HANDOFF_MARKER = '[HANDOFF]'
+
+// Último valor não vazio de um marcador de linha (a Clara pode corrigir um dado
+// na mesma resposta; vale a escolha mais recente).
+function lastLineValue(raw: string, marker: RegExp): string | null {
+  const values = [...raw.matchAll(marker)].map((m) => m[1].trim()).filter(Boolean)
+  return values.at(-1) ?? null
+}
 
 export interface ParsedMarkers {
   /** Horário confirmado, exatamente como o Claude escreveu (ISO com -03:00), ou null. */
@@ -61,6 +80,20 @@ export interface ParsedMarkers {
   patientBirthDate: string | null
   /** Dia (e horário, se o paciente nomeou um) que o paciente quer esperar, ou null. */
   waitlistDesired: { date: string; time: string | null } | null
+  /** DATA_NASCIMENTO cru (AAAA-MM-DD esperado), ainda sem validar, ou null. */
+  isoBirthDate: string | null
+  /** CARTEIRINHA crua, ou null. */
+  cardNumber: string | null
+  /** CPF cru, ou null. */
+  cpf: string | null
+  /** EMAIL cru, ou null. */
+  email: string | null
+  /** MOTIVO_CONSULTA cru, ou null. */
+  reason: string | null
+  /** PREFERENCIA_HORARIO cru, ou null. */
+  preference: string | null
+  /** A Clara fechou a coleta de uma unidade com agenda externa. */
+  schedulingRequested: boolean
   /** O Claude sinalizou transferência para atendimento humano. */
   handoffRequested: boolean
   /**
@@ -97,6 +130,13 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
     .replace(PATIENT_NAME_MARKER, '')
     .replace(BIRTH_DATE_MARKER, '')
     .replace(WAITLIST_MARKER, '')
+    .replace(ISO_BIRTH_DATE_MARKER, '')
+    .replace(CARD_NUMBER_MARKER, '')
+    .replace(CPF_MARKER, '')
+    .replace(EMAIL_MARKER, '')
+    .replace(REASON_MARKER, '')
+    .replace(PREFERENCE_MARKER, '')
+    .replace(SCHEDULING_REQUEST_MARKER, '')
     .trim()
 
   return {
@@ -109,6 +149,13 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
     patientName,
     patientBirthDate: birthMatch?.[1] ?? null,
     waitlistDesired: waitlistMatch ? { date: waitlistMatch[1], time: waitlistMatch[2] ?? null } : null,
+    isoBirthDate: lastLineValue(rawMessage, ISO_BIRTH_DATE_MARKER),
+    cardNumber: lastLineValue(rawMessage, CARD_NUMBER_MARKER),
+    cpf: lastLineValue(rawMessage, CPF_MARKER),
+    email: lastLineValue(rawMessage, EMAIL_MARKER),
+    reason: lastLineValue(rawMessage, REASON_MARKER),
+    preference: lastLineValue(rawMessage, PREFERENCE_MARKER),
+    schedulingRequested: [...rawMessage.matchAll(SCHEDULING_REQUEST_MARKER)].length > 0,
     handoffRequested: cleanedMessage.includes(HANDOFF_MARKER),
     cleanedMessage,
     messageForPatient: cleanedMessage.replace(HANDOFF_MARKER, '').trim(),
