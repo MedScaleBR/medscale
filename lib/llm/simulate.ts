@@ -1,5 +1,5 @@
 import { createAdminClient } from '@/lib/supabase/server'
-import { getBotConfig } from '@/lib/bot/config'
+import { getBotConfig, type BotConfig } from '@/lib/bot/config'
 import { getWorkspaceBotSettings, parseBotSettingsBody, type BotSettingsUpdate } from '@/lib/bot/unit-settings'
 import { claudeCostUsd } from '@/lib/costs/pricing'
 import { buildAgentContext, loadAccountUnits, type HistoryMessage, type StoredIntake } from '@/lib/llm/agent-context'
@@ -21,6 +21,30 @@ const MAX_TEXT = 4000
 const MAX_HISTORY = 60
 export const SIMULATOR_RATE_LIMIT = 30
 export const SIMULATOR_RATE_WINDOW_SECONDS = 60
+
+// Account sem Clara configurada (sem linha em bot_config): o simulador usa os
+// padrões do schema para dar para testar antes de configurar. Só aqui — a
+// produção continua exigindo a configuração.
+const DEFAULT_BOT_CONFIG: BotConfig = {
+  specialty: null,
+  acceptsPrivate: true,
+  paymentMethods: [],
+  pricingInfo: null,
+  examPreparation: null,
+  policies: null,
+  toneOfVoice: null,
+  handoffInstructions: null,
+  forbiddenActions: null,
+  faq: [],
+  handoffMessage: 'Vou te conectar com nossa equipe agora. Um momento!',
+  welcomeMessage: 'Olá! Posso ajudar com agendamentos e informações. Como posso ajudar?',
+  outOfHoursMessage:
+    'No momento nossa equipe não está disponível para atendimento humano — já registrei sua mensagem e vamos retornar assim que possível. Enquanto isso, posso continuar te ajudando por aqui!',
+  isActive: false,
+  phoneNumberId: null,
+  metaToken: null,
+  numberSource: 'medscale',
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -141,9 +165,13 @@ export async function runSimulation(input: SimulationInput, opts: { staffUserId:
   const accountId = input.account_id
   const notes: string[] = []
 
-  const botConfig = await getBotConfig(accountId)
-  if (!botConfig) throw new SimulationError('Esta account ainda não tem a Clara configurada.')
-  if (!botConfig.isActive) notes.push('A Clara está desligada nesta account: em produção ela não responderia.')
+  const savedConfig = await getBotConfig(accountId)
+  const botConfig = savedConfig ?? DEFAULT_BOT_CONFIG
+  if (!savedConfig) {
+    notes.push('Esta account ainda não tem a Clara configurada: usando a configuração padrão (sem especialidade, FAQ nem políticas).')
+  } else if (!botConfig.isActive) {
+    notes.push('A Clara está desligada nesta account: em produção ela não responderia.')
+  }
   const channelReady = Boolean(botConfig.phoneNumberId && botConfig.metaToken)
   if (!channelReady) notes.push('A account não tem WhatsApp conectado: em produção nada seria enviado e não haveria transferência.')
 

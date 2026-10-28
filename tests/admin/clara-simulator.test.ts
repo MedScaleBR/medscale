@@ -243,11 +243,18 @@ describe('simulador da Clara — sem efeito real', () => {
     expectNoRealEffect(s)
   })
 
-  it('sem configuração da Clara: erro claro, sem chamar o Claude', async () => {
-    setup()
+  it('sem configuração da Clara: simula com o padrão e avisa', async () => {
+    const s = setup()
     state.botConfig = null
-    await expect(runSimulation(input(), STAFF)).rejects.toThrow('ainda não tem a Clara configurada')
-    expect(claudeCreate).not.toHaveBeenCalled()
+    state.claudeResponses = ['Olá! Como posso ajudar?']
+
+    const r = await runSimulation(input(), STAFF)
+
+    expect(claudeCreate).toHaveBeenCalledTimes(1)
+    expect(r.reply).toContain('Como posso ajudar')
+    expect(r.notes.some((n) => n.includes('ainda não tem a Clara configurada'))).toBe(true)
+    expect(r.notes.some((n) => n.includes('desligada'))).toBe(false)
+    expectNoRealEffect(s)
   })
 })
 
