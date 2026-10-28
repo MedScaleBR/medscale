@@ -3,6 +3,7 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
+  Bot,
   Building2,
   Coins,
   LayoutDashboard,
@@ -25,6 +26,7 @@ const ITEMS: AdminNavItem[] = [
   { label: 'Dashboard', href: '/admin', icon: LayoutDashboard, exact: true },
   { label: 'Accounts', href: '/admin/accounts', icon: Building2 },
   { label: 'Tarefas', href: '/admin/tasks', icon: ListChecks },
+  { label: 'Clara', href: '/admin/clara', icon: Bot },
   { label: 'Custos', href: '/admin/costs', icon: Coins },
   { label: 'Feedback', href: '/admin/feedback', icon: MessageSquareText },
 ]

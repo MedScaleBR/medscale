@@ -37,6 +37,8 @@ export type NumberSource = 'own' | 'medscale'
 // Origem de um custo variável da MedScale (ver supabase/migration_costs.sql).
 export type CostProvider =
   | 'claude_agendamento'
+  // Simulador da Clara (/admin): chamada real, separada do custo de atendimento.
+  | 'claude_simulador'
   | 'claude_financeiro'
   | 'claude_soap'
   | 'whisper'
@@ -178,6 +180,8 @@ export interface Database {
           bot_instructions: string | null
           bot_settings_updated_by: string | null
           bot_settings_updated_at: string | null
+          // Modelo de onde a configuração foi copiada (só referência; ver bot_presets).
+          bot_preset_id: string | null
           cnes: string | null
           cnpj: string | null
           legal_name: string | null
@@ -328,6 +332,22 @@ export interface Database {
             referencedColumns: ['id']
           },
         ]
+      }
+      bot_presets: {
+        Row: {
+          id: string
+          name: string
+          description: string | null
+          scheduling_mode: SchedulingMode
+          intake_fields: IntakeField[]
+          bot_instructions: string | null
+          created_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['bot_presets']['Row']> & { name: string }
+        Update: Partial<Database['public']['Tables']['bot_presets']['Row']>
+        Relationships: []
       }
       cost_events: {
         Row: {

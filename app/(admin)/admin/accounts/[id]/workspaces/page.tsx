@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/server'
 import { WorkspacesClient } from '@/components/locais/WorkspacesClient'
 import { WorkspaceBotSettingsSection, type WorkspaceBotSettingsRow } from '@/components/admin/WorkspaceBotSettingsSection'
 import { getWorkspaceBotSettings } from '@/lib/bot/unit-settings'
+import { PRESET_COLUMNS, type BotPreset } from '@/lib/bot/presets'
 
 type BotSettingsColumns = {
   id: string
@@ -13,13 +14,23 @@ type BotSettingsColumns = {
   bot_instructions: string | null
   bot_settings_updated_by: string | null
   bot_settings_updated_at: string | null
+  bot_preset_id?: string | null
 }
+
+const BOT_COLUMNS = 'id, scheduling_mode, intake_fields, bot_instructions, bot_settings_updated_by, bot_settings_updated_at'
 
 export default async function AdminAccountWorkspacesPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const supabase = await createClient()
 
-  const [{ data: account }, { data: workspaces }, botSettingsResult] = await Promise.all([
+  // Com bot_preset_id (migration dos modelos); sem ela, cai nas colunas antigas.
+  const loadBotSettings = async () => {
+    const withPreset = await supabase.from('workspaces').select(`${BOT_COLUMNS}, bot_preset_id`).eq('account_id', id)
+    if (!withPreset.error) return withPreset
+    return supabase.from('workspaces').select(BOT_COLUMNS).eq('account_id', id)
+  }
+
+  const [{ data: account }, { data: workspaces }, botSettingsResult, { data: presetRows }] = await Promise.all([
     supabase.from('accounts').select('id, name').eq('id', id).single(),
     supabase
       .from('workspaces')
@@ -28,11 +39,10 @@ export default async function AdminAccountWorkspacesPage({ params }: { params: P
       .order('display_order'),
     // À parte: se a migration da Clara por unidade ainda não rodou, a página
     // continua abrindo (só sem a seção).
-    supabase
-      .from('workspaces')
-      .select('id, scheduling_mode, intake_fields, bot_instructions, bot_settings_updated_by, bot_settings_updated_at')
-      .eq('account_id', id),
+    loadBotSettings(),
+    supabase.from('bot_presets').select(PRESET_COLUMNS).order('name'),
   ])
+  const presets = (presetRows ?? []) as BotPreset[]
 
   if (!account) notFound()
 
@@ -57,6 +67,7 @@ export default async function AdminAccountWorkspacesPage({ params }: { params: P
             intake_fields: s.intakeFields,
             bot_instructions: s.botInstructions,
           },
+          presetId: row?.bot_preset_id ?? null,
           updatedByName: row?.bot_settings_updated_by ? (updaterName.get(row.bot_settings_updated_by) ?? null) : null,
           updatedAt: row?.bot_settings_updated_at ?? null,
         }
@@ -84,7 +95,7 @@ export default async function AdminAccountWorkspacesPage({ params }: { params: P
           A configuração da Clara por unidade fica disponível depois que a migration for aplicada.
         </p>
       ) : (
-        settingsRows.length > 0 && <WorkspaceBotSettingsSection rows={settingsRows} />
+        settingsRows.length > 0 && <WorkspaceBotSettingsSection accountId={id} rows={settingsRows} presets={presets} />
       )}
     </div>
   )
