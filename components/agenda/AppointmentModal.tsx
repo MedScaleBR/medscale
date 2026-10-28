@@ -59,6 +59,10 @@ export interface AppointmentFormValues {
 export interface ModalWorkspaceOption {
   id: string
   name: string
+  // O que a unidade aceita (tela de Convênios). Ausente = sem restrição.
+  accepts_private?: boolean
+  insurer_ids?: string[]
+  health_plans?: string[]
 }
 
 interface AppointmentModalProps {
@@ -145,6 +149,14 @@ function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenCh
   const showUnitPicker = workspaces.length > 1
   const billingMode = billingInsurers.length > 0
 
+  // Só o que a unidade escolhida aceita: particular e os convênios ligados a ela.
+  const unit = workspaces.find((w) => w.id === values.workspace_id) ?? (workspaces.length === 1 ? workspaces[0] : undefined)
+  const unitAcceptsPrivate = unit?.accepts_private ?? true
+  const unitInsurers = unit?.insurer_ids
+    ? billingInsurers.filter((i) => unit.insurer_ids!.includes(i.id))
+    : billingInsurers
+  const unitHealthPlans = unit?.health_plans ?? healthPlans
+
   // Modo faturamento: o "Atendimento" lista as operadoras cadastradas.
   const billingChoice = values.billing?.insurer_id ?? (values.health_plan ? LEGACY_PLAN : PARTICULAR)
   const billingLabels: Record<string, string> = {
@@ -152,6 +164,20 @@ function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenCh
     ...(values.health_plan && !values.billing ? { [LEGACY_PLAN]: values.health_plan } : {}),
     ...Object.fromEntries(billingInsurers.map((i) => [i.id, i.name])),
   }
+  // Escolha atual que a unidade não aceita (ex.: trocou de unidade depois de escolher).
+  const paymentProblem = !unit
+    ? null
+    : billingMode
+      ? billingChoice === PARTICULAR
+        ? unitAcceptsPrivate ? null : `A unidade ${unit.name} não atende particular. Escolha um convênio.`
+        : billingChoice !== LEGACY_PLAN && !unitInsurers.some((i) => i.id === billingChoice)
+          ? `A unidade ${unit.name} não aceita este convênio.`
+          : null
+      : values.health_plan == null
+        ? unitAcceptsPrivate ? null : `A unidade ${unit.name} não atende particular. Escolha um convênio.`
+        : healthPlans.includes(values.health_plan) && !unitHealthPlans.includes(values.health_plan)
+          ? `A unidade ${unit.name} não aceita este convênio.`
+          : null
   const onBillingChoice = (choice: string | null) => {
     if (!choice || choice === LEGACY_PLAN) return
     if (choice === PARTICULAR) {
@@ -200,8 +226,16 @@ function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenCh
     }))
   }
 
+  // Consulta já existente só é barrada se a forma de atendimento mudou (a API faz o mesmo).
+  const paymentChanged =
+    !values.id ||
+    (values.billing?.insurer_id ?? null) !== (initialValues?.billing?.insurer_id ?? null) ||
+    (values.health_plan ?? null) !== (initialValues?.health_plan ?? null)
+  const paymentBlocked = paymentProblem !== null && paymentChanged
+
   const handleSave = async () => {
     if (!values.patient_name || !values.patient_phone || !values.scheduled_at) return
+    if (paymentBlocked) return
     setSaving(true)
     try {
       await onSave(values)
@@ -323,11 +357,15 @@ function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenCh
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value={PARTICULAR}>Particular</SelectItem>
+                    {(unitAcceptsPrivate || billingChoice === PARTICULAR) && (
+                      <SelectItem value={PARTICULAR}>Particular</SelectItem>
+                    )}
                     {billingChoice === LEGACY_PLAN && (
                       <SelectItem value={LEGACY_PLAN}>{values.health_plan}</SelectItem>
                     )}
-                    {billingInsurers.map((i) => (
+                    {billingInsurers
+                      .filter((i) => i.id === billingChoice || unitInsurers.some((u) => u.id === i.id))
+                      .map((i) => (
                       <SelectItem key={i.id} value={i.id}>
                         {i.name}
                       </SelectItem>
@@ -361,8 +399,12 @@ function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenCh
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value={PARTICULAR}>Particular</SelectItem>
-                  {healthPlans.map((plan) => (
+                  {(unitAcceptsPrivate || values.health_plan == null) && (
+                    <SelectItem value={PARTICULAR}>Particular</SelectItem>
+                  )}
+                  {healthPlans
+                    .filter((plan) => plan === values.health_plan || unitHealthPlans.includes(plan))
+                    .map((plan) => (
                     <SelectItem key={plan} value={plan}>
                       {plan}
                     </SelectItem>
@@ -446,6 +488,8 @@ function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenCh
           </div>
         </div>
 
+        {paymentBlocked && <p className="mt-3 text-xs text-red-600">{paymentProblem}</p>}
+
         <DialogFooter className="gap-2 sm:justify-between">
           {onDelete && values.id ? (
             <Button variant="ghost" className="text-red-600 hover:text-red-700" onClick={onDelete}>
@@ -456,7 +500,7 @@ function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenCh
           )}
           <Button
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || paymentBlocked}
             className="bg-[var(--cyan)] text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
           >
             {saving ? 'Salvando...' : 'Salvar'}

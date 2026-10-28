@@ -2480,3 +2480,40 @@ revoke all on function public.finalize_tiss_batch(uuid, uuid, bigint, text, text
 grant execute on function public.finalize_tiss_batch(uuid, uuid, bigint, text, text, text, text, bigint, uuid, uuid[], jsonb) to authenticated, service_role;
 
 -- END BILLING AUTHENTICATED OPERATIONS
+
+-- ============================================================
+-- CONVÊNIOS E PARTICULAR POR UNIDADE (ver migration_convenios_por_unidade.sql)
+-- ============================================================
+alter table public.workspaces add column accepts_private boolean not null default true;
+
+create table public.health_insurer_workspaces (
+  insurer_id   uuid not null references public.health_insurers(id) on delete cascade,
+  workspace_id uuid not null references public.workspaces(id) on delete cascade,
+  account_id   uuid not null references public.accounts(id) on delete cascade, -- desnormalizado p/ RLS
+  created_at   timestamptz not null default now(),
+  primary key (insurer_id, workspace_id)
+);
+create index idx_health_insurer_workspaces_workspace on public.health_insurer_workspaces (workspace_id);
+
+create or replace function public.enforce_insurer_workspace_account()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  select account_id into new.account_id from public.health_insurers where id = new.insurer_id;
+  if not exists (
+    select 1 from public.workspaces where id = new.workspace_id and account_id = new.account_id
+  ) then
+    raise exception 'Unidade e convênio de accounts diferentes' using errcode = '42501';
+  end if;
+  return new;
+end $$;
+
+create trigger trg_health_insurer_workspaces_account
+  before insert or update on public.health_insurer_workspaces
+  for each row execute procedure public.enforce_insurer_workspace_account();
+
+alter table public.health_insurer_workspaces enable row level security;
+create policy "health_insurer_workspaces: members read" on public.health_insurer_workspaces
+  for select using (account_id = any(public.my_account_ids()));
+create policy "health_insurer_workspaces: admin write" on public.health_insurer_workspaces
+  for all using (public.is_account_admin(account_id)) with check (public.is_account_admin(account_id));
+grant all on public.health_insurer_workspaces to authenticated, service_role;

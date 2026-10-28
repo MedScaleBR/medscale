@@ -48,11 +48,15 @@ export interface UnitContext {
   externalClinicPhone: string | null
   // Clara por unidade (lib/bot/unit-settings.ts) — padrões aplicados.
   botSettings: WorkspaceBotSettings
+  // Atende particular nesta unidade. null/ausente = coluna ainda não migrada
+  // (vale o bot_config.accepts_private da account — ver lib/bot/unit-insurance.ts).
+  acceptsPrivate?: boolean | null
 }
 
 const UNIT_COLUMNS =
   'id, name, address, directions_parking, contact_info, handoff_number, display_order, is_outsourced, external_clinic_phone'
 const BOT_SETTINGS_COLUMNS = 'scheduling_mode, intake_fields, bot_instructions'
+const COVERAGE_COLUMNS = 'accepts_private'
 
 // Cache simples em memória (por processo) — evita query ao banco em cada mensagem.
 // Em ambiente serverless cada instância tem seu próprio cache, então o TTL curto
@@ -101,7 +105,9 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
     Database['public']['Tables']['workspaces']['Row'],
     'id' | 'name' | 'address' | 'directions_parking' | 'contact_info' | 'handoff_number' | 'is_outsourced' | 'external_clinic_phone'
   > &
-    Partial<Pick<Database['public']['Tables']['workspaces']['Row'], 'scheduling_mode' | 'intake_fields' | 'bot_instructions'>>
+    Partial<
+      Pick<Database['public']['Tables']['workspaces']['Row'], 'scheduling_mode' | 'intake_fields' | 'bot_instructions' | 'accepts_private'>
+    >
 
   const query = async (columns: string) => {
     const res = await supabase
@@ -113,12 +119,18 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
     return { data: res.data as unknown as UnitRow[] | null, error: res.error }
   }
 
-  let { data, error } = await query(`${UNIT_COLUMNS}, ${BOT_SETTINGS_COLUMNS}`)
-  if (error) {
-    // Colunas da Clara por unidade ainda não existem (migration pendente):
-    // segue com o padrão em vez de deixar a Clara sem unidades.
+  // Colunas por unidade que podem ainda não existir (migration pendente): cai
+  // para o conjunto seguinte e segue com o padrão em vez de deixar a Clara sem unidades.
+  const attempts = [
+    `${UNIT_COLUMNS}, ${BOT_SETTINGS_COLUMNS}, ${COVERAGE_COLUMNS}`,
+    `${UNIT_COLUMNS}, ${BOT_SETTINGS_COLUMNS}`,
+    UNIT_COLUMNS,
+  ]
+  let { data, error } = await query(attempts[0])
+  for (const columns of attempts.slice(1)) {
+    if (!error) break
     console.warn('[bot-config] configuração por unidade indisponível — usando o padrão')
-    ;({ data, error } = await query(UNIT_COLUMNS))
+    ;({ data, error } = await query(columns))
   }
 
   if (!data?.length) return []
@@ -157,6 +169,7 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
     isOutsourced: isOutsourcedWorkspace(w),
     externalClinicPhone: w.external_clinic_phone,
     botSettings: getWorkspaceBotSettings(w),
+    acceptsPrivate: w.accepts_private ?? null,
   }))
 }
 

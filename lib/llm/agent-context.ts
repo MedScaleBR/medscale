@@ -5,6 +5,7 @@ import { getAccountUnits, type BotConfig, type UnitContext } from '@/lib/bot/con
 import { getFreeSlotsForBot } from '@/lib/google/availability'
 import { detectInjectionAttempt, type InjectionSignal } from '@/lib/bot/security'
 import type { IntakeField } from '@/lib/bot/unit-settings'
+import { buildCoverageByUnit, mergeCoverages, type UnitCoverage } from '@/lib/bot/unit-insurance'
 import type { Database } from '@/types/database'
 import { PENDING_EXTERNAL_STATUS } from '@/types/database'
 
@@ -70,6 +71,8 @@ export interface AgentContext {
   flatCatalog: { id: string; name: string; price: number }[]
   insurers: { id: string; name: string }[]
   insurersError: boolean
+  /** O que cada unidade aceita: particular e convênios ligados a ela. */
+  coverageByUnit: Record<string, UnitCoverage>
   injectionSignals: InjectionSignal[]
   /** Há número e token do WhatsApp — sem isso a produção não envia nem transfere. */
   channelReady: boolean
@@ -83,6 +86,18 @@ export interface AccountUnits {
 
 export function isExternalUnit(ctx: Pick<AgentContext, 'unitById'>, unitId: string | null | undefined): boolean {
   return !!unitId && ctx.unitById.get(unitId)?.botSettings?.schedulingMode === 'external'
+}
+
+/**
+ * O que vale para a unidade da escolha. Sem unidade (account com várias e
+ * nenhuma escolhida), vale o que alguma unidade aceita.
+ */
+export function coverageFor(
+  ctx: Pick<AgentContext, 'coverageByUnit' | 'units'>,
+  unitId: string | null | undefined
+): UnitCoverage {
+  if (unitId && ctx.coverageByUnit[unitId]) return ctx.coverageByUnit[unitId]
+  return mergeCoverages(ctx.units.map((u) => ctx.coverageByUnit[u.id]).filter(Boolean))
 }
 
 /** Unidades da account + nome e módulos. Mesma leitura na produção e no simulador. */
@@ -213,13 +228,35 @@ export async function buildAgentContext(input: BuildAgentContextInput): Promise<
   }
   const flatCatalog = Object.values(procedureCatalogByUnit).flat()
 
-  // Convênios aceitos — os ativos cadastrados em Convênios.
-  const { data: insurerRows, error: insurersError } = await supabase
-    .from('health_insurers')
-    .select('id, name')
-    .eq('account_id', accountId)
-    .eq('is_active', true)
-    .order('name', { ascending: true })
+  // Convênios aceitos — os ativos cadastrados em Convênios, com as unidades
+  // ligadas a cada um. Sem a tabela de vínculo (migration pendente), todo
+  // convênio vale em todas as unidades.
+  type InsurerRow = { id: string; name: string; health_insurer_workspaces?: { workspace_id: string }[] | null }
+  const loadInsurers = (columns: string) =>
+    supabase
+      .from('health_insurers')
+      .select(columns)
+      .eq('account_id', accountId)
+      .eq('is_active', true)
+      .order('name', { ascending: true })
+  let insurerResult = await loadInsurers('id, name, health_insurer_workspaces(workspace_id)')
+  if (insurerResult.error) {
+    console.warn('[agent] vínculo convênio↔unidade indisponível — convênios valem em todas as unidades')
+    insurerResult = await loadInsurers('id, name')
+  }
+  const insurerRows = (insurerResult.data ?? []) as unknown as InsurerRow[]
+  const insurersError = insurerResult.error
+  const coverageByUnit = buildCoverageByUnit(
+    units,
+    insurerRows.map((i) => ({
+      id: i.id,
+      name: i.name,
+      workspaceIds: Array.isArray(i.health_insurer_workspaces)
+        ? i.health_insurer_workspaces.map((l) => l.workspace_id)
+        : null,
+    })),
+    botConfig.acceptsPrivate
+  )
 
   // Sinais de injection nas últimas 10 mensagens do paciente.
   const injectionSignals = history
@@ -259,8 +296,9 @@ export async function buildAgentContext(input: BuildAgentContextInput): Promise<
     upcomingAppointmentsAvailable: !upcomingError,
     procedureCatalogByUnit,
     flatCatalog,
-    insurers: insurerRows ?? [],
+    insurers: insurerRows.map((i) => ({ id: i.id, name: i.name })),
     insurersError: Boolean(insurersError),
+    coverageByUnit,
     injectionSignals,
     channelReady: input.channelReady,
   }

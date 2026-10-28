@@ -174,6 +174,8 @@ export interface Database {
           bot_settings_updated_at: string | null
           // Modelo de onde a configuração foi copiada (só referência; ver bot_presets).
           bot_preset_id: string | null
+          // Atende particular nesta unidade (Clara e Agenda respeitam).
+          accepts_private: boolean
           cnes: string | null
           cnpj: string | null
           legal_name: string | null
@@ -461,6 +463,35 @@ export interface Database {
             foreignKeyName: 'health_insurers_account_id_fkey'
             columns: ['account_id']
             referencedRelation: 'accounts'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      // Convênios aceitos por unidade (Clara e Agenda só oferecem estes).
+      health_insurer_workspaces: {
+        Row: {
+          insurer_id: string
+          workspace_id: string
+          account_id: string
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['health_insurer_workspaces']['Row']> & {
+          insurer_id: string
+          workspace_id: string
+          account_id: string
+        }
+        Update: Partial<Database['public']['Tables']['health_insurer_workspaces']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'health_insurer_workspaces_insurer_id_fkey'
+            columns: ['insurer_id']
+            referencedRelation: 'health_insurers'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'health_insurer_workspaces_workspace_id_fkey'
+            columns: ['workspace_id']
+            referencedRelation: 'workspaces'
             referencedColumns: ['id']
           },
         ]
