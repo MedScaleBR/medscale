@@ -1,1 +1,2 @@
 graphify-out/graph.json merge=graphify
+tests/tiss/golden/*.xml binary

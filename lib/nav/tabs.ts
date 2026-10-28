@@ -18,14 +18,15 @@ export const MODULE_ROUTES: Record<ModuleSlug, { href: string; label: string }> 
   transcriptions: { href: '/transcricoes', label: 'Transcrições' },
   finance: { href: '/finance', label: 'Financeiro' },
   revenue_cycle: { href: '/ciclo-receita', label: 'Ciclo de receita' },
-  billing: { href: '/faturamento', label: 'Faturamento' },
+  billing: { href: '/faturamento', label: 'Convênios / TISS' },
 }
 
 // Só o owner vê estes módulos, mesmo ativos no account.
 export const OWNER_ONLY_MODULES: ModuleSlug[] = ['finance']
 
-// Exigem no mínimo papel admin. 'billing' (guias e lotes TISS) também é
-// reforçado na API (requireRole) e na RLS (is_account_admin).
+// Exigem no mínimo papel admin. 'billing' (Convênios / TISS: autorizações,
+// guias e lotes TISS) também é reforçado na API (requireBilling adminOnly) e
+// na RLS (is_account_admin).
 export const ADMIN_MIN_MODULES: ModuleSlug[] = ['revenue_cycle', 'billing']
 
 // Módulos que um owner pode restringir por pessoa via module_overrides —

@@ -93,6 +93,14 @@ export type BillingType = 'particular' | 'convenio'
 export type TissGuideType = 'consulta' | 'sp_sadt'
 export type TissGuideStatus = 'draft' | 'ready' | 'batched' | 'sent' | 'cancelled'
 export type TissBatchStatus = 'generated' | 'sent' | 'error'
+export type TissAuthorizationType = 'sp_sadt_request' | 'hospitalization_request' | 'opme_request'
+export type TissAuthorizationStatus =
+  | 'draft' | 'ready' | 'sent' | 'under_review' | 'pending_info'
+  | 'authorized' | 'partially_authorized' | 'denied' | 'cancelled'
+export type TissAuthorizationItemKind = 'procedure' | 'opme'
+export type TissAuthorizationEventType =
+  | 'created' | 'updated' | 'items_changed' | 'refreshed' | 'ready'
+  | 'sent' | 'response_recorded' | 'cancelled' | 'xml_generated'
 export type AccountNoteType = 'note' | 'call' | 'email' | 'meeting'
 export type AccountTaskStatus = 'todo' | 'doing' | 'done'
 export type AccountTaskSourceType = 'cost_alert' | 'feedback'
@@ -585,6 +593,117 @@ export interface Database {
             foreignKeyName: 'tiss_guides_appointment_id_fkey'
             columns: ['appointment_id']
             referencedRelation: 'appointments'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      tiss_authorizations: {
+        Row: {
+          id: string
+          account_id: string
+          workspace_id: string
+          patient_id: string
+          insurer_id: string
+          appointment_id: string | null
+          parent_id: string | null
+          type: TissAuthorizationType
+          status: TissAuthorizationStatus
+          provider_guide_number: string
+          payload: unknown
+          missing_fields: string[]
+          operator_guide_number: string | null
+          password: string | null
+          authorization_date: string | null
+          password_valid_until: string | null
+          response_status_code: string | null
+          requested_at: string
+          sent_at: string | null
+          responded_at: string | null
+          created_by: string | null
+          updated_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Record<string, never>
+        Update: Record<string, never>
+        Relationships: [
+          {
+            foreignKeyName: 'tiss_authorizations_insurer_id_fkey'
+            columns: ['insurer_id']
+            referencedRelation: 'health_insurers'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'tiss_authorizations_patient_id_fkey'
+            columns: ['patient_id']
+            referencedRelation: 'patients'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'tiss_authorizations_appointment_id_fkey'
+            columns: ['appointment_id']
+            referencedRelation: 'appointments'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'tiss_authorizations_parent_id_fkey'
+            columns: ['parent_id']
+            referencedRelation: 'tiss_authorizations'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      tiss_authorization_items: {
+        Row: {
+          id: string
+          authorization_id: string
+          account_id: string
+          position: number
+          kind: TissAuthorizationItemKind
+          table_code: string
+          code: string
+          description: string
+          quantity_requested: number
+          quantity_authorized: number | null
+          manufacturer_option: string | null
+          requested_value_cents: number | null
+          authorized_value_cents: number | null
+          anvisa_registration: string | null
+          manufacturer_reference: string | null
+          operating_authorization: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: Record<string, never>
+        Update: Record<string, never>
+        Relationships: [
+          {
+            foreignKeyName: 'tiss_authorization_items_authorization_id_fkey'
+            columns: ['authorization_id']
+            referencedRelation: 'tiss_authorizations'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      tiss_authorization_events: {
+        Row: {
+          id: number
+          authorization_id: string
+          account_id: string
+          event: TissAuthorizationEventType
+          from_status: TissAuthorizationStatus | null
+          to_status: TissAuthorizationStatus | null
+          actor_id: string | null
+          data: Record<string, unknown>
+          created_at: string
+        }
+        Insert: Record<string, never>
+        Update: Record<string, never>
+        Relationships: [
+          {
+            foreignKeyName: 'tiss_authorization_events_authorization_id_fkey'
+            columns: ['authorization_id']
+            referencedRelation: 'tiss_authorizations'
             referencedColumns: ['id']
           },
         ]
@@ -1719,6 +1838,60 @@ export interface Database {
         Returns: string
       }
       mark_tiss_batch_sent: { Args: { p_batch_id: string }; Returns: boolean }
+      tiss_authorization_professionals: {
+        Args: { p_workspace_id: string }
+        Returns: Array<{
+          id: string
+          full_name: string
+          crm: string | null
+          crm_uf: string | null
+          cbo_code: string | null
+        }>
+      }
+      create_tiss_authorization: {
+        Args: {
+          p_workspace_id: string
+          p_patient_id: string
+          p_insurer_id: string
+          p_type: TissAuthorizationType
+          p_appointment_id: string | null
+          p_parent_id: string | null
+          p_payload: unknown
+          p_missing_fields: string[]
+          p_items: unknown
+        }
+        Returns: { id: string; status: TissAuthorizationStatus; provider_guide_number: string }
+      }
+      update_tiss_authorization: {
+        Args: {
+          p_id: string
+          p_expected_updated_at: string
+          p_payload: unknown
+          p_missing_fields: string[]
+          p_items?: unknown
+          p_requested_at?: string | null
+          p_event?: 'updated' | 'refreshed'
+        }
+        Returns: { id: string; status: TissAuthorizationStatus; updated_at: string }
+      }
+      transition_tiss_authorization: {
+        Args: { p_id: string; p_to: 'sent' | 'cancelled'; p_expected_updated_at: string }
+        Returns: { id: string; status: TissAuthorizationStatus; updated_at: string }
+      }
+      record_tiss_authorization_response: {
+        Args: {
+          p_id: string
+          p_expected_updated_at: string
+          p_status_code: string
+          p_operator_guide_number: string | null
+          p_password: string | null
+          p_authorization_date: string | null
+          p_password_valid_until: string | null
+          p_items?: unknown
+        }
+        Returns: { id: string; status: TissAuthorizationStatus; updated_at: string }
+      }
+      log_tiss_authorization_xml: { Args: { p_id: string; p_hash: string }; Returns: undefined }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

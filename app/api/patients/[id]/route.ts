@@ -72,6 +72,13 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
 
   const supabase = await createClient()
   const { error } = await supabase.from('patients').delete().eq('id', id).eq('account_id', session.accountId)
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (error) {
+    // FK NO ACTION de tiss_authorizations.patient_id (supabase/tiss-authorizations.sql):
+    // autorização TISS é registro de auditoria e não some com o paciente.
+    if (error.code === '23503' && error.message?.includes('tiss_authorizations_patient_id_fkey')) {
+      return NextResponse.json({ error: 'Este paciente tem autorizações TISS e não pode ser excluído.' }, { status: 409 })
+    }
+    return NextResponse.json({ error: error.message }, { status: 500 })
+  }
   return NextResponse.json({ ok: true })
 }
