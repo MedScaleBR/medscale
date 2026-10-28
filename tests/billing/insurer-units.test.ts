@@ -96,6 +96,6 @@ describe('parseWorkspaceIds / withWorkspaceIds', () => {
 
   it('achata o vínculo aninhado', () => {
     expect(withWorkspaceIds({ id: 'i1', health_insurer_workspaces: [{ workspace_id: 'w1' }] })).toEqual({ id: 'i1', workspace_ids: ['w1'] })
-    expect(withWorkspaceIds({ id: 'i1' })).toEqual({ id: 'i1', workspace_ids: null })
+    expect(withWorkspaceIds({ id: 'i1', health_insurer_workspaces: null })).toEqual({ id: 'i1', workspace_ids: null })
   })
 })
