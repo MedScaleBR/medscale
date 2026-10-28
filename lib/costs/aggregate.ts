@@ -6,6 +6,7 @@ import type { CostProvider } from '@/types/database'
 
 export const PROVIDER_LABELS: Record<CostProvider, string> = {
   claude_agendamento: 'Clara (agendamento)',
+  claude_simulador: 'Simulador da Clara',
   claude_financeiro: 'Agente financeiro',
   claude_soap: 'Prontuário (SOAP)',
   whisper: 'Transcrição (Whisper)',
@@ -264,6 +265,7 @@ export type ProviderGroup = 'claude' | 'whisper' | 'whatsapp'
 
 export const PROVIDER_GROUP: Record<CostProvider, ProviderGroup> = {
   claude_agendamento: 'claude',
+  claude_simulador: 'claude',
   claude_financeiro: 'claude',
   claude_soap: 'claude',
   whisper: 'whisper',

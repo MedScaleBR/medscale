@@ -18,6 +18,7 @@ import {
 
 export type CostProvider =
   | 'claude_agendamento'
+  | 'claude_simulador'
   | 'claude_financeiro'
   | 'claude_soap'
   | 'whisper'
@@ -77,11 +78,13 @@ export interface ClaudeUsage {
  */
 export async function recordClaudeCost(params: {
   ctx: CostContext
-  provider: Extract<CostProvider, 'claude_agendamento' | 'claude_financeiro' | 'claude_soap'>
+  provider: Extract<CostProvider, 'claude_agendamento' | 'claude_simulador' | 'claude_financeiro' | 'claude_soap'>
   model: string
   usage: ClaudeUsage | null | undefined
   relatedId?: string | null
   stage?: CostStage
+  /** Dado técnico extra (ex.: origem do simulador). Nunca conteúdo de paciente. */
+  metadata?: Record<string, unknown>
 }): Promise<void> {
   const inputTokens = params.usage?.input_tokens ?? 0
   const outputTokens = params.usage?.output_tokens ?? 0
@@ -100,6 +103,7 @@ export async function recordClaudeCost(params: {
     costBrl: toBrl(usd),
     relatedId: params.relatedId ?? null,
     metadata: {
+      ...(params.metadata ?? {}),
       usd,
       fx: USD_BRL,
       ...(params.stage ? { stage: params.stage } : {}),
