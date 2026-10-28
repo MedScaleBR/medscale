@@ -3,6 +3,7 @@ import { createClient } from '@/lib/supabase/server'
 import { reconcileAccountCalendars } from '@/lib/google/reconcile'
 import { hasTissIdentity } from '@/lib/billing/insurer'
 import { AgendaClient } from '@/components/agenda/AgendaClient'
+import { INSURER_UNITS_SELECT, withWorkspaceIds } from '@/lib/billing/insurer-units'
 
 export default async function AgendaPage() {
   const session = await resolveActiveSession()
@@ -20,11 +21,10 @@ export default async function AgendaPage() {
 
   const { data: workspaceRows } = await supabase
     .from('workspaces')
-    .select('id, name')
+    .select('id, name, accepts_private')
     .eq('account_id', session.accountId)
     .eq('is_active', true)
     .order('display_order')
-  const workspaces = workspaceRows ?? []
 
   // Catálogo de procedimentos para o seletor do modal — por unidade (o preço
   // pode variar entre unidades). Só quando o ciclo de receita está ativo.
@@ -33,7 +33,7 @@ export default async function AgendaPage() {
     const { data } = await supabase
       .from('procedure_catalog')
       .select('id, name, default_price, workspace_id')
-      .in('workspace_id', workspaces.map((w) => w.id))
+      .in('workspace_id', (workspaceRows ?? []).map((w) => w.id))
       .eq('is_active', true)
       .order('name', { ascending: true })
     for (const p of data ?? []) {
@@ -47,13 +47,29 @@ export default async function AgendaPage() {
 
   // Convênios aceitos (seletor "Atendimento" do modal) — os ativos cadastrados
   // em Convênios. Com o módulo billing, o modal usa as operadoras (com id).
-  const { data: insurerRows } = await supabase
+  const { data: insurerData } = await supabase
     .from('health_insurers')
-    .select('id, name, ans_registry, provider_code')
+    .select(`id, name, ans_registry, provider_code, ${INSURER_UNITS_SELECT}`)
     .eq('account_id', session.accountId)
     .eq('is_active', true)
     .order('name')
-  const healthPlans = (insurerRows ?? []).map((i) => i.name)
+  const insurerRows = ((insurerData ?? []) as unknown as Parameters<typeof withWorkspaceIds>[0][])
+    .map(withWorkspaceIds) as unknown as Array<{
+    id: string
+    name: string
+    ans_registry: string | null
+    provider_code: string | null
+    workspace_ids: string[] | null
+  }>
+  const healthPlans = insurerRows.map((i) => i.name)
+  // O que cada unidade aceita: o modal só oferece isso (a API confere de novo).
+  const workspaces = (workspaceRows ?? []).map((w) => ({
+    id: w.id,
+    name: w.name,
+    accepts_private: w.accepts_private,
+    insurer_ids: insurerRows.filter((i) => !i.workspace_ids || i.workspace_ids.includes(w.id)).map((i) => i.id),
+    health_plans: insurerRows.filter((i) => !i.workspace_ids || i.workspace_ids.includes(w.id)).map((i) => i.name),
+  }))
   // Com billing, só operadoras com registro ANS e código do prestador (prontas p/ TISS).
   const billingInsurers = session.accountModules.includes('billing')
     ? (insurerRows ?? []).filter(hasTissIdentity).map(({ id, name }) => ({ id, name }))

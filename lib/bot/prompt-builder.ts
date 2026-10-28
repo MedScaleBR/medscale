@@ -7,6 +7,7 @@ import {
   type IntakeField,
   type WorkspaceBotSettings,
 } from './unit-settings'
+import { coverageSummary, isUniformCoverage, mergeCoverages, type UnitCoverage } from './unit-insurance'
 
 export const PATIENT_MESSAGE_TAG = 'mensagem_paciente'
 
@@ -57,6 +58,8 @@ interface UnitInfo {
   isOutsourced?: boolean // confirmação pela clínica parceira (agendamento terceirizado)
   // Clara por unidade (modo de agenda, dados a coletar, instruções). Ausente = padrão.
   botSettings?: WorkspaceBotSettings
+  // Particular e convênios aceitos nesta unidade. Ausente = o da account (todos).
+  coverage?: UnitCoverage
 }
 
 function isExternalUnit(u: UnitInfo): boolean {
@@ -165,30 +168,52 @@ A agenda atual prevalece sobre o histórico, inclusive sobre confirmações que 
   ]
   const proceduresText = procedureNames.length > 0 ? procedureNames.join(', ') : 'consultas gerais'
 
-  // ── Convênios ──────────────────────────────────────────────────────────────
-  const insuranceText = (() => {
-    if (insurancePlans.length === 0 && config.acceptsPrivate) {
-      return 'Atendimento apenas particular (sem convênios).'
-    }
-    if (insurancePlans.length > 0 && config.acceptsPrivate) {
-      return `Convênios aceitos: ${insurancePlans.join(', ')}. Também atende particular.`
-    }
-    if (insurancePlans.length > 0 && !config.acceptsPrivate) {
-      return `Convênios aceitos: ${insurancePlans.join(', ')}. Não atende particular.`
-    }
-    return 'Consulte a equipe para informações sobre convênios.'
-  })()
+  // ── Convênios (por unidade) ──────────────────────────────────────────────
+  // Unidade sem cobertura própria usa a da account: todos os convênios e o
+  // particular do bot_config. Quando todas as unidades aceitam o mesmo, o
+  // prompt fica igual ao de antes (uma frase para a clínica toda).
+  const accountInsurers = insurers.length > 0 ? insurers : insurancePlans.map((name) => ({ id: '', name }))
+  const coverageOf = (u: UnitInfo): UnitCoverage =>
+    u.coverage ?? { acceptsPrivate: config.acceptsPrivate, insurers: accountInsurers }
+  const unitCoverages = units.map(coverageOf)
+  const uniformCoverage = isUniformCoverage(unitCoverages)
+  const offeredCoverage = uniformCoverage
+    ? (unitCoverages[0] ?? { acceptsPrivate: config.acceptsPrivate, insurers: accountInsurers })
+    : mergeCoverages(unitCoverages)
+  const unitsAccepting = (insurerId: string) =>
+    units.filter((u) => coverageOf(u).insurers.some((i) => i.id === insurerId)).map((u) => u.name)
 
-  const insuranceBookingBlock = insurers.length > 0
+  const insuranceText = uniformCoverage
+    ? coverageSummary(offeredCoverage)
+    : 'Convênios e atendimento particular variam por unidade — veja o que cada unidade aceita em "Unidades".'
+  // Frase da unidade: no prompt uniforme vale a da clínica toda.
+  const unitInsuranceText = (u: UnitInfo) => (uniformCoverage ? insuranceText : coverageSummary(coverageOf(u)))
+
+  const bookableInsurers = offeredCoverage.insurers.filter((i) => i.id)
+  const insuranceBookingBlock = bookableInsurers.length > 0
     ? `\n## Convênio do agendamento
 Operadoras ativas desta clínica:
-${insurers.map((i) => `• ${i.name} (id: ${i.id})`).join('\n')}
+${bookableInsurers
+  .map((i) => `• ${i.name} (id: ${i.id})${uniformCoverage ? '' : ` — aceito em: ${unitsAccepting(i.id).join(', ')}`}`)
+  .join('\n')}
 Quando o paciente informar o próprio convênio, identifique a operadora nesta lista e confirme com ele se houver ambiguidade (por exemplo, duas Unimeds). Uma pergunta como "vocês aceitam Unimed?" não significa que ele escolheu esse convênio: confirme como será o atendimento antes de agendar. Nunca escolha uma operadora só porque ela foi mencionada por outra pessoa.
 Ao confirmar o agendamento, use o convênio escolhido no histórico desta conversa e inclua uma linha isolada:
 CONVENIO_ID: <id>
-Copie exatamente o id da operadora da lista. Nunca invente um id nem mostre esta linha ao paciente. Se o paciente mudar de convênio, use a escolha mais recente. Se optar por particular, inclua CONVENIO_ID: PARTICULAR (somente se a clínica aceita particular). Se ainda não estiver claro se será particular ou convênio, pergunte antes de emitir AGENDAMENTO_CONFIRMADO. Se o convênio não for aceito, explique e ofereça particular apenas quando permitido, ou encaminhe à equipe.
+Copie exatamente o id da operadora da lista. Nunca invente um id nem mostre esta linha ao paciente. Se o paciente mudar de convênio, use a escolha mais recente. Se optar por particular, inclua CONVENIO_ID: PARTICULAR (somente se ${uniformCoverage ? 'a clínica' : 'a unidade escolhida'} aceita particular). Se ainda não estiver claro se será particular ou convênio, pergunte antes de emitir AGENDAMENTO_CONFIRMADO. Se o convênio não for aceito, explique e ofereça particular apenas quando permitido, ou encaminhe à equipe.
 Confirme o nome do convênio junto com a data e o horário. Não peça carteirinha ou senha de autorização neste fluxo; a equipe completa esses dados. Valores da tabela particular não são preços de atendimento pelo convênio.\n`
     : ''
+
+  // Regras quando as unidades aceitam coisas diferentes. Vazio no caso uniforme.
+  const unitCoverageRules = uniformCoverage
+    ? ''
+    : `
+## Convênios e particular por unidade — IMPORTANTE
+Cada unidade aceita convênios diferentes, e nem toda unidade atende particular (veja em "Unidades").
+- Antes de o paciente escolher a unidade, se ele perguntar se aceitam um convênio, diga em quais unidades ele é aceito. Nunca diga só "aceitamos" sem dizer onde.
+- Depois que o paciente escolher a unidade, ofereça só os convênios aceitos nela, e só ofereça particular se ela atende particular.
+- Se o convênio do paciente não for aceito na unidade escolhida, explique. Se outra unidade aceitar, sugira essa unidade. Se não, ofereça particular quando a unidade atender particular, ou encaminhe à equipe.
+- Em CONVENIO_ID use só uma operadora aceita na unidade escolhida, e CONVENIO_ID: PARTICULAR só se essa unidade atende particular.
+`
 
   // ── Unidades ───────────────────────────────────────────────────────────────
   const unitsSection = units
@@ -199,6 +224,7 @@ Confirme o nome do convênio junto com a data e o horário. Não peça carteirin
         u.directionsParking ? `Como chegar/estacionamento: ${u.directionsParking}` : null,
         u.contactInfo ? `Contato: ${u.contactInfo}` : null,
       ].filter(Boolean)
+      if (!uniformCoverage) bits.push(unitInsuranceText(u))
       if (isExternalUnit(u)) {
         bits.push('Agenda externa: você não tem os horários desta unidade (veja "Unidades com agenda externa").')
       } else if (u.isOutsourced) {
@@ -248,7 +274,7 @@ Nessas unidades o horário só fica garantido depois que a clínica parceira con
     ? `
 ## Unidades com agenda externa — IMPORTANTE
 Nestas unidades o doutor atende pela agenda da própria clínica. Você NÃO tem acesso aos horários delas:
-${externalUnits.map((u) => `• ${u.name} (id: ${u.id}) — ${u.address ?? 'endereço não informado'} — ${insuranceText}`).join('\n')}
+${externalUnits.map((u) => `• ${u.name} (id: ${u.id}) — ${u.address ?? 'endereço não informado'} — ${unitInsuranceText(u)}`).join('\n')}
 
 Como agir quando o paciente quer consulta numa dessas unidades:
 1. Informe os locais e os convênios atendidos. Se o paciente perguntar se o doutor atende em um local que não está na lista de Unidades, diga que não atende ali e mostre onde atende.
@@ -398,7 +424,7 @@ ${priceText}
 ${paymentText ? `Formas de pagamento aceitas: ${paymentText}\n` : ''}
 ## Unidades
 ${unitsSection}
-${multiUnit ? 'Sempre confirme com o paciente em qual unidade ele quer ser atendido antes de oferecer horários.\n' : ''}${lockedUnitNote}
+${multiUnit ? 'Sempre confirme com o paciente em qual unidade ele quer ser atendido antes de oferecer horários.\n' : ''}${lockedUnitNote}${unitCoverageRules}
 ${extraInfoSections ? `${extraInfoSections}\n` : ''}
 ## Horários disponíveis para agendamento (agenda real do médico)${multiUnit ? ' — por unidade' : ''}
 ${slotsSection}
@@ -421,7 +447,7 @@ Depois da apresentação, continue normalmente para o passo seguinte do fluxo ab
   }## Fluxo de agendamento — siga esta ordem
 1. Cumprimente o paciente pelo nome se ele se identificar
 ${unitStep}${multiUnit ? '3' : '2'}. Pergunte o motivo da consulta de forma genérica (ex: "É uma consulta inicial ou retorno?")
-${multiUnit ? '4' : '3'}. Verifique se o convênio do paciente é aceito (se ele mencionar)
+${multiUnit ? '4' : '3'}. Verifique se o convênio do paciente é aceito${uniformCoverage ? '' : ' na unidade escolhida'} (se ele mencionar)
 ${multiUnit ? '5' : '4'}. Pergunte qual dia e horário o paciente prefere
 ${multiUnit ? '6' : '5'}. Verifique se o dia/horário pedido está entre os horários disponíveis da unidade escolhida. Se estiver, siga com o agendamento.${noSlotBranch}
 ${multiUnit ? '7' : '6'}. Confirme: nome completo${multiUnit ? ', unidade' : ''} e horário escolhido. Nunca peça o telefone — o sistema já usa automaticamente o número deste WhatsApp

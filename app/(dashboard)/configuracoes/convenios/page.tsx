@@ -6,6 +6,7 @@ import { resolveActiveSession } from '@/lib/session/server'
 import { InsurersSettings } from '@/components/billing/InsurersSettings'
 import type { InsurerRow } from '@/components/billing/InsurerForm'
 import { AcceptsPrivateToggle } from '@/components/configuracoes/AcceptsPrivateToggle'
+import { INSURER_UNITS_SELECT, withWorkspaceIds } from '@/lib/billing/insurer-units'
 
 export default async function ConveniosSettingsPage() {
   const session = await resolveActiveSession()
@@ -16,22 +17,24 @@ export default async function ConveniosSettingsPage() {
   const billingEnabled = session.accountModules.includes('billing')
 
   const supabase = await createClient()
-  const [{ data: insurers }, { data: workspaces }, { data: botConfig }] = await Promise.all([
+  // Cada convênio vem com as unidades que o aceitam; cada unidade diz se atende particular.
+  const [{ data: insurers }, { data: workspaces }] = await Promise.all([
     supabase
       .from('health_insurers')
       .select(
-        'id, name, ans_registry, provider_code, tiss_version, default_consult_guide, batch_weekdays, batch_hour, max_guides_per_batch, is_active',
+        'id, name, ans_registry, provider_code, tiss_version, default_consult_guide, batch_weekdays, batch_hour, max_guides_per_batch, is_active, ' +
+          INSURER_UNITS_SELECT,
       )
       .eq('account_id', session.accountId)
       .order('name'),
     supabase
       .from('workspaces')
-      .select('id, name, cnes, cnpj, legal_name')
+      .select('id, name, cnes, cnpj, legal_name, accepts_private')
       .eq('account_id', session.accountId)
       .eq('is_active', true)
       .order('display_order'),
-    supabase.from('bot_config').select('accepts_private').eq('account_id', session.accountId).maybeSingle(),
   ])
+  const insurerRows = ((insurers ?? []) as unknown as Parameters<typeof withWorkspaceIds>[0][]).map(withWorkspaceIds)
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -47,14 +50,16 @@ export default async function ConveniosSettingsPage() {
         <p className="text-sm text-gray-400">
           {billingEnabled
             ? 'Operadoras, tabela TUSS e dados do prestador para o faturamento TISS.'
-            : 'Convênios aceitos e atendimento particular — a Clara usa estas informações com o paciente.'}
+            : 'Convênios aceitos e atendimento particular de cada unidade — a Clara e a Agenda usam estas informações.'}
         </p>
       </div>
 
-      <AcceptsPrivateToggle initialValue={botConfig?.accepts_private ?? true} />
+      <AcceptsPrivateToggle
+        units={(workspaces ?? []).map((w) => ({ id: w.id, name: w.name, accepts_private: w.accepts_private }))}
+      />
 
       <InsurersSettings
-        initialInsurers={(insurers ?? []) as InsurerRow[]}
+        initialInsurers={insurerRows as unknown as InsurerRow[]}
         workspaces={workspaces ?? []}
         billingEnabled={billingEnabled}
       />

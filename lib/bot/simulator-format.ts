@@ -87,6 +87,8 @@ export function describeEffect(effect: AgentEffect): string {
           return `Bloqueado: falta ${joinPt((effect.fields ?? []).map(fieldLabel))}`
         case 'insurance_unclear':
           return 'Bloqueado: convênio não confirmado (a Clara pede o convênio antes de agendar)'
+        case 'insurance_not_accepted':
+          return 'Bloqueado: a unidade não aceita o convênio escolhido (ou não atende particular). A Clara explica e oferece as opções'
         case 'unit_required':
           return 'Bloqueado: horário confirmado sem unidade (a Clara pergunta a unidade)'
         case 'discount_not_configured':

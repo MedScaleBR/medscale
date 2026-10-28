@@ -21,7 +21,7 @@ import {
 } from '@/lib/bot/unit-settings'
 import { missingOutsourcedFields, type OutsourcedMissingField } from '@/lib/outsourced/config'
 import { missingDataMessage, requestedMessage } from '@/lib/outsourced/messages'
-import { isExternalUnit, type AgentContext, type AgentPatient } from '@/lib/llm/agent-context'
+import { coverageFor, isExternalUnit, type AgentContext, type AgentPatient } from '@/lib/llm/agent-context'
 import type { ExternalRequestSummary, HandoffTriggerReason } from '@/types/database'
 
 // Etapa 3 do agente: ler a resposta crua do Claude, validar os marcadores e
@@ -43,6 +43,34 @@ export const CANCELLATION_FAILED_MESSAGE =
   'Não encontrei essa consulta no sistema para cancelar agora. Pode confirmar comigo a data e o horário certos? Se preferir, chamo alguém da equipe para te ajudar.'
 
 const MAX_INTAKE_TEXT = 200
+
+/**
+ * A escolha de pagamento não vale na unidade: diz o motivo e o que dá para
+ * fazer — outra unidade que aceita o convênio, particular, ou outro convênio.
+ */
+function insuranceNotAcceptedMessage(
+  ctx: Pick<AgentContext, 'coverageByUnit' | 'units' | 'unitById'>,
+  unitId: string,
+  insurer: { id: string; name: string } | null
+): string {
+  const unitName = ctx.unitById.get(unitId)?.name ?? 'esta unidade'
+  const coverage = coverageFor(ctx, unitId)
+  if (!insurer) {
+    return coverage.insurers.length > 0
+      ? `A unidade ${unitName} não atende particular. Pode me dizer qual é o seu convênio? Lá aceitamos ${coverage.insurers.map((i) => i.name).join(', ')}.`
+      : `A unidade ${unitName} não atende particular. Quer que eu chame alguém da equipe para te ajudar?`
+  }
+  const otherUnits = ctx.units
+    .filter((u) => u.id !== unitId && coverageFor(ctx, u.id).insurers.some((i) => i.id === insurer.id))
+    .map((u) => u.name)
+  const options = [
+    otherUnits.length > 0 ? `marcar na unidade ${otherUnits.join(' ou ')}, que aceita ${insurer.name}` : null,
+    coverage.acceptsPrivate ? `fazer a consulta particular na ${unitName}` : null,
+  ].filter(Boolean)
+  return options.length > 0
+    ? `A unidade ${unitName} não atende pelo ${insurer.name}. Se preferir, dá para ${options.join(', ou ')}. Como prefere?`
+    : `A unidade ${unitName} não atende pelo ${insurer.name}. Quer que eu chame alguém da equipe para te ajudar?`
+}
 const BOOKING_DURATION_MIN = 30
 
 export type PatientField = 'full_name' | 'birth_date' | 'cpf' | 'email' | 'insurance_card_number'
@@ -53,6 +81,7 @@ type Insurer = { id: string; name: string }
 export type BlockReason =
   | 'missing_fields'
   | 'insurance_unclear'
+  | 'insurance_not_accepted'
   | 'unit_required'
   | 'outsourced_missing_data'
   | 'discount_not_configured'
@@ -316,15 +345,31 @@ export async function planEffects(
     insuranceChoice && insuranceChoice !== 'PARTICULAR'
       ? ctx.insurers.find((i) => i.id.toLowerCase() === insuranceChoice.toLowerCase()) ?? null
       : null
+  // O que a unidade do agendamento aceita (particular e convênios ligados a ela).
+  const bookingCoverage = coverageFor(ctx, requestedBookingUnitId)
+  // Convênio válido, mas não aceito na unidade (ou particular onde não há particular).
+  const insuranceNotAccepted =
+    confirmedDate !== null &&
+    !ctx.insurersError &&
+    !!requestedBookingUnitId &&
+    (selectedInsurer
+      ? !bookingCoverage.insurers.some((i) => i.id === selectedInsurer.id)
+      : insuranceChoice === 'PARTICULAR' && !bookingCoverage.acceptsPrivate)
   const insuranceNeedsClarification =
     confirmedDate !== null &&
     (ctx.insurersError ||
+      insuranceNotAccepted ||
       (insuranceChoice === null
-        ? ctx.insurers.length > 0 || !botConfig.acceptsPrivate
+        ? bookingCoverage.insurers.length > 0 || !bookingCoverage.acceptsPrivate
         : insuranceChoice === 'PARTICULAR'
-          ? !botConfig.acceptsPrivate
+          ? !bookingCoverage.acceptsPrivate
           : !selectedInsurer))
-  if (insuranceNeedsClarification) effects.push({ kind: 'blocked', reason: 'insurance_unclear' })
+  if (insuranceNotAccepted) {
+    console.warn(`[insurance] escolha não aceita na unidade workspace=${requestedBookingUnitId}`)
+    effects.push({ kind: 'blocked', reason: 'insurance_not_accepted', workspace_id: requestedBookingUnitId ?? undefined })
+  } else if (insuranceNeedsClarification) {
+    effects.push({ kind: 'blocked', reason: 'insurance_unclear' })
+  }
 
   // Unidade envolvida nesta troca (agendamento, ou contexto atual da conversa).
   let resolvedUnitId: string | null = conversationUnitId ?? singleUnitId
@@ -459,13 +504,16 @@ export async function planEffects(
       effects.push({ kind: 'ignored_marker', marker: 'SOLICITACAO_AGENDAMENTO', reason: 'internal_unit', workspace_id: requestUnit.id })
     } else {
       const fields = requestUnit.botSettings.intakeFields
+      const requestCoverage = coverageFor(ctx, requestUnit.id)
       const particular =
-        botConfig.acceptsPrivate &&
-        (insuranceChoice === 'PARTICULAR' || (insuranceChoice === null && ctx.insurers.length === 0))
+        requestCoverage.acceptsPrivate &&
+        (insuranceChoice === 'PARTICULAR' || (insuranceChoice === null && requestCoverage.insurers.length === 0))
+      // Convênio que a unidade não aceita conta como não resolvido: a Clara pergunta de novo.
+      const insurerAccepted = !!selectedInsurer && requestCoverage.insurers.some((i) => i.id === selectedInsurer.id)
       const missing = missingIntakeFields(fields, {
         fullName: patient?.full_name ?? null,
         birthDate: patient?.birth_date ?? null,
-        insuranceResolved: !ctx.insurersError && (particular || !!selectedInsurer),
+        insuranceResolved: !ctx.insurersError && (particular || insurerAccepted),
         particular,
         cardNumber: intake.cardNumber,
         cpf: intake.cpf,
@@ -487,7 +535,7 @@ export async function planEffects(
         if (fields.includes('birth_date')) summary.birth_date = patient!.birth_date!
         if (fields.includes('insurance')) {
           summary.particular = particular
-          if (!particular && selectedInsurer) {
+          if (!particular && selectedInsurer && insurerAccepted) {
             summary.insurance = { convenio_id: selectedInsurer.id, name: selectedInsurer.name, card_number: intake.cardNumber }
           }
         }
@@ -529,8 +577,10 @@ export async function planEffects(
 
   const fixed = externalBookingBlocked
     ? EXTERNAL_BOOKING_BLOCKED_MESSAGE
+    : insuranceNotAccepted
+      ? insuranceNotAcceptedMessage(ctx, requestedBookingUnitId!, selectedInsurer)
     : insuranceNeedsClarification
-      ? botConfig.acceptsPrivate
+      ? bookingCoverage.acceptsPrivate
         ? 'Antes de confirmar o agendamento, pode confirmar qual é o seu convênio ou se prefere atendimento particular?'
         : 'Antes de confirmar o agendamento, pode confirmar qual é o seu convênio? A equipe pode ajudar a verificar o atendimento.'
       : unitRequired || externalRequestUnitRequired
