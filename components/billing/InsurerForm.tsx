@@ -154,9 +154,13 @@ function InsurerFormBody({
         </div>
         {billingEnabled && (
           <>
+        <p className="text-xs text-gray-400">
+          Só o nome é obrigatório. Sem registro ANS e código do prestador o convênio vale na agenda e na Clara, mas não
+          gera guias nem lotes TISS.
+        </p>
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <Label htmlFor="ans_registry">Registro ANS</Label>
+            <Label htmlFor="ans_registry">Registro ANS (opcional)</Label>
             <Input
               id="ans_registry"
               inputMode="numeric"
@@ -167,7 +171,7 @@ function InsurerFormBody({
             />
           </div>
           <div>
-            <Label htmlFor="provider_code">Código do prestador</Label>
+            <Label htmlFor="provider_code">Código do prestador (opcional)</Label>
             <Input
               id="provider_code"
               maxLength={14}

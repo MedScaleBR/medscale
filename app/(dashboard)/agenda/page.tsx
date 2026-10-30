@@ -70,9 +70,10 @@ export default async function AgendaPage() {
     insurer_ids: insurerRows.filter((i) => !i.workspace_ids || i.workspace_ids.includes(w.id)).map((i) => i.id),
     health_plans: insurerRows.filter((i) => !i.workspace_ids || i.workspace_ids.includes(w.id)).map((i) => i.name),
   }))
-  // Com billing, só operadoras com registro ANS e código do prestador (prontas p/ TISS).
+  // Com billing, todos os convênios; os sem registro ANS/código do prestador
+  // podem ser usados na consulta, mas não geram guia TISS (billable: false).
   const billingInsurers = session.accountModules.includes('billing')
-    ? (insurerRows ?? []).filter(hasTissIdentity).map(({ id, name }) => ({ id, name }))
+    ? (insurerRows ?? []).map((i) => ({ id: i.id, name: i.name, billable: hasTissIdentity(i) }))
     : []
 
   return (

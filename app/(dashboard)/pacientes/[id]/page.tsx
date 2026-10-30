@@ -90,7 +90,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
       {showBilling && (
         <PatientInsurances
           patientId={patient.id}
-          insurers={(insurers ?? []).filter(hasTissIdentity).map(({ id, name }) => ({ id, name }))}
+          insurers={(insurers ?? []).map((i) => ({ id: i.id, name: i.name, billable: hasTissIdentity(i) }))}
           initialInsurances={(insurances ?? []) as unknown as PatientInsuranceRow[]}
         />
       )}
