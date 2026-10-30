@@ -171,3 +171,18 @@ describe('prompt — agenda externa sem particular', () => {
     expect(block).not.toContain('convênio ou particular')
   })
 })
+
+describe('prompt — unidade sem particular', () => {
+  it('proíbe oferecer particular na unidade que não atende', () => {
+    const prompt = build([
+      { id: 'w1', name: 'Centro', ...base, coverage: { acceptsPrivate: true, insurers: [{ id: 'i1', name: 'Bradesco Saúde' }] } },
+      {
+        id: 'w3', name: 'Dr. Exemplo', ...base,
+        botSettings: external(['full_name', 'insurance']),
+        coverage: { acceptsPrivate: false, insurers: [{ id: 'i1', name: 'Bradesco Saúde' }] },
+      },
+    ])
+    expect(prompt).toContain('Nunca escreva "ou particular"')
+    expect(prompt).toMatch(/• Dr\. Exemplo \(id: w3\).*NÃO atende particular: nunca ofereça particular nesta unidade\./)
+  })
+})
