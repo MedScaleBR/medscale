@@ -178,6 +178,7 @@ describe('processIncomingMessage — agendamento pelo bot', () => {
       patient_phone: PARAMS.patientPhone,
       scheduled_at: SLOT_ISO,
       duration_min: 30,
+      type: 'consulta', // sem histórico: primeira consulta
       source: 'bot',
       status: 'agendado',
       // Ciclo de receita: sem catálogo de procedimentos e sem preço-base
@@ -186,6 +187,41 @@ describe('processIncomingMessage — agendamento pelo bot', () => {
       procedure_name: null,
       price: null,
     })
+  })
+
+  it('grava retorno quando o paciente teve consulta realizada nos últimos 30 dias', async () => {
+    const supabase = mergeSupabaseConfig({
+      appointments: {
+        // Só a busca do histórico (scheduled_at < agora) devolve a consulta realizada.
+        select: (call) => call.filters.some((f) => f[0] === 'lt' && f[1] === 'scheduled_at')
+          ? { data: [{ scheduled_at: '2025-09-01T13:00:00.000Z', status: 'realizado' }] }
+          : { data: [] },
+        insert: { data: APPT },
+        update: { data: null },
+      },
+    })
+    state.claudeResponses = [`Confirmado!\nAGENDAMENTO_CONFIRMADO: ${SLOT}`]
+
+    await processIncomingMessage(PARAMS)
+
+    expect(supabase.callsTo('appointments', 'insert')[0]?.payload).toMatchObject({ type: 'retorno' })
+  })
+
+  it('sem como saber (última realizada há mais de 30 dias): grava o tipo vazio', async () => {
+    const supabase = mergeSupabaseConfig({
+      appointments: {
+        select: (call) => call.filters.some((f) => f[0] === 'lt' && f[1] === 'scheduled_at')
+          ? { data: [{ scheduled_at: '2025-06-01T13:00:00.000Z', status: 'realizado' }] }
+          : { data: [] },
+        insert: { data: APPT },
+        update: { data: null },
+      },
+    })
+    state.claudeResponses = [`Confirmado!\nAGENDAMENTO_CONFIRMADO: ${SLOT}`]
+
+    await processIncomingMessage(PARAMS)
+
+    expect(supabase.callsTo('appointments', 'insert')[0]?.payload).toMatchObject({ type: null })
   })
 
   it('deve associar a consulta criada à conversa correta', async () => {

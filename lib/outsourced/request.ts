@@ -6,6 +6,7 @@ import { isGoogleConnected } from '@/lib/google/auth'
 import { createEvent, deleteEvent } from '@/lib/google/calendar'
 import { trackAppointmentBookedByBot } from '@/lib/analytics/posthog-server'
 import { notifyOutsourcedIssue } from '@/lib/outsourced/notify'
+import { calendarTypeText, resolveBotAppointmentType } from '@/lib/appointment-type'
 import {
   TEMPLATE_SOLICITACAO_AGENDAMENTO,
   buildSolicitacaoParams,
@@ -60,6 +61,13 @@ export async function requestExternalConfirmation(input: ExternalRequestInput): 
   if (existing) return { kind: 'already_pending' }
 
   // 2. Consulta pendente. Sem receita prevista até a clínica confirmar.
+  // Primeira consulta ou retorno pelo histórico; sem certeza, fica vazio.
+  const appointmentType = await resolveBotAppointmentType(supabase, {
+    accountId,
+    patientId: patient.id,
+    scheduledAt,
+    now: new Date(),
+  })
   const { data: appt } = await supabase
     .from('appointments')
     .insert({
@@ -70,6 +78,7 @@ export async function requestExternalConfirmation(input: ExternalRequestInput): 
       patient_phone: input.patientPhone,
       scheduled_at: scheduledAt.toISOString(),
       duration_min: durationMin,
+      type: appointmentType,
       source: 'bot',
       status: PENDING_EXTERNAL_STATUS,
       external_requested_at: new Date().toISOString(),
@@ -105,7 +114,7 @@ export async function requestExternalConfirmation(input: ExternalRequestInput): 
         workspaceId: unit.id,
         patientName: appt.patient_name,
         patientPhone: appt.patient_phone,
-        appointmentType: appt.type,
+        appointmentType: calendarTypeText(appt.type),
         startTime: scheduledAt,
         durationMin,
         workspaceName: unit.name,

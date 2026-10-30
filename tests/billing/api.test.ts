@@ -98,6 +98,16 @@ describe('acesso às rotas /api/billing', () => {
     expect(call.payload).toEqual({ name: 'Unimed', account_id: 'acc1' })
   })
 
+  it('com o módulo billing, cadastra convênio só com o nome (sem dados TISS)', async () => {
+    setup({ health_insurers: { insert: { data: { id: 'ins1', name: 'Unimed' } } } })
+
+    const res = await createInsurer(req('/api/billing/insurers', json({ name: 'Unimed', ans_registry: '', provider_code: '' })))
+
+    expect(res.status).toBe(201)
+    const [call] = g.supabase.callsTo('health_insurers', 'insert')
+    expect(call.payload).toMatchObject({ name: 'Unimed', ans_registry: null, provider_code: null })
+  })
+
   it('member não pode cadastrar operadora', async () => {
     g.session = { ...OWNER, role: 'member' }
     const res = await createInsurer(req('/api/billing/insurers', json({ name: 'X', ans_registry: '123456', provider_code: 'P' })))

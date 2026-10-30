@@ -60,7 +60,7 @@ export function buildGuidePayload(src: GuideSources): GuidePayload {
     service: {
       date: saoPauloDate(src.appointment.scheduled_at),
       guide_type: guideType,
-      is_return: src.appointment.type === 'retorno',
+      is_return: src.appointment.type === null ? null : src.appointment.type === 'retorno',
       tuss_code: blank(src.procedure?.tuss_code),
       description: blank(src.procedure?.description),
       price_cents: src.procedure?.price_cents ?? 0,
@@ -90,6 +90,7 @@ export function computeMissingFields(payload: GuidePayload): MissingField[] {
   if (!professional.cbo_code || !/^\d{6}$/.test(professional.cbo_code)) missing.push('professional.cbo_code')
   if (!service.tuss_code) missing.push('service.tuss_code')
   if (sadt && !service.description) missing.push('service.description')
+  if (service.is_return === null) missing.push('service.consultation_type')
   if (sadt && service.authorization_number && !service.authorization_date) {
     missing.push('service.authorization_date')
   }

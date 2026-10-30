@@ -12,8 +12,8 @@ const isGuideType = (v: unknown): v is GuideType => v === 'consulta' || v === 's
 
 export interface InsurerInput {
   name?: string
-  ans_registry?: string
-  provider_code?: string
+  ans_registry?: string | null
+  provider_code?: string | null
   tiss_version?: string
   default_consult_guide?: GuideType
   batch_weekdays?: number[]
@@ -39,18 +39,21 @@ export function parseInsurerInput(
     if (!name) return { ok: false, error: 'Nome da operadora é obrigatório.' }
     out.name = name.slice(0, 120)
   }
-  if (has('ans_registry')) {
+  // Registro ANS e código do prestador são opcionais: sem eles o convênio
+  // funciona na agenda e na Clara, mas não entra no faturamento (ver
+  // hasTissIdentity). Vazio grava null; preenchido precisa estar no formato.
+  if (tiss && 'ans_registry' in body) {
     const ans = str(body.ans_registry)
-    if (!/^\d{6}$/.test(ans)) return { ok: false, error: 'Registro ANS deve ter exatamente 6 dígitos.' }
-    out.ans_registry = ans
+    if (ans && !/^\d{6}$/.test(ans)) return { ok: false, error: 'Registro ANS deve ter exatamente 6 dígitos.' }
+    out.ans_registry = ans || null
   }
-  if (has('provider_code')) {
+  if (tiss && 'provider_code' in body) {
     const code = str(body.provider_code)
     // codigoPrestadorNaOperadora é st_texto14 no XSD.
-    if (!code || code.length > 14) {
-      return { ok: false, error: 'Código do prestador na operadora é obrigatório (até 14 caracteres).' }
+    if (code.length > 14) {
+      return { ok: false, error: 'Código do prestador na operadora deve ter até 14 caracteres.' }
     }
-    out.provider_code = code
+    out.provider_code = code || null
   }
   if ('tiss_version' in body) {
     if (!(SUPPORTED_TISS_VERSIONS as readonly unknown[]).includes(body.tiss_version)) {

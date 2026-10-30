@@ -3,6 +3,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendWhatsAppMessage } from '@/lib/whatsapp/send'
 import { decryptToken } from '@/lib/crypto'
 import { isSlotAvailable } from '@/lib/google/availability'
+import { calendarTypeText, resolveBotAppointmentType } from '@/lib/appointment-type'
 import { isGoogleConnected } from '@/lib/google/auth'
 import { cancelEvent, createEvent, deleteEvent } from '@/lib/google/calendar'
 import { getBotConfig, getAccountUnits } from '@/lib/bot/config'
@@ -629,6 +630,14 @@ async function bookAppointment(
     return false
   }
 
+  // Primeira consulta ou retorno pelo histórico; sem certeza, fica vazio.
+  const appointmentType = await resolveBotAppointmentType(supabase, {
+    accountId,
+    patientId: patient?.id,
+    scheduledAt,
+    now: ctx.now,
+  })
+
   const { data: appt } = await supabase
     .from('appointments')
     .insert({
@@ -639,6 +648,7 @@ async function bookAppointment(
       patient_phone: patientPhone,
       scheduled_at: scheduledAt.toISOString(),
       duration_min: durationMin,
+      type: appointmentType,
       source: 'bot',
       status: 'agendado',
       procedure_id: resolvedProcedure?.id ?? null,
@@ -698,7 +708,7 @@ async function bookAppointment(
         workspaceId: bookingUnitId,
         patientName: appt.patient_name,
         patientPhone: appt.patient_phone,
-        appointmentType: appt.type,
+        appointmentType: calendarTypeText(appt.type),
         startTime: scheduledAt,
         durationMin,
         workspaceName: unitById.get(bookingUnitId)?.name ?? accountName,

@@ -770,7 +770,7 @@ export interface Database {
           patient_phone: string
           scheduled_at: string
           duration_min: number
-          type: AppointmentType
+          type: AppointmentType | null // null = não definido (a Clara não conseguiu identificar)
           source: AppointmentSource
           status: AppointmentStatus
           notes: string | null

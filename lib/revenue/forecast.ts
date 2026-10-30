@@ -1,4 +1,5 @@
-import { PENDING_EXTERNAL_STATUS, type AppointmentType, type Database } from '@/types/database'
+import { appointmentTypeLabel } from '@/lib/appointment-type'
+import { PENDING_EXTERNAL_STATUS, type Database } from '@/types/database'
 
 export type ForecastAppointment = Pick<Database['public']['Tables']['appointments']['Row'],
   'type' | 'status' | 'procedure_id' | 'procedure_name' | 'price' | 'health_plan'>
@@ -11,10 +12,6 @@ export interface RevenueForecast {
   rows: { key: string; name: string; quantity: number; unitPrice: number | null; total: number }[]
 }
 
-const TYPE_LABELS: Record<AppointmentType, string> = {
-  consulta: 'Consulta', retorno: 'Retorno', avaliacao: 'Avaliação',
-  procedimento: 'Procedimento', outro: 'Outro',
-}
 
 // Usa o preço combinado na consulta, preservando descontos e preços históricos.
 // Valores diferentes do mesmo procedimento aparecem em linhas separadas.
@@ -34,7 +31,7 @@ export function summarizeAppointmentForecast(appointments: ForecastAppointment[]
     const cents = price != null && Number.isFinite(price) && price >= 0 ? Math.round(price * 100) : null
     if (cents == null) missingPrice++
     quantity++
-    const name = appointment.procedure_name?.trim() || TYPE_LABELS[appointment.type]
+    const name = appointment.procedure_name?.trim() || appointmentTypeLabel(appointment.type)
     const key = JSON.stringify([appointment.procedure_id, name, cents])
     const row = groups.get(key) ?? { key, name, quantity: 0, unitPrice: cents == null ? null : cents / 100, total: 0 }
     row.quantity++

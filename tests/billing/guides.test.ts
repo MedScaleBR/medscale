@@ -74,6 +74,14 @@ describe('buildGuidePayload / computeMissingFields', () => {
     expect(buildGuidePayload(src).service.is_return).toBe(true)
   })
 
+  it('tipo da consulta não definido deixa a guia pendente', () => {
+    const src = { ...SOURCES, appointment: { ...SOURCES.appointment, type: null } }
+    const payload = buildGuidePayload(src)
+    expect(payload.service.is_return).toBeNull()
+    expect(computeMissingFields(payload)).toEqual(['service.consultation_type'])
+    expect(statusForMissing(computeMissingFields(payload))).toBe('draft')
+  })
+
   it('não deve apontar nada faltando numa guia completa', () => {
     const missing = computeMissingFields(buildGuidePayload(SOURCES))
     expect(missing).toEqual([])
