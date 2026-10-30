@@ -106,6 +106,9 @@ export interface ParsedMarkers {
   messageForPatient: string
 }
 
+// Carimbo que buildClaudeMessages põe em cada mensagem do histórico.
+const HISTORY_TIMESTAMP = /^[ \t]*\[Mensagem (?:enviada em [^\]\n]*|sem data registrada[^\]\n]*)\][ \t]*\n?/gm
+
 export function parseMarkers(rawMessage: string): ParsedMarkers {
   const confirmMatch = rawMessage.match(CONFIRMATION_MARKER)
   const cancelMatch = rawMessage.match(CANCELLATION_MARKER)
@@ -122,6 +125,8 @@ export function parseMarkers(rawMessage: string): ParsedMarkers {
   const patientName = nameMatch?.[1]?.trim() || null
 
   const cleanedMessage = rawMessage
+    // O histórico chega com "[Mensagem enviada em …]"; a Clara às vezes copia.
+    .replace(HISTORY_TIMESTAMP, '')
     .replace(CONFIRMATION_MARKER, '')
     .replace(CANCELLATION_MARKER, '')
     .replace(PROCEDURE_ID_MARKER, '')

@@ -3,7 +3,7 @@ import { formatWorkingDays, hasWorkingDays, type UnitWorkingDays } from '@/lib/b
 import { BOT_NAME } from './constants'
 import {
   botInstructionsProblem,
-  INTAKE_FIELD_PROMPT,
+  intakeFieldPrompt,
   INTAKE_FIELDS,
   type IntakeField,
   type WorkspaceBotSettings,
@@ -78,8 +78,8 @@ function slotUnitsWithDays(units: UnitInfo[]): boolean {
   return units.some((u) => !isExternalUnit(u))
 }
 
-function intakeList(fields: readonly IntakeField[], indent: string): string {
-  return fields.map((f) => `${indent}- ${INTAKE_FIELD_PROMPT[f]}`).join('\n')
+function intakeList(fields: readonly IntakeField[], indent: string, coverage?: UnitCoverage): string {
+  return fields.map((f) => `${indent}- ${intakeFieldPrompt(f, coverage)}`).join('\n')
 }
 
 // Linha de marcador de cada dado coletado, na ordem canônica.
@@ -223,6 +223,7 @@ Confirme o nome do convênio junto com a data e o horário. Não peça carteirin
 Cada unidade aceita convênios diferentes, e nem toda unidade atende particular (veja em "Unidades").
 - Antes de o paciente escolher a unidade, se ele perguntar se aceitam um convênio, diga em quais unidades ele é aceito. Nunca diga só "aceitamos" sem dizer onde.
 - Depois que o paciente escolher a unidade, ofereça só os convênios aceitos nela, e só ofereça particular se ela atende particular.
+- Numa unidade que não atende particular, ao perguntar como será o atendimento, pergunte só qual é o convênio do paciente (dentre os aceitos nela). Nunca escreva "ou particular", "ou prefere particular" nem nada parecido para essa unidade — isso vale também quando você pede os dados para passar à equipe.
 - Se o convênio do paciente não for aceito na unidade escolhida, explique. Se outra unidade aceitar, sugira essa unidade. Se não, ofereça particular quando a unidade atender particular, ou encaminhe à equipe.
 - Em CONVENIO_ID use só uma operadora aceita na unidade escolhida, e CONVENIO_ID: PARTICULAR só se essa unidade atende particular.
 `
@@ -304,13 +305,13 @@ Nessas unidades o horário só fica garantido depois que a clínica parceira con
     ? `
 ## Unidades com agenda externa — IMPORTANTE
 Nestas unidades o doutor atende pela agenda da própria clínica. Você NÃO tem acesso aos horários delas:
-${externalUnits.map((u) => `• ${u.name} (id: ${u.id}) — ${u.address ?? 'endereço não informado'} — ${unitInsuranceText(u)}`).join('\n')}
+${externalUnits.map((u) => `• ${u.name} (id: ${u.id}) — ${u.address ?? 'endereço não informado'} — ${unitInsuranceText(u)}${coverageOf(u).acceptsPrivate ? '' : ' NÃO atende particular: nunca ofereça particular nesta unidade.'}`).join('\n')}
 
 Como agir quando o paciente quer consulta numa dessas unidades:
 1. Informe os locais e os convênios atendidos. Se o paciente perguntar se o doutor atende em um local que não está na lista de Unidades, diga que não atende ali e mostre onde atende.
 2. Nunca ofereça, sugira, invente ou confirme data ou horário para essas unidades. Nunca diga que a consulta está marcada. Se o paciente pedir horário, explique que a equipe confere a agenda da clínica e confirma com ele por aqui — mas, se a unidade tiver "Dias de atendimento", diga quais são esses dias. Para essas unidades, NUNCA emita AGENDAMENTO_CONFIRMADO nem LISTA_ESPERA.
 3. Se o paciente quiser agendar, peça os dados abaixo de forma natural e sem fazer parecer um formulário (pode juntar dois itens numa mesma mensagem):
-${externalUnits.map((u) => `   ${u.name} →\n${intakeList(u.botSettings!.intakeFields, '     ')}`).join('\n')}
+${externalUnits.map((u) => `   ${u.name} →\n${intakeList(u.botSettings!.intakeFields, '     ', coverageOf(u))}`).join('\n')}
    O telefone é o desta conversa: não pergunte. Só peça outro se o paciente disser que o contato é de outra pessoa.
    Peça somente os dados da lista daquela unidade. Se o paciente oferecer outro dado (como CPF), agradeça e diga que não é necessário.
 4. Quando tiver tudo, faça um resumo curto dos dados para o paciente confirmar. Com a confirmação, avise que vai passar para a equipe confirmar o horário e emita UNIDADE_ID, os marcadores dos dados coletados (cada um em sua linha, no formato de "Formato dos dados coletados") e, por último, uma linha isolada com SOLICITACAO_AGENDAMENTO.
@@ -325,7 +326,7 @@ ${externalUnits.map((u) => `   ${u.name} →\n${intakeList(u.botSettings!.intake
       return `
 ## Dados a coletar antes de agendar — ${u.name}
 Antes de emitir AGENDAMENTO_CONFIRMADO para esta unidade, garanta que você tem:
-${intakeList(fields, '')}
+${intakeList(fields, '', coverageOf(u))}
 Peça o que faltar de forma natural, depois que o paciente escolher o horário. Emita os marcadores desses dados junto com o AGENDAMENTO_CONFIRMADO.${
         fields.includes('insurance')
           ? '\nNesta unidade, se for convênio, peça também o número da carteirinha (vale acima da orientação de não pedir carteirinha).'

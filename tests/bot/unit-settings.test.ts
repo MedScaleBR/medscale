@@ -3,6 +3,8 @@ import {
   BOT_INSTRUCTIONS_INJECTION_ERROR,
   formatExternalRequestSummary,
   getWorkspaceBotSettings,
+  INTAKE_FIELD_PROMPT,
+  intakeFieldPrompt,
   intakeMissingMessage,
   missingIntakeFields,
   normalizeIntakeFields,
@@ -219,5 +221,42 @@ describe('parseMarkers — dados da coleta', () => {
   it('resposta comum continua sem nenhum dado novo', () => {
     const m = parseMarkers('Oi! Como posso ajudar?')
     expect(m).toMatchObject({ isoBirthDate: null, cpf: null, schedulingRequested: false, messageForPatient: 'Oi! Como posso ajudar?' })
+  })
+})
+
+describe('pedido do convênio conforme a unidade', () => {
+  const insurer = { id: 'i1', name: 'Bradesco' }
+
+  it('unidade sem particular não oferece particular', () => {
+    const text = intakeFieldPrompt('insurance', { acceptsPrivate: false, insurers: [insurer] })
+    expect(text).not.toContain('ou particular')
+    expect(text).toContain('não atende particular')
+  })
+
+  it('unidade só particular não pergunta convênio', () => {
+    expect(intakeFieldPrompt('insurance', { acceptsPrivate: true, insurers: [] })).toContain('não atende convênio')
+  })
+
+  it('unidade com os dois mantém o texto padrão', () => {
+    expect(intakeFieldPrompt('insurance', { acceptsPrivate: true, insurers: [insurer] })).toBe(INTAKE_FIELD_PROMPT.insurance)
+    expect(intakeFieldPrompt('full_name', { acceptsPrivate: false, insurers: [] })).toBe('nome completo')
+  })
+
+  it('mensagem de dado faltando também respeita a unidade', () => {
+    const msg = intakeMissingMessage(['insurance'], { acceptsPrivate: false, insurers: [insurer] })
+    expect(msg).not.toContain('ou particular')
+    expect(intakeMissingMessage(['insurance'])).toContain('convênio ou particular')
+  })
+})
+
+describe('carimbo de data do histórico', () => {
+  it('nunca vai para o paciente', () => {
+    const raw = '[Mensagem enviada em 30/10/2026, 16:13 (America/Sao_Paulo)]\n\nPerfeito! Você tem convênio?'
+    expect(parseMarkers(raw).messageForPatient).toBe('Perfeito! Você tem convênio?')
+    expect(parseMarkers('[Mensagem sem data registrada; referências como "amanhã" não determinam a data atual.]\nOi!').messageForPatient).toBe('Oi!')
+  })
+
+  it('não mexe em colchetes que não são o carimbo', () => {
+    expect(parseMarkers('Leve [exames anteriores] na consulta.').messageForPatient).toBe('Leve [exames anteriores] na consulta.')
   })
 })

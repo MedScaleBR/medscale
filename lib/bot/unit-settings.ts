@@ -3,6 +3,7 @@
 // agente, pela rota de /admin e pelos componentes de tela.
 import type { ExternalRequestSummary, IntakeField, SchedulingMode } from '@/types/database'
 import { detectInjectionAttempt } from './security'
+import type { UnitCoverage } from './unit-insurance'
 
 export type { IntakeField, SchedulingMode }
 
@@ -39,6 +40,18 @@ export const INTAKE_FIELD_PROMPT: Record<IntakeField, string> = {
   email: 'e-mail',
   reason: 'motivo da consulta, em poucas palavras',
   preference: 'dia ou período de preferência',
+}
+
+/**
+ * Como pedir um dado à unidade. Só o convênio muda: a unidade que não atende
+ * particular não pode oferecer particular, e a que só atende particular não
+ * pergunta convênio. Sem cobertura conhecida, vale o texto padrão.
+ */
+export function intakeFieldPrompt(field: IntakeField, coverage?: Pick<UnitCoverage, 'acceptsPrivate' | 'insurers'>): string {
+  if (field !== 'insurance' || !coverage) return INTAKE_FIELD_PROMPT[field]
+  if (!coverage.acceptsPrivate) return 'convênio e o número da carteirinha (esta unidade não atende particular)'
+  if (coverage.insurers.length === 0) return 'confirmação de que o atendimento será particular (esta unidade não atende convênio)'
+  return INTAKE_FIELD_PROMPT[field]
 }
 
 /** Mínimo de uma unidade 'external': sem isto a equipe não consegue marcar. */
@@ -194,8 +207,11 @@ function joinPt(items: string[]): string {
 }
 
 /** Mensagem fixa enviada quando o backend recusa por falta de dado. */
-export function intakeMissingMessage(missing: readonly IntakeField[]): string {
-  return `Antes de seguir, só preciso de mais um detalhe: ${joinPt(missing.map((f) => INTAKE_FIELD_PROMPT[f]))}. Pode me passar?`
+export function intakeMissingMessage(
+  missing: readonly IntakeField[],
+  coverage?: Pick<UnitCoverage, 'acceptsPrivate' | 'insurers'>
+): string {
+  return `Antes de seguir, só preciso de mais um detalhe: ${joinPt(missing.map((f) => intakeFieldPrompt(f, coverage)))}. Pode me passar?`
 }
 
 // ── Mensagens fixas da agenda externa (o texto do Claude é descartado) ──────
