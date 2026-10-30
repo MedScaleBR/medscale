@@ -118,3 +118,32 @@ describe('prompt — Clara por unidade', () => {
     warn.mockRestore()
   })
 })
+
+describe('prompt — dias de atendimento', () => {
+  it('sem expediente cadastrado o prompt não muda', () => {
+    const prompt = build([{ id: 'w1', name: 'Centro', ...base }, { id: 'w2', name: 'Sul', ...base }])
+    expect(prompt).not.toContain('Dias de atendimento')
+  })
+
+  it('mostra os dias de cada unidade e a regra de dia sem atendimento', () => {
+    const prompt = build([
+      { id: 'w1', name: 'Centro', ...base, workingDays: [1, 2] },
+      { id: 'w2', name: 'Sul', ...base, workingDays: [4], extraDates: ['2026-11-07'] },
+    ])
+    expect(prompt).toContain('Dias de atendimento: segunda-feira e terça-feira')
+    expect(prompt).toContain('Dias de atendimento: quinta-feira (e também nas datas avulsas 07/11/2026)')
+    expect(prompt).toContain('## Dias de atendimento — IMPORTANTE')
+    expect(prompt).toContain('Nunca diga que o dia está "sem vaga"')
+    expect(prompt).toContain('nem LISTA_ESPERA para um dia em que a unidade não atende')
+  })
+
+  it('agenda externa: informa os dias mesmo sem oferecer horários', () => {
+    const prompt = build([
+      { id: 'w1', name: 'Centro', ...base },
+      { id: 'w3', name: 'Hospital', ...base, workingDays: [1, 2], botSettings: external(['full_name']) },
+    ])
+    expect(prompt).toContain('Dias de atendimento: segunda-feira e terça-feira')
+    expect(prompt).toContain('Nas unidades com agenda externa você não tem os horários, mas sabe os dias')
+    expect(prompt).toContain('se a unidade tiver "Dias de atendimento", diga quais são esses dias')
+  })
+})

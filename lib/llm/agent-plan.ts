@@ -23,6 +23,7 @@ import { missingOutsourcedFields, type OutsourcedMissingField } from '@/lib/outs
 import { missingDataMessage, requestedMessage } from '@/lib/outsourced/messages'
 import { coverageFor, isExternalUnit, type AgentContext, type AgentPatient } from '@/lib/llm/agent-context'
 import type { ExternalRequestSummary, HandoffTriggerReason } from '@/types/database'
+import { attendsOn, closedDayMessage } from '@/lib/bot/working-days'
 
 // Etapa 3 do agente: ler a resposta crua do Claude, validar os marcadores e
 // decidir O QUE aconteceria — sem fazer nada. A produção executa o plano em
@@ -73,6 +74,10 @@ function insuranceNotAcceptedMessage(
 }
 const BOOKING_DURATION_MIN = 30
 
+function saoPauloDate(d: Date): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(d)
+}
+
 export type PatientField = 'full_name' | 'birth_date' | 'cpf' | 'email' | 'insurance_card_number'
 
 type Procedure = { id: string; name: string; price: number }
@@ -86,7 +91,7 @@ export type BlockReason =
   | 'outsourced_missing_data'
   | 'discount_not_configured'
 
-export type IgnoreReason = 'external_unit' | 'internal_unit' | 'invalid_value' | 'no_unit' | 'module_disabled'
+export type IgnoreReason = 'external_unit' | 'internal_unit' | 'invalid_value' | 'no_unit' | 'module_disabled' | 'closed_day'
 
 /** O que aconteceria com esta resposta. Os de "aviso" não executam nada. */
 export type AgentEffect =
@@ -338,7 +343,21 @@ export async function planEffects(
       workspace_id: requestedBookingUnitId ?? undefined,
     })
   }
-  const confirmedDate = externalBookingBlocked ? null : markers.confirmedDate
+  // Dia em que a unidade não atende: não agenda nem pede à clínica parceira —
+  // a Clara avisa os dias de atendimento (mensagem fixa abaixo).
+  const bookingUnitForDays = requestedBookingUnitId ? unitById.get(requestedBookingUnitId) : undefined
+  let closedDay: { unitName: string; days: number[] } | null = null
+  if (
+    !externalBookingBlocked &&
+    markers.confirmedDate !== null &&
+    bookingUnitForDays &&
+    !attendsOn(bookingUnitForDays, saoPauloDate(markers.confirmedDate))
+  ) {
+    console.warn(`[working-days] AGENDAMENTO_CONFIRMADO em dia sem atendimento workspace=${bookingUnitForDays.id}`)
+    effects.push({ kind: 'ignored_marker', marker: 'AGENDAMENTO_CONFIRMADO', reason: 'closed_day', workspace_id: bookingUnitForDays.id })
+    closedDay = { unitName: bookingUnitForDays.name, days: bookingUnitForDays.workingDays! }
+  }
+  const confirmedDate = externalBookingBlocked || closedDay ? null : markers.confirmedDate
 
   const insuranceChoice = markers.insuranceChoice
   const selectedInsurer =
@@ -460,6 +479,7 @@ export async function planEffects(
     !insuranceNeedsClarification &&
     outsourcedMissing === null &&
     !externalBookingBlocked &&
+    closedDay === null &&
     intakeMissing === null
   ) {
     effects.push({
@@ -476,7 +496,13 @@ export async function planEffects(
   }
   if (markers.waitlistDesired && ctx.waitlistEnabled && !markers.confirmedDate && patient) {
     const waitlistUnitId = validMarkerUnit(markers.unitId) ?? ctx.currentUnitId ?? singleUnitId
-    if (waitlistUnitId) {
+    const waitlistUnit = waitlistUnitId ? unitById.get(waitlistUnitId) : undefined
+    if (waitlistUnit && !attendsOn(waitlistUnit, markers.waitlistDesired.date)) {
+      // A vaga nunca vai abrir: a unidade não atende nesse dia.
+      console.warn(`[working-days] LISTA_ESPERA em dia sem atendimento workspace=${waitlistUnit.id}`)
+      effects.push({ kind: 'ignored_marker', marker: 'LISTA_ESPERA', reason: 'closed_day', workspace_id: waitlistUnit.id })
+      closedDay ??= { unitName: waitlistUnit.name, days: waitlistUnit.workingDays! }
+    } else if (waitlistUnitId) {
       effects.push({
         kind: 'waitlist',
         workspace_id: waitlistUnitId,
@@ -577,6 +603,8 @@ export async function planEffects(
 
   const fixed = externalBookingBlocked
     ? EXTERNAL_BOOKING_BLOCKED_MESSAGE
+    : closedDay
+      ? closedDayMessage(closedDay.unitName, closedDay.days)
     : insuranceNotAccepted
       ? insuranceNotAcceptedMessage(ctx, requestedBookingUnitId!, selectedInsurer)
     : insuranceNeedsClarification

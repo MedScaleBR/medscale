@@ -34,6 +34,8 @@ export function buildAgentPrompt(ctx: AgentContext): string {
       name: u.name,
       address: u.address,
       businessHours: u.businessHours,
+      workingDays: u.workingDays,
+      extraDates: u.extraDates,
       directionsParking: u.directionsParking,
       contactInfo: u.contactInfo,
       isOutsourced: u.isOutsourced,

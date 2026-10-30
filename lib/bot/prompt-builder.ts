@@ -1,4 +1,5 @@
 import type { BotConfig } from './config'
+import { formatWorkingDays, hasWorkingDays, type UnitWorkingDays } from '@/lib/bot/working-days'
 import { BOT_NAME } from './constants'
 import {
   botInstructionsProblem,
@@ -48,7 +49,7 @@ interface CatalogProcedure {
   price: number
 }
 
-interface UnitInfo {
+interface UnitInfo extends UnitWorkingDays {
   id: string // id real da workspace — usado no UNIDADE_ID
   name: string
   address: string | null
@@ -64,6 +65,17 @@ interface UnitInfo {
 
 function isExternalUnit(u: UnitInfo): boolean {
   return u.botSettings?.schedulingMode === 'external'
+}
+
+function workingDaysText(u: UnitInfo): string {
+  const days = formatWorkingDays(u.workingDays!)
+  const extras = (u.extraDates ?? []).slice(0, 6).map((d) => d.split('-').reverse().join('/'))
+  return extras.length > 0 ? `${days} (e também nas datas avulsas ${extras.join(', ')})` : days
+}
+
+// Alguma unidade com dias cadastrados tem horários na MedScale (não é agenda externa).
+function slotUnitsWithDays(units: UnitInfo[]): boolean {
+  return units.some((u) => !isExternalUnit(u))
 }
 
 function intakeList(fields: readonly IntakeField[], indent: string): string {
@@ -221,6 +233,7 @@ Cada unidade aceita convênios diferentes, e nem toda unidade atende particular 
       const bits = [
         u.address ? `Endereço: ${u.address}` : null,
         u.businessHours ? `Horário presencial: ${u.businessHours}` : null,
+        hasWorkingDays(u) ? `Dias de atendimento: ${workingDaysText(u)}` : null,
         u.directionsParking ? `Como chegar/estacionamento: ${u.directionsParking}` : null,
         u.contactInfo ? `Contato: ${u.contactInfo}` : null,
       ].filter(Boolean)
@@ -235,6 +248,23 @@ Cada unidade aceita convênios diferentes, e nem toda unidade atende particular 
       return `• ${u.name} (id: ${u.id})${bits.length ? `\n  ${bits.join('\n  ')}` : ''}`
     })
     .join('\n')
+
+  // ── Dias de atendimento ───────────────────────────────────────────────────
+  // Vale também para a agenda externa: lá a Clara não oferece horário, mas
+  // avisa os dias antes de passar o pedido à equipe. Vazio quando nenhuma
+  // unidade tem expediente cadastrado.
+  const workingDaysUnits = units.filter(hasWorkingDays)
+  const workingDaysSection = workingDaysUnits.length > 0
+    ? `
+## Dias de atendimento — IMPORTANTE
+Cada unidade atende só nos dias listados em "Dias de atendimento" (veja "Unidades").
+- Se o paciente pedir ou preferir um dia da semana em que a unidade escolhida não atende, avise logo, na mesma resposta, que essa unidade atende só nesses dias. Nunca diga que o dia está "sem vaga" nem que vai verificar: o dia simplesmente não é de atendimento ali.
+- Em seguida, pergunte qual dos dias de atendimento fica melhor para ele.${slotUnitsWithDays(workingDaysUnits) ? ' Nas unidades com horários listados, sugira os horários mais próximos dentre os disponíveis.' : ''}
+- Se outra unidade atende no dia que o paciente pediu, mencione essa opção.
+- Nunca emita AGENDAMENTO_CONFIRMADO, SOLICITACAO_AGENDAMENTO nem LISTA_ESPERA para um dia em que a unidade não atende.${workingDaysUnits.some(isExternalUnit) ? `
+- Nas unidades com agenda externa você não tem os horários, mas sabe os dias: informe-os quando o paciente perguntar quando o doutor atende ali ou disser um dia de preferência. A preferência de dia que você registra para a equipe precisa ser um dia de atendimento da unidade.` : ''}
+`
+    : ''
 
   // ── Unidades com confirmação da clínica parceira ──────────────────────────
   // Vazio quando nenhuma unidade é terceirizada: o prompt nativo não muda.
@@ -278,7 +308,7 @@ ${externalUnits.map((u) => `• ${u.name} (id: ${u.id}) — ${u.address ?? 'ende
 
 Como agir quando o paciente quer consulta numa dessas unidades:
 1. Informe os locais e os convênios atendidos. Se o paciente perguntar se o doutor atende em um local que não está na lista de Unidades, diga que não atende ali e mostre onde atende.
-2. Nunca ofereça, sugira, invente ou confirme data ou horário para essas unidades. Nunca diga que a consulta está marcada. Se o paciente pedir horário, explique que a equipe confere a agenda da clínica e confirma com ele por aqui. Para essas unidades, NUNCA emita AGENDAMENTO_CONFIRMADO nem LISTA_ESPERA.
+2. Nunca ofereça, sugira, invente ou confirme data ou horário para essas unidades. Nunca diga que a consulta está marcada. Se o paciente pedir horário, explique que a equipe confere a agenda da clínica e confirma com ele por aqui — mas, se a unidade tiver "Dias de atendimento", diga quais são esses dias. Para essas unidades, NUNCA emita AGENDAMENTO_CONFIRMADO nem LISTA_ESPERA.
 3. Se o paciente quiser agendar, peça os dados abaixo de forma natural e sem fazer parecer um formulário (pode juntar dois itens numa mesma mensagem):
 ${externalUnits.map((u) => `   ${u.name} →\n${intakeList(u.botSettings!.intakeFields, '     ')}`).join('\n')}
    O telefone é o desta conversa: não pergunte. Só peça outro se o paciente disser que o contato é de outra pessoa.
@@ -449,7 +479,7 @@ Depois da apresentação, continue normalmente para o passo seguinte do fluxo ab
 ${unitStep}${multiUnit ? '3' : '2'}. Pergunte o motivo da consulta de forma genérica (ex: "É uma consulta inicial ou retorno?")
 ${multiUnit ? '4' : '3'}. Verifique se o convênio do paciente é aceito${uniformCoverage ? '' : ' na unidade escolhida'} (se ele mencionar)
 ${multiUnit ? '5' : '4'}. Pergunte qual dia e horário o paciente prefere
-${multiUnit ? '6' : '5'}. Verifique se o dia/horário pedido está entre os horários disponíveis da unidade escolhida. Se estiver, siga com o agendamento.${noSlotBranch}
+${multiUnit ? '6' : '5'}. Verifique se o dia/horário pedido está entre os horários disponíveis da unidade escolhida. Se estiver, siga com o agendamento.${workingDaysUnits.length > 0 ? ' Se for um dia em que a unidade não atende, siga "Dias de atendimento" abaixo.' : ''}${noSlotBranch}
 ${multiUnit ? '7' : '6'}. Confirme: nome completo${multiUnit ? ', unidade' : ''} e horário escolhido. Nunca peça o telefone — o sistema já usa automaticamente o número deste WhatsApp
 ${multiUnit ? '8' : '7'}. Encerre confirmando ${multiUnit ? 'unidade, ' : ''}data, hora e que um lembrete será enviado
 
@@ -473,7 +503,7 @@ Se o paciente estiver remarcando uma consulta existente (e não apenas criando u
 Assim que o paciente disser o próprio nome completo pela primeira vez na conversa (ele se apresentando, ou respondendo quando você pergunta o nome), inclua na MESMA resposta uma linha isolada no formato exato:
 NOME_PACIENTE: <nome completo exatamente como o paciente escreveu>
 Só inclua essa linha quando o paciente estiver claramente informando o próprio nome — nunca invente, nunca use o nome de outra pessoa que ele mencionar (ex: nome do médico, de um convênio). Essa linha é lida por um sistema automático e nunca deve ser mostrada ao paciente.
-${outsourcedSection}${externalSection}${intakeSection}${intakeFormatSection}
+${workingDaysSection}${outsourcedSection}${externalSection}${intakeSection}${intakeFormatSection}
 ## Regras absolutas — NUNCA viole
 - NUNCA diagnostique, sugira tratamentos, opine sobre resultados ou condutas clínicas
 - NUNCA prometa resultados de procedimentos estéticos ou cirúrgicos
