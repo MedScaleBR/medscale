@@ -64,6 +64,27 @@ describe('getAccountUnits — expediente presencial', () => {
     expect(supabase.callsTo('availability_rules', 'select')[0].filters).toContainEqual(['eq', 'is_active', true])
   })
 
+  it('devolve os dias da semana e as datas avulsas de cada unidade', async () => {
+    const supabase = setup({
+      workspaces: { select: { data: [{ id: 'w1', name: 'Centro' }, { id: 'w2', name: 'Sul' }] } },
+      availability_rules: { select: { data: [
+        { workspace_id: 'w1', day_of_week: 2, start_time: '08:00:00', end_time: '12:00:00' },
+        { workspace_id: 'w1', day_of_week: 1, start_time: '08:00:00', end_time: '12:00:00' },
+        { workspace_id: 'w1', day_of_week: 1, start_time: '14:00:00', end_time: '18:00:00' },
+      ] } },
+      availability_exceptions: { select: { data: [
+        { workspace_id: 'w1', date: '2030-01-05' },
+        { workspace_id: 'w1', date: '2030-01-05' },
+      ] } },
+    })
+
+    const units = await getAccountUnits('account-1')
+
+    expect(units[0]).toMatchObject({ workingDays: [1, 2], extraDates: ['2030-01-05'] })
+    expect(units[1]).toMatchObject({ workingDays: [], extraDates: [] })
+    expect(supabase.callsTo('availability_exceptions', 'select')[0].filters).toContainEqual(['eq', 'type', 'extra'])
+  })
+
   it('não informa texto antigo quando a unidade ainda não tem expediente', async () => {
     setup({ workspaces: { select: { data: [{ id: 'w1', name: 'Centro', business_hours: '24 horas' }] } } })
     expect((await getAccountUnits('account-1'))[0].businessHours).toBeNull()
