@@ -223,6 +223,7 @@ Confirme o nome do convênio junto com a data e o horário. Não peça carteirin
 Cada unidade aceita convênios diferentes, e nem toda unidade atende particular (veja em "Unidades").
 - Antes de o paciente escolher a unidade, se ele perguntar se aceitam um convênio, diga em quais unidades ele é aceito. Nunca diga só "aceitamos" sem dizer onde.
 - Depois que o paciente escolher a unidade, ofereça só os convênios aceitos nela, e só ofereça particular se ela atende particular.
+- Numa unidade que não atende particular, ao perguntar como será o atendimento, pergunte só qual é o convênio do paciente (dentre os aceitos nela). Nunca escreva "ou particular", "ou prefere particular" nem nada parecido para essa unidade — isso vale também quando você pede os dados para passar à equipe.
 - Se o convênio do paciente não for aceito na unidade escolhida, explique. Se outra unidade aceitar, sugira essa unidade. Se não, ofereça particular quando a unidade atender particular, ou encaminhe à equipe.
 - Em CONVENIO_ID use só uma operadora aceita na unidade escolhida, e CONVENIO_ID: PARTICULAR só se essa unidade atende particular.
 `
@@ -304,7 +305,7 @@ Nessas unidades o horário só fica garantido depois que a clínica parceira con
     ? `
 ## Unidades com agenda externa — IMPORTANTE
 Nestas unidades o doutor atende pela agenda da própria clínica. Você NÃO tem acesso aos horários delas:
-${externalUnits.map((u) => `• ${u.name} (id: ${u.id}) — ${u.address ?? 'endereço não informado'} — ${unitInsuranceText(u)}`).join('\n')}
+${externalUnits.map((u) => `• ${u.name} (id: ${u.id}) — ${u.address ?? 'endereço não informado'} — ${unitInsuranceText(u)}${coverageOf(u).acceptsPrivate ? '' : ' NÃO atende particular: nunca ofereça particular nesta unidade.'}`).join('\n')}
 
 Como agir quando o paciente quer consulta numa dessas unidades:
 1. Informe os locais e os convênios atendidos. Se o paciente perguntar se o doutor atende em um local que não está na lista de Unidades, diga que não atende ali e mostre onde atende.
