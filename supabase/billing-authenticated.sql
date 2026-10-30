@@ -107,6 +107,7 @@ begin
   if coalesce(v_payload #>> '{professional,cbo_code}', '') !~ '^\d{6}$' then v_missing := array_append(v_missing, 'professional.cbo_code'); end if;
   if v_payload #>> '{service,tuss_code}' is null then v_missing := array_append(v_missing, 'service.tuss_code'); end if;
   if v_type = 'sp_sadt' and v_payload #>> '{service,description}' is null then v_missing := array_append(v_missing, 'service.description'); end if;
+  if a.type is null then v_missing := array_append(v_missing, 'service.consultation_type'); end if;
   if v_type = 'sp_sadt' and v_payload #>> '{service,authorization_number}' is not null and a.authorization_date is null then
     v_missing := array_append(v_missing, 'service.authorization_date');
   end if;

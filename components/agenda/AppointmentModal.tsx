@@ -26,6 +26,9 @@ import { AppointmentRecordingEntry } from '@/components/transcriptions/Appointme
 import { AppointmentBillingFields, type AppointmentBillingValues } from '@/components/billing/AppointmentBillingFields'
 import type { InsurerOption } from '@/components/billing/PatientInsurances'
 import type { AppointmentType, AppointmentStatus, BillingType } from '@/types/database'
+import { UNDEFINED_TYPE_LABEL } from '@/lib/appointment-type'
+
+const UNDEFINED_TYPE_VALUE = 'nao_definido'
 
 export interface CatalogProcedureOption {
   id: string
@@ -42,7 +45,7 @@ export interface AppointmentFormValues {
   patient_phone: string
   scheduled_at: string // datetime-local value
   duration_min: number
-  type: AppointmentType
+  type: AppointmentType | null
   status: AppointmentStatus
   notes: string
   price: string
@@ -338,7 +341,10 @@ function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenCh
             </div>
             <div>
               <Label>Tipo</Label>
-              <Select value={values.type} onValueChange={(t) => setValues((v) => ({ ...v, type: t as AppointmentType }))}>
+              <Select
+                value={values.type ?? UNDEFINED_TYPE_VALUE}
+                onValueChange={(t) => setValues((v) => ({ ...v, type: t === UNDEFINED_TYPE_VALUE ? null : (t as AppointmentType) }))}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -348,6 +354,8 @@ function AppointmentForm({ initialValues, workspaces, onSave, onDelete, onOpenCh
                   <SelectItem value="avaliacao">Avaliação</SelectItem>
                   <SelectItem value="procedimento">Procedimento</SelectItem>
                   <SelectItem value="outro">Outro</SelectItem>
+                  {/* Só aparece quando a Clara não conseguiu identificar o tipo. */}
+                  {values.type === null && <SelectItem value={UNDEFINED_TYPE_VALUE}>{UNDEFINED_TYPE_LABEL}</SelectItem>}
                 </SelectContent>
               </Select>
             </div>

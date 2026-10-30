@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { RecordingButton } from '@/components/transcriptions/RecordingButton'
 import { hasTissIdentity } from '@/lib/billing/insurer'
 import { PatientInsurances, type PatientInsuranceRow } from '@/components/billing/PatientInsurances'
+import { appointmentTypeLabel } from '@/lib/appointment-type'
 
 const STATUS_LABEL: Record<string, string> = {
   agendado: 'Agendado',
@@ -106,7 +107,7 @@ export default async function PatientDetailPage({ params }: { params: Promise<{ 
                   <p className="text-sm font-medium text-gray-900">
                     {new Date(a.scheduled_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' })}
                   </p>
-                  <p className="text-xs text-gray-400">{a.type}</p>
+                  <p className="text-xs text-gray-400">{appointmentTypeLabel(a.type)}</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <Badge

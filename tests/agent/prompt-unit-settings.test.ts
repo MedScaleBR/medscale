@@ -147,3 +147,11 @@ describe('prompt — dias de atendimento', () => {
     expect(prompt).toContain('se a unidade tiver "Dias de atendimento", diga quais são esses dias')
   })
 })
+
+describe('prompt — primeira consulta ou retorno', () => {
+  it('não pergunta mais se é consulta inicial ou retorno', () => {
+    const prompt = build([{ id: 'w1', name: 'Centro', ...base }])
+    expect(prompt).not.toContain('inicial ou retorno')
+    expect(prompt).toContain('Nunca pergunte se é primeira consulta ou retorno')
+  })
+})

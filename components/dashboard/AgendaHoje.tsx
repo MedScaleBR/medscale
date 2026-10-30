@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { Badge } from '@/components/ui/badge'
 import type { TodayAgendaItem } from '@/lib/types'
+import { appointmentTypeLabel } from '@/lib/appointment-type'
 
 const STATUS_LABEL: Record<string, string> = {
   agendado: 'Agendado',
@@ -39,7 +40,7 @@ export function AgendaHoje({ items }: { items: TodayAgendaItem[] }) {
                 </span>
                 <div>
                   <p className="text-sm font-medium text-gray-900">{item.patient_name}</p>
-                  <p className="text-xs text-gray-400">{item.type}</p>
+                  <p className="text-xs text-gray-400">{appointmentTypeLabel(item.type)}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
