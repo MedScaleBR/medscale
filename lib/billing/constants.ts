@@ -21,6 +21,7 @@ export const MISSING_FIELD_LABELS: Record<MissingField, string> = {
   'service.tuss_code': 'Procedimento TUSS',
   'service.description': 'Descrição do procedimento',
   'service.authorization_date': 'Data da autorização',
+  'service.consultation_type': 'Tipo da consulta (primeira ou retorno) — defina na agenda',
 }
 
 // Campos que só se corrigem nas configurações — a tela da guia aponta para lá

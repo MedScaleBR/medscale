@@ -1,3 +1,4 @@
+import { calendarTypeText } from '@/lib/appointment-type'
 import { createAdminClient } from '@/lib/supabase/server'
 import { listEvents, createEvent } from './calendar'
 import { isGoogleConnected } from './auth'
@@ -109,7 +110,7 @@ export async function reconcileCalendar(workspaceId: string, from: Date, to: Dat
         workspaceId,
         patientName: row.patient_name,
         patientPhone: row.patient_phone,
-        appointmentType: row.type,
+        appointmentType: calendarTypeText(row.type),
         startTime: new Date(row.scheduled_at),
         durationMin: row.duration_min,
         workspaceName: workspace?.name ?? 'Unidade',

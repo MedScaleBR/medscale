@@ -21,8 +21,9 @@ export type GuidePayload = {
   service: {
     date: string // YYYY-MM-DD no fuso de SP
     guide_type: GuideType
-    // appointments.type === 'retorno' → tipoConsulta "2 - Seguimento" na guia
-    is_return: boolean
+    // appointments.type === 'retorno' → tipoConsulta "2 - Seguimento" na guia.
+    // null = tipo da consulta não definido: a guia fica pendente até a equipe escolher.
+    is_return: boolean | null
     tuss_code: string | null
     description: string | null
     price_cents: number
@@ -43,6 +44,7 @@ export type MissingField =
   | 'service.tuss_code'
   | 'service.description'
   | 'service.authorization_date'
+  | 'service.consultation_type'
 
 // Guia pronta para entrar num lote — o gerador de cada versão só recebe isto.
 export interface BatchGuide {

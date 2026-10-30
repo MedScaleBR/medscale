@@ -6,7 +6,7 @@ export interface TodayAgendaItem {
   patient_name: string
   patient_phone: string
   scheduled_at: string
-  type: AppointmentType
+  type: AppointmentType | null
   source: AppointmentSource
   status: AppointmentStatus
 }
