@@ -14,6 +14,8 @@ import { friendlyErrorMessage } from '@/lib/friendly-errors'
 export interface InsurerOption {
   id: string
   name: string
+  /** false = sem registro ANS/código do prestador: não gera guia TISS. */
+  billable?: boolean
 }
 
 export interface PatientInsuranceRow {

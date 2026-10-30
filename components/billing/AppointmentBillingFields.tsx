@@ -66,6 +66,7 @@ export function AppointmentBillingFields({
   }, [value.insurer_id])
 
   const insurerCards = cards.filter((c) => c.insurer_id === value.insurer_id)
+  const notBillable = insurers.find((i) => i.id === value.insurer_id)?.billable === false
 
   // Sem carteirinha escolhida, pré-seleciona a principal (ou a única) desta operadora.
   useEffect(() => {
@@ -86,6 +87,12 @@ export function AppointmentBillingFields({
 
   return (
     <div className="ph-no-capture ph-mask space-y-3 rounded-lg border border-[var(--navy-06)] p-3">
+      {notBillable && (
+        <p className="rounded-md bg-amber-50 px-2 py-1.5 text-xs text-amber-700">
+          Este convênio não tem registro ANS e código do prestador: a consulta fica registrada, mas não gera guia TISS.
+          Complete os dados em Convênios para faturar.
+        </p>
+      )}
       <div>
         <div className="flex items-center justify-between">
           <Label>Carteirinha</Label>

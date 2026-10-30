@@ -63,7 +63,7 @@ export function InsurersSettings({
             <h2 className="text-sm font-medium text-gray-900">{billingEnabled ? 'Operadoras' : 'Convênios aceitos'}</h2>
             <p className="mt-0.5 text-xs text-gray-400">
               {billingEnabled
-                ? 'Registro ANS, código do prestador, tabela de procedimentos e horário do lote de cada convênio.'
+                ? 'Só o nome é obrigatório. Para faturar, complete o registro ANS, o código do prestador, a tabela de procedimentos e o horário do lote.'
                 : 'Convênios que a clínica atende — a Clara informa ao paciente.'}
             </p>
           </div>
@@ -112,7 +112,7 @@ export function InsurersSettings({
                       </span>
                     )}
                     {billingEnabled && !(i.ans_registry && i.provider_code) && (
-                      <Badge className="border-none bg-amber-50 text-amber-700">Falta ANS/código do prestador</Badge>
+                      <Badge className="border-none bg-amber-50 text-amber-700">Sem faturamento: falta ANS/código do prestador</Badge>
                     )}
                     <button
                       onClick={() => {

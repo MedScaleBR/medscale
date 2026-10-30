@@ -217,11 +217,19 @@ describe('validação de entrada', () => {
     })
   })
 
-  it('com o módulo billing continua exigindo registro ANS no cadastro', () => {
-    expect(parseInsurerInput({ name: 'Unimed' }, false, { tiss: true })).toEqual({
-      ok: false,
-      error: 'Registro ANS deve ter exatamente 6 dígitos.',
+  it('com o módulo billing aceita cadastrar só com o nome', () => {
+    expect(parseInsurerInput({ name: 'Unimed' }, false, { tiss: true })).toEqual({ ok: true, value: { name: 'Unimed' } })
+  })
+
+  it('registro ANS e código do prestador vazios gravam null', () => {
+    expect(parseInsurerInput({ name: 'Unimed', ans_registry: ' ', provider_code: '' }, false, { tiss: true })).toEqual({
+      ok: true,
+      value: { name: 'Unimed', ans_registry: null, provider_code: null },
     })
+  })
+
+  it('código do prestador com mais de 14 caracteres é recusado', () => {
+    expect(parseInsurerInput({ ...base, provider_code: 'X'.repeat(15) }, false, { tiss: true }).ok).toBe(false)
   })
 
   it('PATCH parcial só valida o que veio', () => {
