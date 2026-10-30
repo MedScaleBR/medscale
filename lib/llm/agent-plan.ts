@@ -329,6 +329,8 @@ export async function planEffects(
   // Coleta por unidade: dados que faltam antes de agendar (unidade 'internal')
   // ou de transferir (unidade 'external'). null = nada recusado.
   let intakeMissing: IntakeField[] | null = null
+  // Unidade do dado faltando — o texto do convênio depende do que ela aceita.
+  let intakeMissingUnitId: string | null = null
 
   // A Clara nunca marca consulta em unidade com agenda externa: o prompt
   // proíbe e aqui o marcador é descartado.
@@ -430,6 +432,7 @@ export async function planEffects(
       if (bookingMissing.length > 0) {
         console.warn(`[intake] missing_fields=${bookingMissing.join(',')} trigger_reason=booking workspace=${bookingUnitId}`)
         intakeMissing = bookingMissing
+        intakeMissingUnitId = bookingUnitId
         effects.push({ kind: 'blocked', reason: 'missing_fields', fields: bookingMissing, workspace_id: bookingUnitId })
       } else if (bookingUnit?.isOutsourced && bookingUnit.externalClinicPhone) {
         // Unidade terceirizada: a Clara não agenda — pede o horário à clínica parceira.
@@ -551,6 +554,7 @@ export async function planEffects(
       if (missing.length > 0) {
         console.warn(`[intake] missing_fields=${missing.join(',')} trigger_reason=${EXTERNAL_REQUEST_REASON} workspace=${requestUnit.id}`)
         intakeMissing = missing
+        intakeMissingUnitId = requestUnit.id
         effects.push({ kind: 'blocked', reason: 'missing_fields', fields: missing, workspace_id: requestUnit.id })
       } else {
         const summary: ExternalRequestSummary = {
@@ -614,7 +618,7 @@ export async function planEffects(
       : unitRequired || externalRequestUnitRequired
         ? UNIT_REQUIRED_MESSAGE
         : intakeMissing
-          ? intakeMissingMessage(intakeMissing)
+          ? intakeMissingMessage(intakeMissing, intakeMissingUnitId ? coverageFor(ctx, intakeMissingUnitId) : undefined)
           : null
 
   // Solicitação: dentro do horário de handoff a conversa vai para a equipe;
