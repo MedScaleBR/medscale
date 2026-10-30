@@ -55,6 +55,7 @@ import {
   REQUEST_FAILED_MESSAGE,
   requestedMessage,
 } from '@/lib/outsourced/messages'
+import { closedDayMessage } from '@/lib/bot/working-days'
 
 const SLOT = '2026-10-16T08:00-03:00'
 const CLINIC_PHONE = '5571999990000'
@@ -98,6 +99,43 @@ describe('processIncomingMessage — agendamento em unidade terceirizada', () =>
     expect(supabase.callsTo('appointments', 'insert')[0]?.payload).toMatchObject({ status: 'agendado' })
     expect(requestExternalConfirmation).not.toHaveBeenCalled()
     expect(lastSentMessage()).toBe('Confirmado!')
+  })
+
+  it('dia em que a unidade não atende: não pede à clínica parceira e avisa os dias', async () => {
+    // SLOT cai numa sexta; a unidade atende só segunda e terça.
+    state.units = [{ ...UNIT, isOutsourced: true, externalClinicPhone: CLINIC_PHONE, name: 'IAD Pituba', workingDays: [1, 2] }]
+    const supabase = completePatient()
+    state.claudeResponses = [CLAUDE_OK]
+
+    await processIncomingMessage(PARAMS)
+
+    expect(requestExternalConfirmation).not.toHaveBeenCalled()
+    expect(supabase.callsTo('appointments', 'insert')).toHaveLength(0)
+    expect(lastSentMessage()).toBe(closedDayMessage('IAD Pituba', [1, 2]))
+  })
+
+  it('remarcação para dia sem atendimento mantém a consulta antiga', async () => {
+    state.units = [{ ...UNIT, isOutsourced: true, externalClinicPhone: CLINIC_PHONE, name: 'IAD Pituba', workingDays: [1, 2] }]
+    const supabase = completePatient()
+    state.claudeResponses = [`${CLAUDE_OK}\nCANCELAMENTO_CONFIRMADO: ${OLD_APPT}`]
+
+    await processIncomingMessage(PARAMS)
+
+    expect(requestExternalConfirmation).not.toHaveBeenCalled()
+    expect(supabase.callsTo('appointments', 'update')).toHaveLength(0)
+  })
+
+  it('data avulsa aberta conta como dia de atendimento', async () => {
+    state.units = [{
+      ...UNIT, isOutsourced: true, externalClinicPhone: CLINIC_PHONE, name: 'IAD Pituba',
+      workingDays: [1, 2], extraDates: ['2026-10-16'],
+    }]
+    completePatient()
+    state.claudeResponses = [CLAUDE_OK]
+
+    await processIncomingMessage(PARAMS)
+
+    expect(requestExternalConfirmation).toHaveBeenCalledTimes(1)
   })
 
   it('sem nome real e nascimento: não agenda e pede os dados', async () => {

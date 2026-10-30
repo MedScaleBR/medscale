@@ -32,8 +32,9 @@ vi.mock('@anthropic-ai/sdk', async () => {
 vi.mock('@/lib/realtime/broadcast', () => ({ broadcastToWorkspace: vi.fn(), workspaceChannel: (id: string) => `handoff-toast:${id}` }))
 
 import { processIncomingMessage } from '@/lib/llm/agent'
-import { resetAgentHarness, mergeSupabaseConfig, state, PARAMS, UNIT_ID } from '../helpers/agent-harness'
+import { resetAgentHarness, mergeSupabaseConfig, state, PARAMS, UNIT_ID, lastSentMessage } from '../helpers/agent-harness'
 import { filterValue } from '../helpers/supabase-mock'
+import { closedDayMessage } from '@/lib/bot/working-days'
 
 const WL_ON = { accounts: { select: { data: { name: 'Clínica Teste', modules: ['waitlist'] } } } }
 
@@ -60,6 +61,21 @@ describe('processIncomingMessage — lista de espera', () => {
       source: 'bot',
       status: 'waiting',
     })
+  })
+
+  it('não põe na lista de espera um dia em que a unidade não atende', async () => {
+    // 2026-09-16 é quarta; a unidade atende só segunda e terça.
+    state.units = [{ ...state.units[0], workingDays: [1, 2] }]
+    const supabase = mergeSupabaseConfig({
+      ...WL_ON,
+      waitlist: { select: { data: null }, insert: { data: { id: 'wl1' } }, update: { data: null } },
+    })
+    state.claudeResponses = ['Beleza, te aviso!\nLISTA_ESPERA: 2026-09-16']
+
+    await processIncomingMessage(PARAMS)
+
+    expect(supabase.callsTo('waitlist', 'insert')).toHaveLength(0)
+    expect(lastSentMessage()).toBe(closedDayMessage('Clínica Teste', [1, 2]))
   })
 
   it('grava desired_time null quando o paciente deu só o dia', async () => {

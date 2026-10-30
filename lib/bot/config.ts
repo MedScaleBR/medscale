@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { isOutsourcedWorkspace } from '@/lib/outsourced/config'
 import { getWorkspaceBotSettings, type WorkspaceBotSettings } from '@/lib/bot/unit-settings'
 import type { Database, NumberSource } from '@/types/database'
+import type { UnitWorkingDays } from '@/lib/bot/working-days'
 
 // Configuração da Clara — uma por account, vale para todas as unidades.
 // Campos que variam por unidade (endereço, horário, estacionamento, contato,
@@ -35,7 +36,7 @@ export interface BotConfig {
 // Contexto de uma unidade para a Clara — o que ela informa ao paciente e usa
 // para agendar. Slots livres e catálogo de procedimentos são carregados à
 // parte no agente (dependem de data).
-export interface UnitContext {
+export interface UnitContext extends UnitWorkingDays {
   id: string
   name: string
   address: string | null
@@ -135,13 +136,31 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
 
   if (!data?.length) return []
 
-  const { data: rules } = await supabase
-    .from('availability_rules')
-    .select('workspace_id, day_of_week, start_time, end_time')
-    .in('workspace_id', data.map((w) => w.id))
-    .eq('is_active', true)
-    .order('day_of_week')
-    .order('start_time')
+  const workspaceIds = data.map((w) => w.id)
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+  const [{ data: rules }, { data: extras }] = await Promise.all([
+    supabase
+      .from('availability_rules')
+      .select('workspace_id, day_of_week, start_time, end_time')
+      .in('workspace_id', workspaceIds)
+      .eq('is_active', true)
+      .order('day_of_week')
+      .order('start_time'),
+    // Datas avulsas abertas (ex.: um sábado pontual) — contam como dia de atendimento.
+    supabase
+      .from('availability_exceptions')
+      .select('workspace_id, date')
+      .in('workspace_id', workspaceIds)
+      .eq('type', 'extra')
+      .gte('date', today)
+      .order('date'),
+  ])
+  const extraDates = new Map<string, string[]>()
+  for (const extra of extras ?? []) {
+    const list = extraDates.get(extra.workspace_id) ?? []
+    if (!list.includes(extra.date)) list.push(extra.date)
+    extraDates.set(extra.workspace_id, list)
+  }
 
   const days = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado']
   const schedules = new Map<string, Map<number, Set<string>>>()
@@ -163,6 +182,8 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
           .map(([day, intervals]) => `${days[day]}: ${[...intervals].sort().join(', ')}`)
           .join('; ') + ' (America/Sao_Paulo)'
       : null,
+    workingDays: [...(schedules.get(w.id)?.keys() ?? [])].sort((a, b) => a - b),
+    extraDates: extraDates.get(w.id) ?? [],
     directionsParking: w.directions_parking,
     contactInfo: w.contact_info,
     handoffNumber: w.handoff_number,
