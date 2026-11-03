@@ -256,6 +256,7 @@ Referência de onde cada variável vem:
 | `GOOGLE_CLIENT_SECRET` | Google Cloud Console (passo 5.4) | Só para Google Agenda |
 | `GOOGLE_REDIRECT_URI` | `http://localhost:3000/api/google/callback` em dev | Só para Google Agenda |
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | Provedor SMTP de sua escolha (Gmail, provedor do seu domínio, etc.) | Opcional — sem elas, o convite de `/admin` é criado normalmente e a tela mostra um link para copiar/colar manualmente |
+| `BOT_SLOTS_LOOKAHEAD_DAYS` | Até quantos dias à frente a Clara procura horários livres em cada unidade | Opcional — padrão `35`. Ela para antes, ao achar 4 dias com vaga; aumentar só faz diferença para expediente a cada 3 ou 4 semanas |
 | `NEXT_PUBLIC_POSTHOG_KEY` / `NEXT_PUBLIC_POSTHOG_HOST` | [posthog.com](https://posthog.com) → Project Settings | Opcional |
 | `SENTRY_DSN` / `NEXT_PUBLIC_SENTRY_DSN` / `SENTRY_ORG` / `SENTRY_PROJECT` | [sentry.io](https://sentry.io) → novo projeto Next.js | Opcional |
 

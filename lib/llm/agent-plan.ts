@@ -23,7 +23,7 @@ import { missingOutsourcedFields, type OutsourcedMissingField } from '@/lib/outs
 import { missingDataMessage, requestedMessage } from '@/lib/outsourced/messages'
 import { coverageFor, isExternalUnit, type AgentContext, type AgentPatient } from '@/lib/llm/agent-context'
 import type { ExternalRequestSummary, HandoffTriggerReason } from '@/types/database'
-import { attendsOn, closedDayMessage } from '@/lib/bot/working-days'
+import { attendsOn, closedDayMessage, type UnitWorkingDays } from '@/lib/bot/working-days'
 
 // Etapa 3 do agente: ler a resposta crua do Claude, validar os marcadores e
 // decidir O QUE aconteceria — sem fazer nada. A produção executa o plano em
@@ -348,7 +348,7 @@ export async function planEffects(
   // Dia em que a unidade não atende: não agenda nem pede à clínica parceira —
   // a Clara avisa os dias de atendimento (mensagem fixa abaixo).
   const bookingUnitForDays = requestedBookingUnitId ? unitById.get(requestedBookingUnitId) : undefined
-  let closedDay: { unitName: string; days: number[] } | null = null
+  let closedDay: { unitName: string; days: number[]; unit: UnitWorkingDays } | null = null
   if (
     !externalBookingBlocked &&
     markers.confirmedDate !== null &&
@@ -357,7 +357,7 @@ export async function planEffects(
   ) {
     console.warn(`[working-days] AGENDAMENTO_CONFIRMADO em dia sem atendimento workspace=${bookingUnitForDays.id}`)
     effects.push({ kind: 'ignored_marker', marker: 'AGENDAMENTO_CONFIRMADO', reason: 'closed_day', workspace_id: bookingUnitForDays.id })
-    closedDay = { unitName: bookingUnitForDays.name, days: bookingUnitForDays.workingDays! }
+    closedDay = { unitName: bookingUnitForDays.name, days: bookingUnitForDays.workingDays!, unit: bookingUnitForDays }
   }
   const confirmedDate = externalBookingBlocked || closedDay ? null : markers.confirmedDate
 
@@ -504,7 +504,7 @@ export async function planEffects(
       // A vaga nunca vai abrir: a unidade não atende nesse dia.
       console.warn(`[working-days] LISTA_ESPERA em dia sem atendimento workspace=${waitlistUnit.id}`)
       effects.push({ kind: 'ignored_marker', marker: 'LISTA_ESPERA', reason: 'closed_day', workspace_id: waitlistUnit.id })
-      closedDay ??= { unitName: waitlistUnit.name, days: waitlistUnit.workingDays! }
+      closedDay ??= { unitName: waitlistUnit.name, days: waitlistUnit.workingDays!, unit: waitlistUnit }
     } else if (waitlistUnitId) {
       effects.push({
         kind: 'waitlist',
@@ -608,7 +608,7 @@ export async function planEffects(
   const fixed = externalBookingBlocked
     ? EXTERNAL_BOOKING_BLOCKED_MESSAGE
     : closedDay
-      ? closedDayMessage(closedDay.unitName, closedDay.days)
+      ? closedDayMessage(closedDay.unitName, closedDay.days, closedDay.unit, saoPauloDate(ctx.now))
     : insuranceNotAccepted
       ? insuranceNotAcceptedMessage(ctx, requestedBookingUnitId!, selectedInsurer)
     : insuranceNeedsClarification

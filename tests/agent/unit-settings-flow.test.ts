@@ -17,7 +17,7 @@ vi.mock('@/lib/whatsapp/send', async () => {
 vi.mock('@/lib/crypto', () => ({ decryptToken: (t: string) => `decrypted:${t}`, encryptToken: (t: string) => t }))
 vi.mock('@/lib/google/availability', async () => {
   const h = await import('../helpers/agent-harness')
-  return { getFreeSlotsForBot: h.getFreeSlotsForBot, isSlotAvailable: h.isSlotAvailable }
+  return { getFreeSlotsForBot: h.getFreeSlotsForBot, getFreeSlotsByDayForBot: h.getFreeSlotsByDayForBot, isSlotAvailable: h.isSlotAvailable }
 })
 vi.mock('@/lib/google/auth', async () => {
   const h = await import('../helpers/agent-harness')

@@ -940,6 +940,10 @@ export interface Database {
           start_time: string
           end_time: string
           slot_duration: number
+          // Repetição (lib/scheduling/recurrence.ts): 1 = toda semana; 2–4 = a cada N
+          // semanas a partir de anchor_date (obrigatória quando > 1).
+          interval_weeks: number
+          anchor_date: string | null
           is_active: boolean
           created_at: string
         }

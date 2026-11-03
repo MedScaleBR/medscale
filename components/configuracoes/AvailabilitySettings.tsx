@@ -19,6 +19,15 @@ import { trackAvailabilityRulesSaved } from '@/lib/analytics/posthog'
 import type { Database } from '@/types/database'
 import { friendlyErrorMessage } from '@/lib/friendly-errors'
 import { groupBlockedDays } from '@/lib/availability/blocked-ranges'
+import {
+  addDaysToDate,
+  formatDayMonth,
+  INTERVAL_WEEKS_OPTIONS,
+  intervalLabel,
+  nextRuleDates,
+  recurrenceProblem,
+  weekdayOfDate,
+} from '@/lib/scheduling/recurrence'
 
 type AvailabilityRule = Database['public']['Tables']['availability_rules']['Row']
 type AvailabilityException = Database['public']['Tables']['availability_exceptions']['Row']
@@ -27,6 +36,21 @@ const DAY_LABEL = ['Domingo', 'Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta', 
 // O Select (Base UI) só resolve o label da opção selecionada automaticamente
 // se receber esse mapa — sem ele, mostra o value bruto (ex: "1" em vez de "Segunda").
 const DAY_ITEMS = Object.fromEntries(DAY_LABEL.map((label, i) => [String(i), label]))
+
+const INTERVAL_ITEMS: Record<string, string> = Object.fromEntries(
+  INTERVAL_WEEKS_OPTIONS.map((n) => [String(n), n === 1 ? 'Toda semana' : `A cada ${n} semanas`])
+)
+
+/** Hoje (AAAA-MM-DD) no fuso do consultório. */
+function saoPauloToday(): string {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
+}
+
+/** Próxima data (hoje ou depois) que cai no dia da semana pedido. */
+function nextWeekday(day: number): string {
+  const today = saoPauloToday()
+  return addDaysToDate(today, (day - weekdayOfDate(today) + 7) % 7)
+}
 
 const formatDate = (date: string) => new Date(`${date}T12:00:00`).toLocaleDateString('pt-BR')
 
@@ -42,7 +66,14 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
   const [workspaceId, setWorkspaceId] = useState(initialWorkspaceId)
   const [rules, setRules] = useState(initialRules)
   const [exceptions, setExceptions] = useState(initialExceptions)
-  const [ruleForm, setRuleForm] = useState({ day_of_week: '1', start_time: '08:00', end_time: '12:00', slot_duration: '30' })
+  const [ruleForm, setRuleForm] = useState({
+    day_of_week: '1',
+    start_time: '08:00',
+    end_time: '12:00',
+    slot_duration: '30',
+    interval_weeks: '1',
+    anchor_date: '',
+  })
   const [savingRule, setSavingRule] = useState(false)
   const [excForm, setExcForm] = useState({ date: '', end_date: '', reason: '' })
   const [savingExc, setSavingExc] = useState(false)
@@ -55,6 +86,41 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
   const isFullDayBlock = (e: AvailabilityException) => e.type === 'blocked' && !e.start_time
   const blockedRanges = groupBlockedDays(selectedExceptions.filter(isFullDayBlock))
   const otherExceptions = selectedExceptions.filter((e) => !isFullDayBlock(e))
+
+  // Repetição da regra em edição: mesma validação e mesma conta de datas do servidor.
+  const formDay = Number(ruleForm.day_of_week)
+  const formInterval = Number(ruleForm.interval_weeks)
+  const formAnchor = formInterval > 1 ? ruleForm.anchor_date || null : null
+  const recurrenceError =
+    formInterval > 1 && !ruleForm.anchor_date
+      ? null // ainda não preencheu: o botão fica desabilitado, sem mensagem de erro
+      : recurrenceProblem({ day_of_week: formDay, interval_weeks: formInterval, anchor_date: formAnchor })
+  const previewDates =
+    formInterval > 1 && formAnchor && !recurrenceError
+      ? nextRuleDates(
+          [{ day_of_week: formDay, interval_weeks: formInterval, anchor_date: formAnchor }],
+          selectedExceptions.filter((e) => e.type === 'blocked' && !e.start_time),
+          saoPauloToday(),
+          3,
+          120
+        )
+      : []
+  const ruleIncomplete = formInterval > 1 && !ruleForm.anchor_date
+
+  const changeInterval = (value: string) =>
+    setRuleForm((f) => ({
+      ...f,
+      interval_weeks: value,
+      // Sugere a próxima data do dia da semana escolhido como referência.
+      anchor_date: Number(value) > 1 && !f.anchor_date ? nextWeekday(Number(f.day_of_week)) : f.anchor_date,
+    }))
+
+  const changeDay = (value: string) =>
+    setRuleForm((f) => ({
+      ...f,
+      day_of_week: value,
+      anchor_date: Number(f.interval_weeks) > 1 ? nextWeekday(Number(value)) : f.anchor_date,
+    }))
 
   async function availabilityRequest(url: string, options: RequestInit) {
     const response = await fetch(url, {
@@ -79,6 +145,7 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
           start_time: ruleForm.start_time,
           end_time: ruleForm.end_time,
           slot_duration: Number(ruleForm.slot_duration),
+          ...(formInterval > 1 ? { interval_weeks: formInterval, anchor_date: formAnchor } : {}),
         }),
       })
       if (res.ok) {
@@ -186,6 +253,7 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
                 {dayRules.map((r) => (
                   <Badge key={r.id} className="gap-1.5 border-none bg-[var(--navy-06)] text-[var(--navy)]">
                     {workspaceName} · {r.start_time.slice(0, 5)}–{r.end_time.slice(0, 5)} ({r.slot_duration}min)
+                    {(r.interval_weeks ?? 1) > 1 && ` · ${intervalLabel(r.interval_weeks)}`}
                     {canManage && <button aria-label={`Excluir horário de ${label} em ${workspaceName}`} onClick={() => removeRule(r.id)} className="ml-0.5 hover:text-red-600">
                       <X className="h-3 w-3" />
                     </button>}
@@ -203,7 +271,7 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
             <Select
               items={DAY_ITEMS}
               value={ruleForm.day_of_week}
-              onValueChange={(v) => v && setRuleForm((f) => ({ ...f, day_of_week: v }))}
+              onValueChange={(v) => v && changeDay(v)}
             >
               <SelectTrigger className="w-32">
                 <SelectValue />
@@ -244,9 +312,38 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
               onChange={(e) => setRuleForm((f) => ({ ...f, slot_duration: e.target.value }))}
             />
           </div>
+          <div>
+            <Label className="text-xs">Repete</Label>
+            <Select items={INTERVAL_ITEMS} value={ruleForm.interval_weeks} onValueChange={(v) => v && changeInterval(v)}>
+              <SelectTrigger className="w-44" aria-label="Repete">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {INTERVAL_WEEKS_OPTIONS.map((n) => (
+                  <SelectItem key={n} value={String(n)}>
+                    {INTERVAL_ITEMS[String(n)]}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          {formInterval > 1 && (
+            <div>
+              <Label className="text-xs" htmlFor="rule-anchor">
+                Um dia em que atende ({DAY_LABEL[formDay].toLowerCase()})
+              </Label>
+              <Input
+                id="rule-anchor"
+                type="date"
+                className="w-40"
+                value={ruleForm.anchor_date}
+                onChange={(e) => setRuleForm((f) => ({ ...f, anchor_date: e.target.value }))}
+              />
+            </div>
+          )}
           <Button
             onClick={addRule}
-            disabled={savingRule}
+            disabled={savingRule || ruleIncomplete || !!recurrenceError}
             size="sm"
             className="gap-1.5 bg-[var(--cyan)] text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
           >
@@ -254,6 +351,16 @@ export function AvailabilitySettings({ initialRules, initialExceptions, workspac
             Adicionar
           </Button>
         </div>}
+        {canManage && formInterval > 1 && (
+          <p className={`mt-2 text-xs ${recurrenceError ? 'text-red-500' : 'text-gray-500'}`}>
+            {recurrenceError ??
+              (ruleIncomplete
+                ? 'Escolha um dia em que o atendimento acontece.'
+                : previewDates.length > 0
+                  ? `Próximas datas: ${previewDates.map(formatDayMonth).join(', ')}`
+                  : 'Nenhuma data nos próximos meses (todas bloqueadas).')}
+          </p>
+        )}
       </div>
 
       <div className="border-t border-[var(--navy-06)] pt-5">
