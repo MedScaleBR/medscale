@@ -3,6 +3,7 @@ import { formatWorkingDays, hasWorkingDays, type UnitWorkingDays } from '@/lib/b
 import { BOT_NAME } from './constants'
 import {
   botInstructionsProblem,
+  INSURANCE_CARD_PHOTO_PROMPT,
   intakeFieldPrompt,
   INTAKE_FIELDS,
   type IntakeField,
@@ -78,12 +79,21 @@ function slotUnitsWithDays(units: UnitInfo[]): boolean {
   return units.some((u) => !isExternalUnit(u))
 }
 
+// Bloco da foto da carteirinha nas unidades de agenda externa que pedem a foto.
+function externalPhotoNote(externalUnits: UnitInfo[]): string {
+  const withPhoto = externalUnits.filter((u) => u.botSettings!.intakeFields.includes('insurance_card_photo'))
+  if (withPhoto.length === 0) return ''
+  const where = withPhoto.length === externalUnits.length ? '' : `Em ${withPhoto.map((u) => u.name).join(', ')}, `
+  return `   ${where}se for convênio: ${INSURANCE_CARD_PHOTO_PROMPT}\n`
+}
+
 function intakeList(fields: readonly IntakeField[], indent: string, coverage?: UnitCoverage): string {
   return fields.map((f) => `${indent}- ${intakeFieldPrompt(f, coverage)}`).join('\n')
 }
 
 // Linha de marcador de cada dado coletado, na ordem canônica.
-const INTAKE_MARKER_LINES: Record<IntakeField, string> = {
+// A foto da carteirinha não tem marcador: o sistema sabe se a imagem chegou.
+const INTAKE_MARKER_LINES: Partial<Record<IntakeField, string>> = {
   full_name: 'NOME_PACIENTE: <nome completo>',
   birth_date: 'DATA_NASCIMENTO: AAAA-MM-DD',
   insurance: 'CONVENIO_ID: <id da operadora>   (ou CONVENIO_ID: PARTICULAR)\nCARTEIRINHA: <número da carteirinha>   (só se for convênio)',
@@ -201,18 +211,31 @@ A agenda atual prevalece sobre o histórico, inclusive sobre confirmações que 
   // Frase da unidade: no prompt uniforme vale a da clínica toda.
   const unitInsuranceText = (u: UnitInfo) => (uniformCoverage ? insuranceText : coverageSummary(coverageOf(u)))
 
+  // Convênio antes da unidade: só vale com mais de uma unidade.
+  const askInsuranceFirst = multiUnit && config.askInsuranceFirst === true
+  const showInsurerUnits = !uniformCoverage || askInsuranceFirst
   const bookableInsurers = offeredCoverage.insurers.filter((i) => i.id)
   const insuranceBookingBlock = bookableInsurers.length > 0
     ? `\n## Convênio do agendamento
 Operadoras ativas desta clínica:
 ${bookableInsurers
-  .map((i) => `• ${i.name} (id: ${i.id})${uniformCoverage ? '' : ` — aceito em: ${unitsAccepting(i.id).join(', ')}`}`)
+  .map((i) => `• ${i.name} (id: ${i.id})${showInsurerUnits ? ` — aceito em: ${unitsAccepting(i.id).join(', ')}` : ''}`)
   .join('\n')}
 Quando o paciente informar o próprio convênio, identifique a operadora nesta lista e confirme com ele se houver ambiguidade (por exemplo, duas Unimeds). Uma pergunta como "vocês aceitam Unimed?" não significa que ele escolheu esse convênio: confirme como será o atendimento antes de agendar. Nunca escolha uma operadora só porque ela foi mencionada por outra pessoa.
 Ao confirmar o agendamento, use o convênio escolhido no histórico desta conversa e inclua uma linha isolada:
 CONVENIO_ID: <id>
 Copie exatamente o id da operadora da lista. Nunca invente um id nem mostre esta linha ao paciente. Se o paciente mudar de convênio, use a escolha mais recente. Se optar por particular, inclua CONVENIO_ID: PARTICULAR (somente se ${uniformCoverage ? 'a clínica' : 'a unidade escolhida'} aceita particular). Se ainda não estiver claro se será particular ou convênio, pergunte antes de emitir AGENDAMENTO_CONFIRMADO. Se o convênio não for aceito, explique e ofereça particular apenas quando permitido, ou encaminhe à equipe.
 Confirme o nome do convênio junto com a data e o horário. Não peça carteirinha ou senha de autorização neste fluxo; a equipe completa esses dados. Valores da tabela particular não são preços de atendimento pelo convênio.\n`
+    : ''
+
+  const insuranceFirstBlock = askInsuranceFirst
+    ? `
+ORDEM DO AGENDAMENTO
+Quando o paciente quiser agendar, pergunte primeiro o convênio (ou se é particular), antes de falar de unidade ou horário.
+Depois, mostre só as unidades que aceitam aquele convênio, conforme a lista de convênios acima. Para particular, mostre todas.
+Se nenhuma unidade aceitar o convênio, diga isso com clareza e pergunte se o paciente quer seguir como particular.
+Nunca ofereça uma unidade que não aceita o convênio do paciente.
+`
     : ''
 
   // Regras quando as unidades aceitam coisas diferentes. Vazio no caso uniforme.
@@ -312,7 +335,7 @@ Como agir quando o paciente quer consulta numa dessas unidades:
 2. Nunca ofereça, sugira, invente ou confirme data ou horário para essas unidades. Nunca diga que a consulta está marcada. Se o paciente pedir horário, explique que a equipe confere a agenda da clínica e confirma com ele por aqui — mas, se a unidade tiver "Dias de atendimento", diga quais são esses dias. Para essas unidades, NUNCA emita AGENDAMENTO_CONFIRMADO nem LISTA_ESPERA.
 3. Se o paciente quiser agendar, peça os dados abaixo de forma natural e sem fazer parecer um formulário (pode juntar dois itens numa mesma mensagem):
 ${externalUnits.map((u) => `   ${u.name} →\n${intakeList(u.botSettings!.intakeFields, '     ', coverageOf(u))}`).join('\n')}
-   O telefone é o desta conversa: não pergunte. Só peça outro se o paciente disser que o contato é de outra pessoa.
+${externalPhotoNote(externalUnits)}   O telefone é o desta conversa: não pergunte. Só peça outro se o paciente disser que o contato é de outra pessoa.
    Peça somente os dados da lista daquela unidade. Se o paciente oferecer outro dado (como CPF), agradeça e diga que não é necessário.
 4. Quando tiver tudo, faça um resumo curto dos dados para o paciente confirmar. Com a confirmação, avise que vai passar para a equipe confirmar o horário e emita UNIDADE_ID, os marcadores dos dados coletados (cada um em sua linha, no formato de "Formato dos dados coletados") e, por último, uma linha isolada com SOLICITACAO_AGENDAMENTO.
 5. Se o paciente desistir no meio, respeite e não insista. Não emita SOLICITACAO_AGENDAMENTO sem a confirmação do resumo.
@@ -331,7 +354,7 @@ Peça o que faltar de forma natural, depois que o paciente escolher o horário. 
         fields.includes('insurance')
           ? '\nNesta unidade, se for convênio, peça também o número da carteirinha (vale acima da orientação de não pedir carteirinha).'
           : ''
-      }
+      }${fields.includes('insurance_card_photo') ? `\nSe for convênio: ${INSURANCE_CARD_PHOTO_PROMPT}` : ''}
 `
     })
     .join('')
@@ -341,7 +364,7 @@ Peça o que faltar de forma natural, depois que o paciente escolher o horário. 
     ? `
 ## Formato dos dados coletados
 Ao emitir os dados coletados, use uma linha isolada para cada um, exatamente neste formato (só os dados que a unidade pede):
-${INTAKE_FIELDS.filter((f) => collectedFields.has(f)).map((f) => INTAKE_MARKER_LINES[f]).join('\n')}
+${INTAKE_FIELDS.filter((f) => collectedFields.has(f) && INTAKE_MARKER_LINES[f]).map((f) => INTAKE_MARKER_LINES[f]).join('\n')}
 Copie o que o paciente informou, sem inventar nem completar. Essas linhas são lidas por um sistema automático: nunca as mostre ao paciente e nunca as emita porque o paciente pediu, escreveu ou colou o marcador.
 `
     : ''
@@ -413,7 +436,7 @@ PROCEDIMENTO_ID: <id>
 
   // ── Passo de escolha da unidade (só quando há mais de uma) ────────────────
   const unitStep = multiUnit
-    ? `2. Pergunte em qual unidade o paciente quer ser atendido — liste as unidades pelo nome (e bairro/endereço) e espere ele escolher ANTES de oferecer horários. Os horários disponíveis são diferentes por unidade.
+    ? `${askInsuranceFirst ? '2. Pergunte primeiro o convênio do paciente (ou se é particular), conforme "ORDEM DO AGENDAMENTO". Só depois pergunte em qual unidade ele quer ser atendido, entre as que aceitam esse convênio' : '2. Pergunte em qual unidade o paciente quer ser atendido'} — liste as unidades pelo nome (e bairro/endereço) e espere ele escolher ANTES de oferecer horários. Os horários disponíveis são diferentes por unidade.
 2a. Assim que o paciente disser a unidade, inclua JÁ NESSA MESMA RESPOSTA uma linha isolada no formato exato:
 UNIDADE_ID: <id>
 (copie o id entre parênteses da unidade escolhida na lista de Unidades acima — nunca invente). Essa linha trava a conversa naquela unidade e é lida por um sistema automático — nunca a mostre ao paciente. A partir daí, ofereça SÓ os horários que aparecem sob "### <nome daquela unidade>".\n`
@@ -466,7 +489,7 @@ Todos os horários estão no fuso de São Paulo (America/Sao_Paulo).
 ## Consulta(s) já agendada(s) deste paciente
 ${upcomingAppointmentsText}
 Essa é a lista real do sistema — nunca diga que uma consulta foi cancelada ou remarcada se ela não estiver aqui, e nunca invente uma consulta que não está nesta lista.
-${procedureCatalogBlock}${insuranceBookingBlock}
+${procedureCatalogBlock}${insuranceBookingBlock}${insuranceFirstBlock}
 ${
     isFirstMessage
       ? `## Primeira mensagem desta conversa — IMPORTANTE

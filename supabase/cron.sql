@@ -152,6 +152,24 @@ select cron.schedule(
   $$
 );
 
+-- CLEANUP-INSURANCE-CARDS: apaga do Storage as fotos de carteirinha com mais
+-- de INSURANCE_CARD_RETENTION_DAYS dias (padrão 90) e marca deleted_at em
+-- conversation_attachments (ver supabase/migration_clara_carteirinha_email.sql) — 3h30
+select cron.schedule(
+  'cleanup-insurance-cards',
+  '30 3 * * *',
+  $$
+    select net.http_post(
+      url     := 'https://medscalebr.com/api/cron/cleanup-insurance-cards',
+      headers := jsonb_build_object(
+        'Content-Type',  'application/json',
+        'Authorization', 'Bearer ' || public.cron_secret()
+      ),
+      body    := '{}'::jsonb
+    );
+  $$
+);
+
 -- CLEANUP-RATE-LIMITS: apaga registros de rate_limit_log com janela expirada
 -- há mais de 10min (ver lib/rate-limit/webhook.ts) — a cada 10min. DELETE
 -- direto no Postgres, sem HTTP: não há rota envolvida. Registros velhos não

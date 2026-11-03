@@ -15,6 +15,7 @@ import {
   recordPendingExternalRequest,
 } from '@/lib/bot/external-request'
 import { executeHandoff, logHandoffUnavailable } from '@/lib/bot/handoff'
+import { sendExternalRequestEmail } from '@/lib/bot/request-email'
 import { broadcastToWorkspace } from '@/lib/realtime/broadcast'
 import { createBookingRevenueEntry } from '@/lib/revenue/cycle'
 import {
@@ -40,6 +41,7 @@ import {
   type AgentEffect,
   type AgentPlan,
   type ApplyOutcome,
+  type ExternalRequestPlan,
 } from '@/lib/llm/agent-plan'
 
 interface ProcessMessageParams {
@@ -559,6 +561,7 @@ async function applyEffects(ctx: AgentContext, plan: AgentPlan, io: ApplyIo) {
           body: externalRequestPushBody(externalRequest.summary, externalRequest.unitName),
         },
       })
+      await emailExternalRequest(conversationId, externalRequest)
       return
     }
 
@@ -603,7 +606,21 @@ async function applyEffects(ctx: AgentContext, plan: AgentPlan, io: ApplyIo) {
       handoffNumber: handoffUnit?.handoffNumber ?? null,
       summary: externalRequest.summary,
     })
+    await emailExternalRequest(conversationId, externalRequest)
   }
+}
+
+// E-mail da solicitação, depois do handoff/pendência já gravados. Nunca lança.
+async function emailExternalRequest(
+  conversationId: string,
+  request: ExternalRequestPlan
+) {
+  await sendExternalRequestEmail({
+    conversationId,
+    workspaceId: request.unitId,
+    unitName: request.unitName,
+    summary: request.summary,
+  }).catch(() => console.error(`[email] email_failed conversation=${conversationId}`))
 }
 
 // Agendamento confirmado numa unidade da MedScale. Revalida o horário antes de

@@ -76,6 +76,8 @@ export interface AgentContext {
   injectionSignals: InjectionSignal[]
   /** Há número e token do WhatsApp — sem isso a produção não envia nem transfere. */
   channelReady: boolean
+  /** A conversa tem foto da carteirinha salva (só consultado se alguma unidade pede a foto). */
+  insuranceCardReceived: boolean
 }
 
 export interface AccountUnits {
@@ -258,6 +260,21 @@ export async function buildAgentContext(input: BuildAgentContextInput): Promise<
     botConfig.acceptsPrivate
   )
 
+  // Foto da carteirinha já salva nesta conversa. Sem a tabela (migration
+  // pendente) ou no simulador, conta como não enviada.
+  let insuranceCardReceived = false
+  if (collectedFieldsAnywhere.has('insurance_card_photo') && conversation.id) {
+    const { data: card, error: cardError } = await supabase
+      .from('conversation_attachments')
+      .select('id')
+      .eq('conversation_id', conversation.id)
+      .eq('kind', 'insurance_card')
+      .is('deleted_at', null)
+      .limit(1)
+      .maybeSingle()
+    insuranceCardReceived = !cardError && !!card
+  }
+
   // Sinais de injection nas últimas 10 mensagens do paciente.
   const injectionSignals = history
     .filter((m) => m.role === 'user')
@@ -301,5 +318,6 @@ export async function buildAgentContext(input: BuildAgentContextInput): Promise<
     coverageByUnit,
     injectionSignals,
     channelReady: input.channelReady,
+    insuranceCardReceived,
   }
 }

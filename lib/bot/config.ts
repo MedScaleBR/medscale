@@ -12,6 +12,8 @@ import type { UnitWorkingDays } from '@/lib/bot/working-days'
 export interface BotConfig {
   specialty: string | null
   acceptsPrivate: boolean
+  // Pergunta o convênio antes da unidade (só a MedScale liga). Ausente = false.
+  askInsuranceFirst?: boolean
   paymentMethods: string[]
   pricingInfo: string | null
   examPreparation: string | null
@@ -78,6 +80,8 @@ export async function getBotConfig(accountId: string): Promise<BotConfig | null>
   const config: BotConfig = {
     specialty: data.specialty,
     acceptsPrivate: data.accepts_private,
+    // select '*': sem a migration a coluna não vem e fica false.
+    askInsuranceFirst: data.ask_insurance_first ?? false,
     paymentMethods: data.payment_methods ?? [],
     pricingInfo: data.pricing_info,
     examPreparation: data.exam_preparation,

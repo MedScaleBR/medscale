@@ -54,6 +54,7 @@ export interface SupabaseMock {
     createSignedUploadUrl: ReturnType<typeof vi.fn>
     upload: ReturnType<typeof vi.fn>
     remove: ReturnType<typeof vi.fn>
+    download: ReturnType<typeof vi.fn>
   }
 }
 

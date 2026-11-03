@@ -5,6 +5,8 @@ import { TZDate } from '@date-fns/tz'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
 import { WorkspaceBotSettingsForm, type BotSettingsValue } from './WorkspaceBotSettingsForm'
+import { NotificationEmailsForm } from './NotificationEmailsForm'
+import { ClaraAccountOptions } from './ClaraAccountOptions'
 import { applyPresetToAccount, createPreset, saveWorkspaceBotSettings } from './clara-api'
 import { matchesPreset, presetSettings, type BotPreset } from '@/lib/bot/presets'
 import { getWorkspaceBotSettings } from '@/lib/bot/unit-settings'
@@ -16,6 +18,8 @@ export interface WorkspaceBotSettingsRow {
   presetId: string | null
   updatedByName: string | null
   updatedAt: string | null
+  /** null = coluna ainda não migrada (campo escondido). */
+  notificationEmails: string[] | null
 }
 
 function formatUpdatedAt(iso: string): string {
@@ -72,6 +76,7 @@ function WorkspaceBotSettingsCard({
           ) : null
         }
       />
+      {row.notificationEmails !== null && <NotificationEmailsForm workspaceId={row.id} initial={row.notificationEmails} />}
     </section>
   )
 }
@@ -201,10 +206,13 @@ export function WorkspaceBotSettingsSection({
   accountId,
   rows: initialRows,
   presets: initialPresets,
+  askInsuranceFirst,
 }: {
   accountId: string
   rows: WorkspaceBotSettingsRow[]
   presets: BotPreset[]
+  /** null = account sem bot_config ou coluna não migrada (opção escondida). */
+  askInsuranceFirst: boolean | null
 }) {
   const [rows, setRows] = useState(initialRows)
   const [presets, setPresets] = useState(initialPresets)
@@ -219,6 +227,9 @@ export function WorkspaceBotSettingsSection({
           Como a Clara atende em cada unidade. Só a equipe MedScale altera; o cliente vê um resumo em Meus locais.
         </p>
       </div>
+      {askInsuranceFirst !== null && (
+        <ClaraAccountOptions accountId={accountId} askInsuranceFirst={askInsuranceFirst} unitsCount={rows.length} />
+      )}
       <ApplyToAllUnits
         accountId={accountId}
         rows={rows}

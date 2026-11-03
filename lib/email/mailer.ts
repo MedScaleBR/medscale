@@ -66,3 +66,33 @@ export async function sendInviteEmail({
     return { sent: false, error: String(err) }
   }
 }
+
+export interface MailAttachment {
+  filename: string
+  content: Buffer
+  contentType: string
+}
+
+/** O SMTP está configurado? Sem ele, os avisos por e-mail são pulados em silêncio. */
+export function isMailerConfigured(): boolean {
+  return Boolean(getTransporter() && process.env.SMTP_FROM)
+}
+
+// Envio genérico (avisos internos). Nunca loga destinatário nem conteúdo.
+export async function sendMail(params: {
+  to: string[]
+  subject: string
+  html: string
+  text: string
+  attachments?: MailAttachment[]
+}): Promise<{ sent: boolean; error?: string }> {
+  const transporter = getTransporter()
+  const from = process.env.SMTP_FROM
+  if (!transporter || !from) return { sent: false, error: 'not_configured' }
+  try {
+    await transporter.sendMail({ from, ...params })
+    return { sent: true }
+  } catch (err) {
+    return { sent: false, error: String(err) }
+  }
+}

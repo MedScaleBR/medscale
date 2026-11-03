@@ -11,6 +11,7 @@ const g = vi.hoisted(() => ({
   processFinancialMessage: null as unknown as MockFn,
   sendFinanceReply: null as unknown as MockFn,
   sendWhatsAppMessage: vi.fn(async () => undefined),
+  receiveInsuranceCard: vi.fn<(p: unknown) => Promise<string | null>>(async () => null),
 }))
 
 // `after()` só funciona dentro de um request scope do Next — aqui ele é
@@ -39,6 +40,11 @@ vi.mock('@/lib/crypto', () => ({
   decryptToken: (t: string) => t.replace(/^enc:/, ''),
   encryptToken: (t: string) => `enc:${t}`,
 }))
+
+vi.mock('@/lib/bot/insurance-card', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/bot/insurance-card')>()
+  return { ...actual, receiveInsuranceCard: (p: unknown) => g.receiveInsuranceCard(p) }
+})
 
 import { POST, GET } from '@/app/api/whatsapp/webhook/route'
 
@@ -251,6 +257,47 @@ describe('POST /api/whatsapp/webhook — roteamento da mensagem', () => {
     await runAfterCallbacks()
 
     expect(g.handleUnsupportedMessage).toHaveBeenCalledWith(expect.objectContaining({ messageType: 'audio' }))
+    expect(g.processIncomingMessage).not.toHaveBeenCalled()
+  })
+
+  const imagePayload = () =>
+    JSON.stringify({
+      entry: [
+        {
+          changes: [
+            {
+              value: {
+                metadata: { phone_number_id: PHONE_NUMBER_ID },
+                messages: [
+                  { from: '5511988887777', id: 'wamid.3', type: 'image', image: { id: 'media-1', mime_type: 'image/jpeg', caption: 'frente' } },
+                ],
+              },
+            },
+          ],
+        },
+      ],
+    })
+
+  it('imagem numa unidade que pede a foto: a Clara recebe o texto de sistema no lugar da imagem', async () => {
+    g.receiveInsuranceCard.mockResolvedValueOnce('[foto salva]')
+    const body = imagePayload()
+    await POST(makeRequest(body, makeSignature(body, GLOBAL_SECRET)) as never)
+    await runAfterCallbacks()
+
+    expect(g.receiveInsuranceCard).toHaveBeenCalledWith(
+      expect.objectContaining({ accountId: 'acc1', media: { type: 'image', mediaId: 'media-1', mimeType: 'image/jpeg', caption: 'frente' } })
+    )
+    expect(g.processIncomingMessage).toHaveBeenCalledWith(expect.objectContaining({ message: '[foto salva]', whatsappMessageId: 'wamid.3' }))
+    expect(g.handleUnsupportedMessage).not.toHaveBeenCalled()
+  })
+
+  it('imagem numa unidade que não pede a foto: segue como mídia não suportada', async () => {
+    g.receiveInsuranceCard.mockResolvedValueOnce(null)
+    const body = imagePayload()
+    await POST(makeRequest(body, makeSignature(body, GLOBAL_SECRET)) as never)
+    await runAfterCallbacks()
+
+    expect(g.handleUnsupportedMessage).toHaveBeenCalledWith(expect.objectContaining({ messageType: 'image' }))
     expect(g.processIncomingMessage).not.toHaveBeenCalled()
   })
 

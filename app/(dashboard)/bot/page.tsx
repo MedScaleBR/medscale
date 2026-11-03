@@ -48,6 +48,26 @@ export default async function BotPage() {
         .not('summary', 'is', null)
         .order('sent_at', { ascending: false })
     : { data: [], error: null }
+  // Foto da carteirinha mais recente de cada conversa com solicitação. Só o id
+  // e o tipo vão ao client; a imagem abre por /api/bot/attachments/[id].
+  // Erro (ex.: migration pendente) = sem foto.
+  const requestConversationIds = [...new Set((requestsError ? [] : (requestRows ?? [])).map((r) => r.conversation_id).filter((v): v is string => !!v))]
+  const { data: cardRows, error: cardsError } = requestConversationIds.length
+    ? await supabase
+        .from('conversation_attachments')
+        .select('id, conversation_id, mime_type')
+        .in('conversation_id', requestConversationIds)
+        .eq('kind', 'insurance_card')
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
+    : { data: [], error: null }
+  const cardByConversation = new Map<string, { id: string; isPdf: boolean }>()
+  for (const c of cardsError ? [] : (cardRows ?? [])) {
+    if (!cardByConversation.has(c.conversation_id)) {
+      cardByConversation.set(c.conversation_id, { id: c.id, isPdf: c.mime_type === 'application/pdf' })
+    }
+  }
+
   const requestByConversation = new Map<string, ExternalRequestView>()
   for (const r of requestsError ? [] : (requestRows ?? [])) {
     if (!r.conversation_id || requestByConversation.has(r.conversation_id)) continue
@@ -57,6 +77,7 @@ export default async function BotPage() {
       lines: formatExternalRequestLines(r.summary as ExternalRequestSummary, unitName),
       sentAt: r.sent_at,
       resolvedAt: r.resolved_at,
+      cardPhoto: cardByConversation.get(r.conversation_id) ?? null,
     })
   }
 

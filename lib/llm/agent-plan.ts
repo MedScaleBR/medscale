@@ -386,7 +386,9 @@ export async function planEffects(
           ? !bookingCoverage.acceptsPrivate
           : !selectedInsurer))
   if (insuranceNotAccepted) {
-    console.warn(`[insurance] escolha não aceita na unidade workspace=${requestedBookingUnitId}`)
+    console.warn(
+      `[insurance] insurer_not_accepted marker=AGENDAMENTO_CONFIRMADO workspace=${requestedBookingUnitId} insurer=${selectedInsurer?.id ?? 'PARTICULAR'}`
+    )
     effects.push({ kind: 'blocked', reason: 'insurance_not_accepted', workspace_id: requestedBookingUnitId ?? undefined })
   } else if (insuranceNeedsClarification) {
     effects.push({ kind: 'blocked', reason: 'insurance_unclear' })
@@ -520,6 +522,8 @@ export async function planEffects(
   // unidade 'external' e com todos os dados que ela coleta.
   let externalRequest: Omit<ExternalRequestPlan, 'inHours'> | null = null
   let externalRequestUnitRequired = false
+  // Convênio escolhido que a unidade da solicitação não aceita: não transfere.
+  let requestInsurerNotAccepted: { unitId: string; insurer: Insurer } | null = null
   if (markers.schedulingRequested && !discountFlagged) {
     const requestUnitId = validMarkerUnit(markers.unitId) ?? conversationUnitId ?? singleUnitId
     const requestUnit = requestUnitId ? unitById.get(requestUnitId) : undefined
@@ -539,6 +543,13 @@ export async function planEffects(
         (insuranceChoice === 'PARTICULAR' || (insuranceChoice === null && requestCoverage.insurers.length === 0))
       // Convênio que a unidade não aceita conta como não resolvido: a Clara pergunta de novo.
       const insurerAccepted = !!selectedInsurer && requestCoverage.insurers.some((i) => i.id === selectedInsurer.id)
+      if (selectedInsurer && !insurerAccepted && !ctx.insurersError) {
+        console.warn(
+          `[insurance] insurer_not_accepted marker=SOLICITACAO_AGENDAMENTO workspace=${requestUnit.id} insurer=${selectedInsurer.id}`
+        )
+        requestInsurerNotAccepted = { unitId: requestUnit.id, insurer: selectedInsurer }
+        effects.push({ kind: 'blocked', reason: 'insurance_not_accepted', workspace_id: requestUnit.id })
+      }
       const missing = missingIntakeFields(fields, {
         fullName: patient?.full_name ?? null,
         birthDate: patient?.birth_date ?? null,
@@ -551,7 +562,9 @@ export async function planEffects(
         preference: intake.preference,
       })
 
-      if (missing.length > 0) {
+      if (requestInsurerNotAccepted) {
+        // Já bloqueado acima: a mensagem explica o convênio, não pede dado.
+      } else if (missing.length > 0) {
         console.warn(`[intake] missing_fields=${missing.join(',')} trigger_reason=${EXTERNAL_REQUEST_REASON} workspace=${requestUnit.id}`)
         intakeMissing = missing
         intakeMissingUnitId = requestUnit.id
@@ -568,6 +581,10 @@ export async function planEffects(
           if (!particular && selectedInsurer && insurerAccepted) {
             summary.insurance = { convenio_id: selectedInsurer.id, name: selectedInsurer.name, card_number: intake.cardNumber }
           }
+        }
+        // Foto só faz sentido para convênio; a falta dela não bloqueia.
+        if (fields.includes('insurance_card_photo') && !particular) {
+          summary.insurance_card_photo = ctx.insuranceCardReceived ? 'sent' : 'missing'
         }
         if (fields.includes('cpf')) summary.cpf = intake.cpf!
         if (fields.includes('email')) summary.email = intake.email!
@@ -611,6 +628,8 @@ export async function planEffects(
       ? closedDayMessage(closedDay.unitName, closedDay.days)
     : insuranceNotAccepted
       ? insuranceNotAcceptedMessage(ctx, requestedBookingUnitId!, selectedInsurer)
+    : requestInsurerNotAccepted
+      ? insuranceNotAcceptedMessage(ctx, requestInsurerNotAccepted.unitId, requestInsurerNotAccepted.insurer)
     : insuranceNeedsClarification
       ? bookingCoverage.acceptsPrivate
         ? 'Antes de confirmar o agendamento, pode confirmar qual é o seu convênio ou se prefere atendimento particular?'
