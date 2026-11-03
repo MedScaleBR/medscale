@@ -1,8 +1,8 @@
-import { addDays, format } from 'date-fns'
+import { format } from 'date-fns'
 import { TZDate } from '@date-fns/tz'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getAccountUnits, type BotConfig, type UnitContext } from '@/lib/bot/config'
-import { getFreeSlotsForBot } from '@/lib/google/availability'
+import { getFreeSlotsByDayForBot } from '@/lib/google/availability'
 import { detectInjectionAttempt, type InjectionSignal } from '@/lib/bot/security'
 import type { IntakeField } from '@/lib/bot/unit-settings'
 import { buildCoverageByUnit, mergeCoverages, type UnitCoverage } from '@/lib/bot/unit-insurance'
@@ -116,18 +116,11 @@ export async function loadAccountUnits(supabase: SupabaseAdmin, accountId: strin
   }
 }
 
-// Slots livres de uma unidade nos próximos dias (até `maxDays` dias com vaga),
-// contados a partir de `now` (o simulador pode passar outra data).
+// Slots livres de uma unidade: até `maxDays` dias com vaga, procurando até
+// BOT_SLOTS_LOOKAHEAD_DAYS dias à frente de `now` (o simulador pode passar
+// outra data). Cada unidade tem a própria contagem.
 export async function collectFreeSlots(unitId: string, now: Date, maxDays = 4): Promise<Record<string, string[]>> {
-  const byDay: Record<string, string[]> = {}
-  for (let i = 1; i <= 12 && Object.keys(byDay).length < maxDays; i++) {
-    const day = addDays(now, i)
-    const slots = await getFreeSlotsForBot(unitId, day).catch(() => [])
-    if (slots.length > 0) {
-      byDay[format(new TZDate(day, 'America/Sao_Paulo'), 'yyyy-MM-dd')] = slots
-    }
-  }
-  return byDay
+  return getFreeSlotsByDayForBot(unitId, now, { maxDays }).catch(() => ({}))
 }
 
 /** Dados da coleta já salvos no paciente — só quando alguma unidade coleta algo. */

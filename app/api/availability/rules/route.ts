@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { requireWorkspaceSession } from '@/lib/session/api'
+import { parseRecurrence } from '@/lib/scheduling/rule-input'
 
 export async function GET(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
@@ -29,6 +30,8 @@ export async function POST(req: NextRequest) {
   if (body.day_of_week == null || !body.start_time || !body.end_time) {
     return NextResponse.json({ error: 'day_of_week, start_time e end_time são obrigatórios' }, { status: 400 })
   }
+  const recurrence = parseRecurrence(body.day_of_week, body)
+  if (!recurrence.ok) return NextResponse.json({ error: recurrence.error }, { status: 400 })
 
   const { data, error } = await supabase
     .from('availability_rules')
@@ -40,6 +43,8 @@ export async function POST(req: NextRequest) {
       end_time: body.end_time,
       slot_duration: body.slot_duration ?? 30,
       is_active: body.is_active ?? true,
+      // Toda semana usa o padrão do banco: o cadastro não depende da migration.
+      ...((recurrence.value.interval_weeks ?? 1) > 1 ? recurrence.value : {}),
     })
     .select()
     .single()

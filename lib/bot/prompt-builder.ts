@@ -1,5 +1,13 @@
 import type { BotConfig } from './config'
-import { formatWorkingDays, hasWorkingDays, type UnitWorkingDays } from '@/lib/bot/working-days'
+import {
+  describeSchedule,
+  formatWorkingDays,
+  hasSpacedRule,
+  hasWorkingDays,
+  upcomingAttendanceDates,
+  type UnitWorkingDays,
+} from '@/lib/bot/working-days'
+import { formatShortDate } from '@/lib/scheduling/recurrence'
 import { BOT_NAME } from './constants'
 import {
   botInstructionsProblem,
@@ -69,9 +77,27 @@ function isExternalUnit(u: UnitInfo): boolean {
 }
 
 function workingDaysText(u: UnitInfo): string {
-  const days = formatWorkingDays(u.workingDays!)
+  // Com regra a cada N semanas, o dia da semana sozinho engana: diz a repetição.
+  const days = hasSpacedRule(u) ? describeSchedule(u.scheduleRules!) : formatWorkingDays(u.workingDays!)
   const extras = (u.extraDates ?? []).slice(0, 6).map((d) => d.split('-').reverse().join('/'))
   return extras.length > 0 ? `${days} (e também nas datas avulsas ${extras.join(', ')})` : days
+}
+
+// Expediente a cada N semanas (unidade com agenda na MedScale): uma linha antes
+// dos horários livres, para a Clara explicar por que não há a semana seguinte.
+// Vazio quando nenhuma regra repete com intervalo > 1 (prompt igual ao de antes).
+function spacedScheduleLine(u: UnitInfo | undefined): string {
+  if (!u || !hasSpacedRule(u)) return ''
+  return `Atendimento nesta unidade: ${describeSchedule(u.scheduleRules!)}.\n`
+}
+
+// Agenda externa com expediente cadastrado: o expediente e as 3 próximas datas
+// (informativas — a equipe confirma o horário). Vazio sem expediente.
+function externalDatesText(u: UnitInfo, today: string): string {
+  if (!u.scheduleRules?.length) return ''
+  const next = upcomingAttendanceDates(u, today, 3, 60)
+  const dates = next.length > 0 ? ` Próximas datas: ${next.map(formatShortDate).join(', ')}.` : ''
+  return ` — atende ${describeSchedule(u.scheduleRules)}.${dates}`
 }
 
 // Alguma unidade com dias cadastrados tem horários na MedScale (não é agenda externa).
@@ -316,10 +342,10 @@ Nessas unidades o horário só fica garantido depois que a clínica parceira con
   const slotsSection = multiUnit
     ? `⚠️ Os horários abaixo são POR UNIDADE. Os que aparecem sob "### <nome>" valem SÓ para aquela unidade. NUNCA ofereça a um paciente um horário listado sob outra unidade — mesmo que exista vaga lá. Se o paciente escolheu a Unidade X, use exclusivamente a lista sob "### X"; se essa lista estiver vazia, diga que não há horário nessa unidade nos próximos dias.\n\n` +
       (slotUnits.length > 0
-        ? slotUnits.map((u) => `### ${u.name}\n${formatSlotsByDay(freeSlotsByUnit[u.id] ?? {})}`).join('\n\n')
+        ? slotUnits.map((u) => `### ${u.name}\n${spacedScheduleLine(u)}${formatSlotsByDay(freeSlotsByUnit[u.id] ?? {})}`).join('\n\n')
         : noInternalSlots)
     : slotUnits.length > 0
-      ? formatSlotsByDay(freeSlotsByUnit[units[0]?.id] ?? {})
+      ? `${spacedScheduleLine(units[0])}${formatSlotsByDay(freeSlotsByUnit[units[0]?.id] ?? {})}`
       : noInternalSlots
 
   // ── Clara por unidade: agenda externa, dados a coletar, instruções ────────
@@ -328,8 +354,10 @@ Nessas unidades o horário só fica garantido depois que a clínica parceira con
     ? `
 ## Unidades com agenda externa — IMPORTANTE
 Nestas unidades o doutor atende pela agenda da própria clínica. Você NÃO tem acesso aos horários delas:
-${externalUnits.map((u) => `• ${u.name} (id: ${u.id}) — ${u.address ?? 'endereço não informado'} — ${unitInsuranceText(u)}${coverageOf(u).acceptsPrivate ? '' : ' NÃO atende particular: nunca ofereça particular nesta unidade.'}`).join('\n')}
-
+${externalUnits.map((u) => `• ${u.name} (id: ${u.id}) — ${u.address ?? 'endereço não informado'} — ${unitInsuranceText(u)}${coverageOf(u).acceptsPrivate ? '' : ' NÃO atende particular: nunca ofereça particular nesta unidade.'}${externalDatesText(u, localNow)}`).join('\n')}
+${externalUnits.some((u) => externalDatesText(u, localNow)) ? `
+Quando a unidade tiver próximas datas listadas, você pode informar ao paciente em quais datas o doutor atende lá e perguntar qual delas ele prefere. Deixe claro que o horário exato é confirmado pela equipe com a clínica. Nunca ofereça um horário específico nem diga que a consulta está marcada. A data escolhida vai na preferência do paciente (PREFERENCIA_HORARIO, por exemplo "ter 25/11, manhã").
+` : ''}
 Como agir quando o paciente quer consulta numa dessas unidades:
 1. Informe os locais e os convênios atendidos. Se o paciente perguntar se o doutor atende em um local que não está na lista de Unidades, diga que não atende ali e mostre onde atende.
 2. Nunca ofereça, sugira, invente ou confirme data ou horário para essas unidades. Nunca diga que a consulta está marcada. Se o paciente pedir horário, explique que a equipe confere a agenda da clínica e confirma com ele por aqui — mas, se a unidade tiver "Dias de atendimento", diga quais são esses dias. Para essas unidades, NUNCA emita AGENDAMENTO_CONFIRMADO nem LISTA_ESPERA.

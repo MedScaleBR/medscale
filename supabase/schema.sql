@@ -851,8 +851,13 @@ create table public.availability_rules (
   start_time    time not null,
   end_time      time not null,
   slot_duration int not null default 30,
+  -- Repetição: 1 = toda semana; 2–4 = a cada N semanas a partir de anchor_date
+  -- (um dia em que atende; obrigatório quando > 1). Ver lib/scheduling/recurrence.ts.
+  interval_weeks smallint not null default 1 check (interval_weeks between 1 and 4),
+  anchor_date   date,
   is_active     boolean not null default true,
-  created_at    timestamptz not null default now()
+  created_at    timestamptz not null default now(),
+  constraint availability_rules_anchor_required check (interval_weeks = 1 or anchor_date is not null)
 );
 
 -- Exceções de expediente (dias bloqueados / horários extras)

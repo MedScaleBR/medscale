@@ -1,4 +1,6 @@
 import { vi } from 'vitest'
+import { addDays, format } from 'date-fns'
+import { TZDate } from '@date-fns/tz'
 import { createSupabaseMock, type SupabaseMockConfig, type SupabaseMock } from './supabase-mock'
 import type { BotConfig, UnitContext } from '@/lib/bot/config'
 
@@ -45,6 +47,21 @@ export const getFreeSlotsForBot = vi.fn(async (_workspaceId: string, date: Date)
   const key = date.toISOString().slice(0, 10)
   return state.freeSlots[key] ?? state.freeSlots['*'] ?? []
 })
+// Busca por período (getFreeSlotsByDayForBot) montada em cima da simulação
+// por dia: os testes continuam controlando os horários por getFreeSlotsForBot.
+export const getFreeSlotsByDayForBot = vi.fn(
+  async (workspaceId: string, from: Date, opts: { maxDays?: number; lookaheadDays?: number } = {}) => {
+    const maxDays = opts.maxDays ?? 4
+    const lookahead = opts.lookaheadDays ?? 35
+    const byDay: Record<string, string[]> = {}
+    for (let i = 1; i <= lookahead && Object.keys(byDay).length < maxDays; i++) {
+      const day = addDays(from, i)
+      const slots = await getFreeSlotsForBot(workspaceId, day)
+      if (slots.length > 0) byDay[format(new TZDate(day, 'America/Sao_Paulo'), 'yyyy-MM-dd')] = slots
+    }
+    return byDay
+  }
+)
 export const claudeCreate = vi.fn(async () => {
   const next = state.claudeResponses.shift()
   if (next === undefined) return { content: [{ type: 'text', text: 'Resposta padrão do teste.' }], stop_reason: 'end_turn' }
@@ -110,6 +127,7 @@ export function resetAgentHarness(config: SupabaseMockConfig = defaultSupabaseCo
   deleteEvent.mockClear()
   isSlotAvailable.mockClear()
   getFreeSlotsForBot.mockClear()
+  getFreeSlotsByDayForBot.mockClear()
   claudeCreate.mockClear()
   return state.supabase
 }
