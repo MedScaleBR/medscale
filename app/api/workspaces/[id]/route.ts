@@ -8,6 +8,13 @@ import {
   parseOutsourcedFields,
 } from '@/lib/outsourced/config'
 import { PENDING_EXTERNAL_STATUS, type Database } from '@/types/database'
+import {
+  ARCHIVE_BLOCKING_STATUSES,
+  ARCHIVE_LAST_UNIT_ERROR,
+  ARCHIVE_NOT_FOUND_ERROR,
+  archivedSlug,
+  archiveFutureAppointmentsError,
+} from '@/lib/workspaces/archive'
 
 type WorkspaceUpdate = Database['public']['Tables']['workspaces']['Update']
 
@@ -109,4 +116,54 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json(data)
+}
+
+// Excluir unidade: arquiva (ver lib/workspaces/archive.ts). Os dados ficam.
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
+  const session = await resolveActiveSession()
+  if (!session) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  if (session.role !== 'owner' && session.role !== 'admin') {
+    return NextResponse.json({ error: 'Apenas admins do account podem excluir unidades.' }, { status: 403 })
+  }
+
+  const supabase = await createClient()
+  const { data: units, error: unitsError } = await supabase
+    .from('workspaces')
+    .select('id, slug, is_active, is_default, display_order')
+    .eq('account_id', session.accountId)
+    .order('display_order')
+  if (unitsError) return NextResponse.json({ error: unitsError.message }, { status: 500 })
+
+  const target = (units ?? []).find((w) => w.id === id)
+  if (!target || !target.is_active) return NextResponse.json({ error: ARCHIVE_NOT_FOUND_ERROR }, { status: 404 })
+  const others = (units ?? []).filter((w) => w.id !== id && w.is_active)
+  if (others.length === 0) return NextResponse.json({ error: ARCHIVE_LAST_UNIT_ERROR }, { status: 400 })
+
+  const { count, error: countError } = await supabase
+    .from('appointments')
+    .select('id', { count: 'exact', head: true })
+    .eq('workspace_id', id)
+    .in('status', [...ARCHIVE_BLOCKING_STATUSES])
+    .gte('scheduled_at', new Date().toISOString())
+  if (countError) return NextResponse.json({ error: countError.message }, { status: 500 })
+  if ((count ?? 0) > 0) {
+    return NextResponse.json({ error: archiveFutureAppointmentsError(count ?? 0) }, { status: 400 })
+  }
+
+  const { error } = await supabase
+    .from('workspaces')
+    .update({ is_active: false, is_default: false, slug: archivedSlug(target.slug, id) })
+    .eq('id', id)
+    .eq('account_id', session.accountId)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // A account precisa de uma unidade padrão: passa para a próxima ativa.
+  let newDefaultId: string | null = null
+  if (target.is_default) {
+    newDefaultId = others[0].id
+    await supabase.from('workspaces').update({ is_default: true }).eq('id', newDefaultId).eq('account_id', session.accountId)
+  }
+
+  return NextResponse.json({ ok: true, newDefaultId })
 }

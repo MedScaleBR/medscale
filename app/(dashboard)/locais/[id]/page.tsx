@@ -19,6 +19,7 @@ export default async function UnitPage({ params }: { params: Promise<{ id: strin
     .select('id, name, address, city, state, zip_code, directions_parking, contact_info, handoff_number, is_outsourced, external_clinic_phone')
     .eq('id', id)
     .eq('account_id', session.accountId)
+    .eq('is_active', true)
     .maybeSingle()
   if (!workspace) notFound()
   const canManage = session.role === 'owner' || session.role === 'admin'

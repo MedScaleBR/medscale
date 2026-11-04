@@ -20,6 +20,7 @@ export async function GET() {
     .from('workspaces')
     .select('id, name, slug, address, city, state, zip_code, is_active, is_default, display_order')
     .eq('account_id', session.accountId)
+    .eq('is_active', true)
     .order('display_order')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
