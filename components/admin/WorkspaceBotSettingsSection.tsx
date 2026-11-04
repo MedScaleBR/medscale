@@ -4,10 +4,13 @@ import { useState } from 'react'
 import { TZDate } from '@date-fns/tz'
 import { format } from 'date-fns'
 import { Button } from '@/components/ui/button'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
 import { WorkspaceBotSettingsForm, type BotSettingsValue } from './WorkspaceBotSettingsForm'
 import { NotificationEmailsForm } from './NotificationEmailsForm'
 import { ClaraAccountOptions } from './ClaraAccountOptions'
-import { applyPresetToAccount, createPreset, saveWorkspaceBotSettings } from './clara-api'
+import { applyPresetToAccount, createPreset, saveAccountNotificationEmails, saveWorkspaceBotSettings } from './clara-api'
+import { NOTIFICATION_EMAILS_MAX, parseNotificationEmails, splitEmails } from '@/lib/bot/notification-emails'
 import { matchesPreset, presetSettings, type BotPreset } from '@/lib/bot/presets'
 import { getWorkspaceBotSettings } from '@/lib/bot/unit-settings'
 
@@ -76,7 +79,13 @@ function WorkspaceBotSettingsCard({
           ) : null
         }
       />
-      {row.notificationEmails !== null && <NotificationEmailsForm workspaceId={row.id} initial={row.notificationEmails} />}
+      {row.notificationEmails !== null && (
+        <NotificationEmailsForm
+          workspaceId={row.id}
+          initial={row.notificationEmails}
+          onSaved={(emails) => onSaved({ ...row, notificationEmails: emails })}
+        />
+      )}
     </section>
   )
 }
@@ -201,6 +210,94 @@ function ApplyToAllUnits({
   )
 }
 
+// Mesma lista de e-mails em todas as unidades ativas, de uma vez. Depois cada
+// unidade ainda pode ser ajustada no próprio card.
+function ApplyEmailsToAllUnits({
+  accountId,
+  rows,
+  onApplied,
+}: {
+  accountId: string
+  rows: WorkspaceBotSettingsRow[]
+  onApplied: (rows: WorkspaceBotSettingsRow[]) => void
+}) {
+  // Se todas as unidades já têm a mesma lista, ela vem preenchida.
+  const lists = rows.map((r) => (r.notificationEmails ?? []).join('\n'))
+  const [text, setText] = useState(lists.length > 0 && lists.every((l) => l === lists[0]) ? lists[0] : '')
+  const [confirming, setConfirming] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const parsed = parseNotificationEmails(splitEmails(text))
+
+  const apply = async () => {
+    if (!parsed.ok) return
+    setSaving(true)
+    setMessage(null)
+    const res = await saveAccountNotificationEmails(accountId, parsed.value)
+    setSaving(false)
+    setConfirming(false)
+    if (res.data === null) {
+      setMessage({ ok: false, text: res.error })
+      return
+    }
+    const byId = new Map(res.data.workspaces.map((w) => [w.id, w.notification_emails]))
+    onApplied(rows.map((r) => (byId.has(r.id) ? { ...r, notificationEmails: byId.get(r.id)! } : r)))
+    const n = res.data.workspaces.length
+    setMessage({ ok: true, text: `E-mails salvos em ${n} ${n === 1 ? 'unidade' : 'unidades'}.` })
+  }
+
+  return (
+    <div className="rounded-xl border border-dashed border-[var(--navy-06)] p-4">
+      <Label htmlFor={`account-${accountId}-emails`}>E-mails que recebem as solicitações (todas as unidades)</Label>
+      <p className="mb-1 text-xs text-gray-400">
+        Um por linha, até {NOTIFICATION_EMAILS_MAX}. Substitui a lista de todas as unidades ativas; depois dá para ajustar
+        uma unidade no card dela.
+      </p>
+      <Textarea
+        id={`account-${accountId}-emails`}
+        value={text}
+        rows={3}
+        onChange={(e) => {
+          setText(e.target.value)
+          setConfirming(false)
+          setMessage(null)
+        }}
+        placeholder="secretaria@clinica.com.br"
+      />
+      {!parsed.ok && <p className="mt-1 text-xs text-red-500">{parsed.error}</p>}
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {!confirming ? (
+          <Button type="button" variant="outline" size="sm" disabled={!parsed.ok} onClick={() => setConfirming(true)}>
+            Aplicar a todas as unidades
+          </Button>
+        ) : (
+          <>
+            <span className="text-sm text-gray-700">
+              {parsed.ok && parsed.value.length === 0
+                ? 'Isso apaga os e-mails de todas as unidades. Confirmar?'
+                : 'Isso substitui os e-mails de todas as unidades. Confirmar?'}
+            </span>
+            <Button
+              type="button"
+              size="sm"
+              disabled={saving || !parsed.ok}
+              onClick={apply}
+              className="bg-[var(--cyan)] text-[var(--navy-dark)] hover:bg-[var(--cyan-dark)]"
+            >
+              {saving ? 'Salvando...' : 'Confirmar e gravar'}
+            </Button>
+            <Button type="button" size="sm" variant="ghost" onClick={() => setConfirming(false)}>
+              Cancelar
+            </Button>
+          </>
+        )}
+        {message && <span className={`text-xs ${message.ok ? 'text-gray-500' : 'text-red-500'}`}>{message.text}</span>}
+      </div>
+    </div>
+  )
+}
+
 // "Clara nesta unidade" em /admin — uma configuração por workspace.
 export function WorkspaceBotSettingsSection({
   accountId,
@@ -239,6 +336,16 @@ export function WorkspaceBotSettingsSection({
           setVersion((v) => v + 1)
         }}
       />
+      {rows.length > 0 && rows.some((r) => r.notificationEmails !== null) && (
+        <ApplyEmailsToAllUnits
+          accountId={accountId}
+          rows={rows}
+          onApplied={(next) => {
+            setRows(next)
+            setVersion((v) => v + 1)
+          }}
+        />
+      )}
       {rows.map((row) => (
         <WorkspaceBotSettingsCard
           key={`${row.id}-${version}`}

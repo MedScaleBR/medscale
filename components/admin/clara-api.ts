@@ -67,6 +67,13 @@ export function saveAskInsuranceFirst(accountId: string, value: boolean) {
   })
 }
 
+export function saveAccountNotificationEmails(accountId: string, emails: string[]) {
+  return call<{ workspaces: { id: string; notification_emails: string[] }[] }>(
+    `/api/admin/accounts/${accountId}/notification-emails`,
+    { method: 'PATCH', body: JSON.stringify({ notification_emails: emails }) }
+  )
+}
+
 export function saveNotificationEmails(workspaceId: string, emails: string[]) {
   return call<{ notification_emails: string[] }>(`/api/admin/workspaces/${workspaceId}/notification-emails`, {
     method: 'PATCH',
