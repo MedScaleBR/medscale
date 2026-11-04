@@ -13,8 +13,9 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog'
-import { Plus, Star } from 'lucide-react'
+import { Plus, Star, Trash2 } from 'lucide-react'
 import { lookupCep, maskCep } from '@/lib/cep'
+import { friendlyErrorMessage } from '@/lib/friendly-errors'
 import type { Database } from '@/types/database'
 
 type WorkspaceRow = Pick<
@@ -30,15 +31,58 @@ interface WorkspacesClientProps {
   apiBase?: string // '/api/workspaces' (padrão) ou '/api/admin/accounts/<id>/workspaces'
   // true em /locais: o nome da unidade abre a página de detalhe; o admin não usa
   linkToDetail?: boolean
+  // true em /locais (owner/admin): mostra "Excluir unidade". A unidade é
+  // arquivada; consultas e histórico continuam guardados.
+  canDelete?: boolean
 }
 
-export function WorkspacesClient({ initialWorkspaces, canManage, apiBase = '/api/workspaces', linkToDetail = false }: WorkspacesClientProps) {
+export function WorkspacesClient({
+  initialWorkspaces,
+  canManage,
+  apiBase = '/api/workspaces',
+  linkToDetail = false,
+  canDelete = false,
+}: WorkspacesClientProps) {
   const [workspaces, setWorkspaces] = useState(initialWorkspaces)
   const [open, setOpen] = useState(false)
   const [form, setForm] = useState(EMPTY_FORM)
   const [saving, setSaving] = useState(false)
   const [cepLoading, setCepLoading] = useState(false)
   const [cepError, setCepError] = useState(false)
+  const [toDelete, setToDelete] = useState<WorkspaceRow | null>(null)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+
+  const activeCount = workspaces.filter((w) => w.is_active).length
+
+  const closeDelete = () => {
+    setToDelete(null)
+    setDeleteError(null)
+  }
+
+  const handleDelete = async () => {
+    if (!toDelete) return
+    setDeleting(true)
+    setDeleteError(null)
+    try {
+      const res = await fetch(`${apiBase}/${toDelete.id}`, { method: 'DELETE' })
+      const body = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setDeleteError(friendlyErrorMessage(body.error, 'Não foi possível excluir a unidade. Tente novamente.'))
+        return
+      }
+      const removedId = toDelete.id
+      const newDefaultId: string | null = body.newDefaultId ?? null
+      setWorkspaces((prev) =>
+        prev
+          .filter((w) => w.id !== removedId)
+          .map((w) => (newDefaultId ? { ...w, is_default: w.id === newDefaultId } : w))
+      )
+      closeDelete()
+    } finally {
+      setDeleting(false)
+    }
+  }
 
   const handleCepChange = async (raw: string) => {
     const { digits, masked } = maskCep(raw)
@@ -113,6 +157,7 @@ export function WorkspacesClient({ initialWorkspaces, canManage, apiBase = '/api
                 <p className="font-medium text-gray-900">{w.name}</p>
               )}
               {w.is_default && <Badge className="border-none bg-[var(--cyan-10)] text-[var(--cyan-dark)]">Padrão</Badge>}
+              {!w.is_active && <Badge className="border-none bg-gray-100 text-gray-500">Excluída</Badge>}
             </div>
             {(w.address || w.city) && (
               <p className="mt-1 text-xs text-gray-400">
@@ -120,18 +165,58 @@ export function WorkspacesClient({ initialWorkspaces, canManage, apiBase = '/api
                 {w.zip_code ? ` — ${w.zip_code}` : ''}
               </p>
             )}
-            {canManage && !w.is_default && (
-              <button
-                onClick={() => handleSetDefault(w.id)}
-                className="mt-3 flex items-center gap-1 text-xs text-[var(--cyan-dark)] hover:underline"
-              >
-                <Star className="h-3 w-3" />
-                Definir como padrão
-              </button>
+            {canManage && w.is_active && (!w.is_default || (canDelete && activeCount > 1)) && (
+              <div className="mt-3 flex items-center justify-between gap-2">
+                {!w.is_default ? (
+                  <button
+                    onClick={() => handleSetDefault(w.id)}
+                    className="flex items-center gap-1 text-xs text-[var(--cyan-dark)] hover:underline"
+                  >
+                    <Star className="h-3 w-3" />
+                    Definir como padrão
+                  </button>
+                ) : (
+                  <span />
+                )}
+                {canDelete && activeCount > 1 && (
+                  <button
+                    onClick={() => setToDelete(w)}
+                    className="flex items-center gap-1 text-xs text-red-500 hover:underline"
+                  >
+                    <Trash2 className="h-3 w-3" />
+                    Excluir
+                  </button>
+                )}
+              </div>
             )}
           </div>
         ))}
       </div>
+
+      <Dialog open={!!toDelete} onOpenChange={(o) => !o && closeDelete()}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Excluir {toDelete?.name}?</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2 text-sm text-gray-600">
+            <p>
+              A unidade some da agenda, das configurações e da Clara. Consultas passadas, pacientes, conversas e
+              financeiro continuam guardados.
+            </p>
+            {toDelete?.is_default && <p>Outra unidade passa a ser a padrão.</p>}
+            <p>Só dá para excluir uma unidade sem consultas marcadas daqui para frente.</p>
+            {deleteError && <p className="text-xs text-red-500">{deleteError}</p>}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDelete} disabled={deleting}>
+              Cancelar
+            </Button>
+            <Button variant="destructive" onClick={handleDelete} disabled={deleting}>
+              {deleting ? 'Excluindo...' : 'Excluir unidade'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-sm">
