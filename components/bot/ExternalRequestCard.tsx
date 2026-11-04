@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { TZDate } from '@date-fns/tz'
 import { format } from 'date-fns'
-import { ClipboardList } from 'lucide-react'
+import { ClipboardList, FileText } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 
@@ -13,6 +13,8 @@ export interface ExternalRequestView {
   lines: string[]
   sentAt: string
   resolvedAt: string | null
+  /** Foto da carteirinha (só o id; a imagem abre por signed URL curta). */
+  cardPhoto?: { id: string; isPdf: boolean } | null
 }
 
 // Resumo da solicitação de agendamento de uma unidade com agenda externa: a
@@ -71,6 +73,26 @@ export function ExternalRequestCard({ request }: { request: ExternalRequestView 
               <li key={line}>{line}</li>
             ))}
           </ul>
+          {request.cardPhoto && (
+            <a
+              href={`/api/bot/attachments/${request.cardPhoto.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 inline-flex items-center gap-2 text-xs font-medium text-[var(--cyan-dark)] hover:underline"
+            >
+              {request.cardPhoto.isPdf ? (
+                <FileText className="h-4 w-4" />
+              ) : (
+                // eslint-disable-next-line @next/next/no-img-element -- signed URL privada, fora do otimizador de imagens
+                <img
+                  src={`/api/bot/attachments/${request.cardPhoto.id}`}
+                  alt="Foto da carteirinha"
+                  className="h-14 w-20 rounded border border-[var(--navy-06)] object-cover"
+                />
+              )}
+              Abrir foto da carteirinha
+            </a>
+          )}
           {error && <p className="mt-1 text-[11px] text-[var(--danger-text)]">Não foi possível atualizar. Tente de novo.</p>}
         </div>
         <Button variant="outline" size="sm" onClick={toggle} disabled={saving} className="shrink-0">

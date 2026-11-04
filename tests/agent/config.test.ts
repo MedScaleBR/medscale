@@ -85,6 +85,35 @@ describe('getAccountUnits — expediente presencial', () => {
     expect(supabase.callsTo('availability_exceptions', 'select')[0].filters).toContainEqual(['eq', 'type', 'extra'])
   })
 
+  it('carrega a repetição das regras e os dias bloqueados inteiros', async () => {
+    const supabase = setup({
+      workspaces: { select: { data: [{ id: 'w1', name: 'Centro' }] } },
+      availability_rules: { select: { data: [
+        { workspace_id: 'w1', day_of_week: 2, start_time: '08:00:00', end_time: '12:00:00', interval_weeks: 2, anchor_date: '2030-01-01' },
+        { workspace_id: 'w1', day_of_week: 4, start_time: '08:00:00', end_time: '12:00:00' },
+      ] } },
+      availability_exceptions: {
+        select: (call) => ({
+          data: call.filters.some((f) => f[0] === 'eq' && f[2] === 'blocked')
+            ? [{ workspace_id: 'w1', date: '2030-01-15', type: 'blocked', start_time: null }]
+            : [],
+        }),
+      },
+    })
+
+    const [unit] = await getAccountUnits('account-1')
+
+    expect(unit.scheduleRules).toEqual([
+      { day_of_week: 2, start_time: '08:00:00', end_time: '12:00:00', interval_weeks: 2, anchor_date: '2030-01-01' },
+      { day_of_week: 4, start_time: '08:00:00', end_time: '12:00:00', interval_weeks: 1, anchor_date: null },
+    ])
+    expect(unit.blockedDates).toEqual(['2030-01-15'])
+    expect(supabase.callsTo('availability_rules', 'select')[0].filters).toContainEqual([
+      'select',
+      'workspace_id, day_of_week, start_time, end_time, interval_weeks, anchor_date',
+    ])
+  })
+
   it('não informa texto antigo quando a unidade ainda não tem expediente', async () => {
     setup({ workspaces: { select: { data: [{ id: 'w1', name: 'Centro', business_hours: '24 horas' }] } } })
     expect((await getAccountUnits('account-1'))[0].businessHours).toBeNull()

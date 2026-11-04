@@ -11,6 +11,7 @@ import { parseReferral, recordAttribution } from '@/lib/whatsapp/referral'
 import { confirmReminderAppointment } from '@/lib/whatsapp/confirm-appointment'
 import { resolveClinicSender, processClinicReplyMessage } from '@/lib/outsourced/clinic-reply'
 import { notifyOutsourcedIssue } from '@/lib/outsourced/notify'
+import { parseIncomingMedia, receiveInsuranceCard } from '@/lib/bot/insurance-card'
 import type { ClinicSenderMatch } from '@/lib/outsourced/config'
 
 // Valida a assinatura HMAC enviada pela Meta para garantir que o payload
@@ -194,11 +195,29 @@ export async function POST(req: NextRequest) {
       return
     }
 
-    if (text) {
+    // Imagem/documento numa unidade que pede a foto da carteirinha: salva o
+    // arquivo e a Clara recebe um texto de sistema no lugar da imagem.
+    let incomingText: string | null = text
+    if (!incomingText) {
+      const media = parseIncomingMedia(message)
+      if (media) {
+        incomingText = await receiveInsuranceCard({
+          accountId,
+          patientPhone: from,
+          whatsappMessageId: message.id,
+          media,
+        }).catch(() => {
+          console.error(`[insurance-card] receive failed account=${accountId}`)
+          return null
+        })
+      }
+    }
+
+    if (incomingText) {
       await processIncomingMessage({
         accountId,
         patientPhone: from,
-        message: text,
+        message: incomingText,
         whatsappMessageId: message.id,
       }).catch(async (err) => {
         console.error('processIncomingMessage failed', err)

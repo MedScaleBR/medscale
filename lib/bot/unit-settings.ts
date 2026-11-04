@@ -14,6 +14,7 @@ export const INTAKE_FIELDS: readonly IntakeField[] = [
   'full_name',
   'birth_date',
   'insurance',
+  'insurance_card_photo',
   'cpf',
   'email',
   'reason',
@@ -25,6 +26,7 @@ export const INTAKE_FIELD_LABELS: Record<IntakeField, string> = {
   full_name: 'Nome completo',
   birth_date: 'Data de nascimento',
   insurance: 'Convênio (ou particular) e número da carteirinha',
+  insurance_card_photo: 'Foto da carteirinha do convênio',
   cpf: 'CPF',
   email: 'E-mail',
   reason: 'Motivo da consulta',
@@ -36,6 +38,7 @@ export const INTAKE_FIELD_PROMPT: Record<IntakeField, string> = {
   full_name: 'nome completo',
   birth_date: 'data de nascimento',
   insurance: 'convênio ou particular e, se for convênio, o número da carteirinha',
+  insurance_card_photo: 'foto da carteirinha do convênio (só se for convênio)',
   cpf: 'CPF',
   email: 'e-mail',
   reason: 'motivo da consulta, em poucas palavras',
@@ -187,12 +190,16 @@ export interface IntakeData {
   preference: string | null
 }
 
-/** Campos de `fields` ainda sem valor, na ordem canônica. "Paciente" não é nome. */
+/**
+ * Campos de `fields` ainda sem valor, na ordem canônica. "Paciente" não é nome.
+ * A foto da carteirinha nunca bloqueia: o paciente pode não conseguir enviar.
+ */
 export function missingIntakeFields(fields: readonly IntakeField[], d: IntakeData): IntakeField[] {
   const has: Record<IntakeField, boolean> = {
     full_name: !!d.fullName?.trim() && d.fullName.trim() !== 'Paciente',
     birth_date: !!d.birthDate,
     insurance: d.insuranceResolved && (d.particular || !!d.cardNumber?.trim()),
+    insurance_card_photo: true,
     cpf: !!d.cpf,
     email: !!d.email,
     reason: !!d.reason?.trim(),
@@ -254,6 +261,9 @@ export function formatExternalRequestLines(summary: ExternalRequestSummary, unit
       `Convênio: ${summary.insurance.name}${summary.insurance.card_number ? ` · Carteirinha: ${summary.insurance.card_number}` : ''}`
     )
   }
+  if (summary.insurance_card_photo) {
+    lines.push(`Foto da carteirinha: ${summary.insurance_card_photo === 'sent' ? 'enviada' : 'não enviada'}`)
+  }
   if (summary.cpf) lines.push(`CPF: ${formatCpf(summary.cpf)}`)
   if (summary.email) lines.push(`E-mail: ${summary.email}`)
   lines.push(`Local: ${unitName}`)
@@ -264,4 +274,23 @@ export function formatExternalRequestLines(summary: ExternalRequestSummary, unit
 
 export function formatExternalRequestSummary(summary: ExternalRequestSummary, unitName: string): string {
   return ['Solicitação de agendamento', ...formatExternalRequestLines(summary, unitName)].join('\n')
+}
+
+// ── Foto da carteirinha ─────────────────────────────────────────────────────
+
+/** Instrução do prompt quando a unidade pede a foto (insurance_card_photo). */
+export const INSURANCE_CARD_PHOTO_PROMPT =
+  'Peça também uma foto da carteirinha do convênio (frente, com o número visível). Quando o sistema avisar que a imagem foi recebida, agradeça e siga. Você não vê o conteúdo da imagem: não comente nem confirme dados dela. Se o paciente não conseguir mandar a foto, siga sem ela e avise que a equipe pode pedir depois.'
+
+/** Texto de sistema que substitui a mensagem do paciente quando a foto foi salva. */
+export const INSURANCE_CARD_RECEIVED_TEXT = '[O paciente enviou uma imagem, que foi salva como foto da carteirinha.]'
+
+/** Texto de sistema quando a imagem não pôde ser recebida (formato, tamanho ou falha). */
+export const INSURANCE_CARD_REJECTED_TEXT =
+  '[O paciente tentou enviar uma imagem, mas ela não pôde ser recebida. Peça outra foto da carteirinha, em JPG, PNG ou PDF, de até 10 MB.]'
+
+/** Monta a mensagem que a Clara recebe no lugar da imagem (com a legenda, se houver). */
+export function insuranceCardMessage(systemText: string, caption: string | null | undefined): string {
+  const text = caption?.trim()
+  return text ? `${systemText}\nLegenda enviada junto: ${text}` : systemText
 }

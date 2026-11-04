@@ -23,7 +23,7 @@ import { missingOutsourcedFields, type OutsourcedMissingField } from '@/lib/outs
 import { missingDataMessage, requestedMessage } from '@/lib/outsourced/messages'
 import { coverageFor, isExternalUnit, type AgentContext, type AgentPatient } from '@/lib/llm/agent-context'
 import type { ExternalRequestSummary, HandoffTriggerReason } from '@/types/database'
-import { attendsOn, closedDayMessage } from '@/lib/bot/working-days'
+import { attendsOn, closedDayMessage, type UnitWorkingDays } from '@/lib/bot/working-days'
 
 // Etapa 3 do agente: ler a resposta crua do Claude, validar os marcadores e
 // decidir O QUE aconteceria — sem fazer nada. A produção executa o plano em
@@ -348,7 +348,7 @@ export async function planEffects(
   // Dia em que a unidade não atende: não agenda nem pede à clínica parceira —
   // a Clara avisa os dias de atendimento (mensagem fixa abaixo).
   const bookingUnitForDays = requestedBookingUnitId ? unitById.get(requestedBookingUnitId) : undefined
-  let closedDay: { unitName: string; days: number[] } | null = null
+  let closedDay: { unitName: string; days: number[]; unit: UnitWorkingDays } | null = null
   if (
     !externalBookingBlocked &&
     markers.confirmedDate !== null &&
@@ -357,7 +357,7 @@ export async function planEffects(
   ) {
     console.warn(`[working-days] AGENDAMENTO_CONFIRMADO em dia sem atendimento workspace=${bookingUnitForDays.id}`)
     effects.push({ kind: 'ignored_marker', marker: 'AGENDAMENTO_CONFIRMADO', reason: 'closed_day', workspace_id: bookingUnitForDays.id })
-    closedDay = { unitName: bookingUnitForDays.name, days: bookingUnitForDays.workingDays! }
+    closedDay = { unitName: bookingUnitForDays.name, days: bookingUnitForDays.workingDays!, unit: bookingUnitForDays }
   }
   const confirmedDate = externalBookingBlocked || closedDay ? null : markers.confirmedDate
 
@@ -386,7 +386,9 @@ export async function planEffects(
           ? !bookingCoverage.acceptsPrivate
           : !selectedInsurer))
   if (insuranceNotAccepted) {
-    console.warn(`[insurance] escolha não aceita na unidade workspace=${requestedBookingUnitId}`)
+    console.warn(
+      `[insurance] insurer_not_accepted marker=AGENDAMENTO_CONFIRMADO workspace=${requestedBookingUnitId} insurer=${selectedInsurer?.id ?? 'PARTICULAR'}`
+    )
     effects.push({ kind: 'blocked', reason: 'insurance_not_accepted', workspace_id: requestedBookingUnitId ?? undefined })
   } else if (insuranceNeedsClarification) {
     effects.push({ kind: 'blocked', reason: 'insurance_unclear' })
@@ -504,7 +506,7 @@ export async function planEffects(
       // A vaga nunca vai abrir: a unidade não atende nesse dia.
       console.warn(`[working-days] LISTA_ESPERA em dia sem atendimento workspace=${waitlistUnit.id}`)
       effects.push({ kind: 'ignored_marker', marker: 'LISTA_ESPERA', reason: 'closed_day', workspace_id: waitlistUnit.id })
-      closedDay ??= { unitName: waitlistUnit.name, days: waitlistUnit.workingDays! }
+      closedDay ??= { unitName: waitlistUnit.name, days: waitlistUnit.workingDays!, unit: waitlistUnit }
     } else if (waitlistUnitId) {
       effects.push({
         kind: 'waitlist',
@@ -520,6 +522,8 @@ export async function planEffects(
   // unidade 'external' e com todos os dados que ela coleta.
   let externalRequest: Omit<ExternalRequestPlan, 'inHours'> | null = null
   let externalRequestUnitRequired = false
+  // Convênio escolhido que a unidade da solicitação não aceita: não transfere.
+  let requestInsurerNotAccepted: { unitId: string; insurer: Insurer } | null = null
   if (markers.schedulingRequested && !discountFlagged) {
     const requestUnitId = validMarkerUnit(markers.unitId) ?? conversationUnitId ?? singleUnitId
     const requestUnit = requestUnitId ? unitById.get(requestUnitId) : undefined
@@ -539,6 +543,13 @@ export async function planEffects(
         (insuranceChoice === 'PARTICULAR' || (insuranceChoice === null && requestCoverage.insurers.length === 0))
       // Convênio que a unidade não aceita conta como não resolvido: a Clara pergunta de novo.
       const insurerAccepted = !!selectedInsurer && requestCoverage.insurers.some((i) => i.id === selectedInsurer.id)
+      if (selectedInsurer && !insurerAccepted && !ctx.insurersError) {
+        console.warn(
+          `[insurance] insurer_not_accepted marker=SOLICITACAO_AGENDAMENTO workspace=${requestUnit.id} insurer=${selectedInsurer.id}`
+        )
+        requestInsurerNotAccepted = { unitId: requestUnit.id, insurer: selectedInsurer }
+        effects.push({ kind: 'blocked', reason: 'insurance_not_accepted', workspace_id: requestUnit.id })
+      }
       const missing = missingIntakeFields(fields, {
         fullName: patient?.full_name ?? null,
         birthDate: patient?.birth_date ?? null,
@@ -551,7 +562,9 @@ export async function planEffects(
         preference: intake.preference,
       })
 
-      if (missing.length > 0) {
+      if (requestInsurerNotAccepted) {
+        // Já bloqueado acima: a mensagem explica o convênio, não pede dado.
+      } else if (missing.length > 0) {
         console.warn(`[intake] missing_fields=${missing.join(',')} trigger_reason=${EXTERNAL_REQUEST_REASON} workspace=${requestUnit.id}`)
         intakeMissing = missing
         intakeMissingUnitId = requestUnit.id
@@ -568,6 +581,10 @@ export async function planEffects(
           if (!particular && selectedInsurer && insurerAccepted) {
             summary.insurance = { convenio_id: selectedInsurer.id, name: selectedInsurer.name, card_number: intake.cardNumber }
           }
+        }
+        // Foto só faz sentido para convênio; a falta dela não bloqueia.
+        if (fields.includes('insurance_card_photo') && !particular) {
+          summary.insurance_card_photo = ctx.insuranceCardReceived ? 'sent' : 'missing'
         }
         if (fields.includes('cpf')) summary.cpf = intake.cpf!
         if (fields.includes('email')) summary.email = intake.email!
@@ -608,9 +625,11 @@ export async function planEffects(
   const fixed = externalBookingBlocked
     ? EXTERNAL_BOOKING_BLOCKED_MESSAGE
     : closedDay
-      ? closedDayMessage(closedDay.unitName, closedDay.days)
+      ? closedDayMessage(closedDay.unitName, closedDay.days, closedDay.unit, saoPauloDate(ctx.now))
     : insuranceNotAccepted
       ? insuranceNotAcceptedMessage(ctx, requestedBookingUnitId!, selectedInsurer)
+    : requestInsurerNotAccepted
+      ? insuranceNotAcceptedMessage(ctx, requestInsurerNotAccepted.unitId, requestInsurerNotAccepted.insurer)
     : insuranceNeedsClarification
       ? bookingCoverage.acceptsPrivate
         ? 'Antes de confirmar o agendamento, pode confirmar qual é o seu convênio ou se prefere atendimento particular?'

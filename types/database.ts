@@ -66,7 +66,15 @@ export type HandoffTriggerReason =
   // Unidade com agenda externa: a Clara coletou os dados e a equipe confirma.
   | 'external_scheduling'
 export type SchedulingMode = 'internal' | 'external'
-export type IntakeField = 'full_name' | 'birth_date' | 'insurance' | 'cpf' | 'email' | 'reason' | 'preference'
+export type IntakeField =
+  | 'full_name'
+  | 'birth_date'
+  | 'insurance'
+  | 'insurance_card_photo'
+  | 'cpf'
+  | 'email'
+  | 'reason'
+  | 'preference'
 // handoff_logs.summary — só as chaves dos campos que a unidade coleta.
 export interface ExternalRequestSummary {
   workspace_id: string
@@ -75,6 +83,8 @@ export interface ExternalRequestSummary {
   birth_date?: string // AAAA-MM-DD
   insurance?: { convenio_id: string; name: string; card_number: string | null }
   particular?: boolean
+  // Só quando a unidade pede a foto e o paciente não é particular.
+  insurance_card_photo?: 'sent' | 'missing'
   cpf?: string
   email?: string
   reason?: string
@@ -184,6 +194,8 @@ export interface Database {
           bot_preset_id: string | null
           // Atende particular nesta unidade (Clara e Agenda respeitam).
           accepts_private: boolean
+          // Quem recebe por e-mail as solicitações de agendamento (máx. 5). Só MedScale altera.
+          notification_emails: string[]
           cnes: string | null
           cnpj: string | null
           legal_name: string | null
@@ -503,6 +515,33 @@ export interface Database {
             referencedColumns: ['id']
           },
         ]
+      }
+      // Anexos de conversa (foto da carteirinha). Arquivo no bucket privado
+      // 'insurance-cards'; storage_path nunca vai ao client.
+      conversation_attachments: {
+        Row: {
+          id: string
+          account_id: string
+          workspace_id: string | null
+          conversation_id: string
+          kind: 'insurance_card'
+          storage_path: string
+          mime_type: string
+          size_bytes: number
+          whatsapp_media_id: string | null
+          created_at: string
+          deleted_at: string | null
+        }
+        Insert: Partial<Database['public']['Tables']['conversation_attachments']['Row']> & {
+          account_id: string
+          conversation_id: string
+          kind: 'insurance_card'
+          storage_path: string
+          mime_type: string
+          size_bytes: number
+        }
+        Update: Partial<Database['public']['Tables']['conversation_attachments']['Row']>
+        Relationships: []
       }
       insurer_procedures: {
         Row: {
@@ -940,6 +979,10 @@ export interface Database {
           start_time: string
           end_time: string
           slot_duration: number
+          // Repetição (lib/scheduling/recurrence.ts): 1 = toda semana; 2–4 = a cada N
+          // semanas a partir de anchor_date (obrigatória quando > 1).
+          interval_weeks: number
+          anchor_date: string | null
           is_active: boolean
           created_at: string
         }
@@ -1161,6 +1204,8 @@ export interface Database {
           procedures: string[] // abandonado: o app não lê nem grava (ver spec 2026-10-02-clara-config-split)
           insurance_plans: string[] // abandonado: o app não lê nem grava (ver spec 2026-10-02-clara-config-split)
           accepts_private: boolean
+          // Clara pergunta o convênio antes da unidade. Só MedScale altera.
+          ask_insurance_first: boolean
           payment_methods: string[]
           pricing_info: string | null
           exam_preparation: string | null
@@ -1403,6 +1448,8 @@ export interface Database {
           summary: ExternalRequestSummary | null
           resolved_at: string | null
           resolved_by: string | null
+          // Aviso por e-mail da solicitação enviado.
+          email_sent_at: string | null
           sent_at: string
         }
         Insert: Partial<Database['public']['Tables']['handoff_logs']['Row']> & { workspace_id: string }

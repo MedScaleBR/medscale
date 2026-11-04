@@ -59,3 +59,17 @@ export function applyPresetToAccount(presetId: string, accountId: string) {
     body: JSON.stringify({ account_id: accountId }),
   })
 }
+
+export function saveAskInsuranceFirst(accountId: string, value: boolean) {
+  return call<{ ask_insurance_first: boolean }>(`/api/admin/accounts/${accountId}/clara`, {
+    method: 'PATCH',
+    body: JSON.stringify({ ask_insurance_first: value }),
+  })
+}
+
+export function saveNotificationEmails(workspaceId: string, emails: string[]) {
+  return call<{ notification_emails: string[] }>(`/api/admin/workspaces/${workspaceId}/notification-emails`, {
+    method: 'PATCH',
+    body: JSON.stringify({ notification_emails: emails }),
+  })
+}

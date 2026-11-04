@@ -2,7 +2,8 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { isOutsourcedWorkspace } from '@/lib/outsourced/config'
 import { getWorkspaceBotSettings, type WorkspaceBotSettings } from '@/lib/bot/unit-settings'
 import type { Database, NumberSource } from '@/types/database'
-import type { UnitWorkingDays } from '@/lib/bot/working-days'
+import type { ScheduleRule, UnitWorkingDays } from '@/lib/bot/working-days'
+import { addDaysToDate } from '@/lib/scheduling/recurrence'
 
 // Configuração da Clara — uma por account, vale para todas as unidades.
 // Campos que variam por unidade (endereço, horário, estacionamento, contato,
@@ -12,6 +13,8 @@ import type { UnitWorkingDays } from '@/lib/bot/working-days'
 export interface BotConfig {
   specialty: string | null
   acceptsPrivate: boolean
+  // Pergunta o convênio antes da unidade (só a MedScale liga). Ausente = false.
+  askInsuranceFirst?: boolean
   paymentMethods: string[]
   pricingInfo: string | null
   examPreparation: string | null
@@ -78,6 +81,8 @@ export async function getBotConfig(accountId: string): Promise<BotConfig | null>
   const config: BotConfig = {
     specialty: data.specialty,
     acceptsPrivate: data.accepts_private,
+    // select '*': sem a migration a coluna não vem e fica false.
+    askInsuranceFirst: data.ask_insurance_first ?? false,
     paymentMethods: data.payment_methods ?? [],
     pricingInfo: data.pricing_info,
     examPreparation: data.exam_preparation,
@@ -138,14 +143,26 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
 
   const workspaceIds = data.map((w) => w.id)
   const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo' }).format(new Date())
-  const [{ data: rules }, { data: extras }] = await Promise.all([
+  type RuleRow = {
+    workspace_id: string
+    day_of_week: number
+    start_time: string
+    end_time: string
+    interval_weeks?: number | null
+    anchor_date?: string | null
+  }
+  const loadRules = (columns: string) =>
     supabase
       .from('availability_rules')
-      .select('workspace_id, day_of_week, start_time, end_time')
+      .select(columns)
       .in('workspace_id', workspaceIds)
       .eq('is_active', true)
       .order('day_of_week')
-      .order('start_time'),
+      .order('start_time')
+  const ruleColumns = 'workspace_id, day_of_week, start_time, end_time'
+  const [rulesResult, { data: extras }, { data: blocks }] = await Promise.all([
+    // Sem as colunas de repetição (migration pendente), toda regra vale toda semana.
+    loadRules(`${ruleColumns}, interval_weeks, anchor_date`).then((r) => (r.error ? loadRules(ruleColumns) : r)),
     // Datas avulsas abertas (ex.: um sábado pontual) — contam como dia de atendimento.
     supabase
       .from('availability_exceptions')
@@ -154,7 +171,37 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
       .eq('type', 'extra')
       .gte('date', today)
       .order('date'),
+    // Dias bloqueados inteiros nos próximos 60 dias — saem das "próximas datas".
+    supabase
+      .from('availability_exceptions')
+      .select('workspace_id, date, type, start_time')
+      .in('workspace_id', workspaceIds)
+      .eq('type', 'blocked')
+      .is('start_time', null)
+      .gte('date', today)
+      .lte('date', addDaysToDate(today, 60))
+      .order('date'),
   ])
+  const rules = (rulesResult.data ?? []) as unknown as RuleRow[]
+  const blockedDates = new Map<string, string[]>()
+  for (const block of (blocks ?? []) as { workspace_id: string; date: string; type?: string; start_time?: string | null }[]) {
+    if (block.type !== 'blocked' || block.start_time) continue
+    const list = blockedDates.get(block.workspace_id) ?? []
+    if (!list.includes(block.date)) list.push(block.date)
+    blockedDates.set(block.workspace_id, list)
+  }
+  const scheduleRules = new Map<string, ScheduleRule[]>()
+  for (const rule of rules) {
+    const list = scheduleRules.get(rule.workspace_id) ?? []
+    list.push({
+      day_of_week: rule.day_of_week,
+      start_time: rule.start_time,
+      end_time: rule.end_time,
+      interval_weeks: rule.interval_weeks ?? 1,
+      anchor_date: rule.anchor_date ?? null,
+    })
+    scheduleRules.set(rule.workspace_id, list)
+  }
   const extraDates = new Map<string, string[]>()
   for (const extra of extras ?? []) {
     const list = extraDates.get(extra.workspace_id) ?? []
@@ -164,7 +211,7 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
 
   const days = ['domingo', 'segunda-feira', 'terça-feira', 'quarta-feira', 'quinta-feira', 'sexta-feira', 'sábado']
   const schedules = new Map<string, Map<number, Set<string>>>()
-  for (const rule of rules ?? []) {
+  for (const rule of rules) {
     const schedule = schedules.get(rule.workspace_id) ?? new Map<number, Set<string>>()
     const intervals = schedule.get(rule.day_of_week) ?? new Set<string>()
     intervals.add(`${rule.start_time.slice(0, 5)}–${rule.end_time.slice(0, 5)}`)
@@ -184,6 +231,8 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
       : null,
     workingDays: [...(schedules.get(w.id)?.keys() ?? [])].sort((a, b) => a - b),
     extraDates: extraDates.get(w.id) ?? [],
+    scheduleRules: scheduleRules.get(w.id) ?? [],
+    blockedDates: blockedDates.get(w.id) ?? [],
     directionsParking: w.directions_parking,
     contactInfo: w.contact_info,
     handoffNumber: w.handoff_number,

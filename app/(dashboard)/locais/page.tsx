@@ -11,6 +11,7 @@ export default async function LocaisPage() {
     .from('workspaces')
     .select('id, name, slug, address, city, state, zip_code, is_active, is_default, display_order')
     .eq('account_id', session.accountId)
+    .eq('is_active', true)
     .order('display_order')
 
   return (
@@ -21,6 +22,7 @@ export default async function LocaisPage() {
       </div>
       <WorkspacesClient
         linkToDetail
+        canDelete={session.role === 'owner' || session.role === 'admin'}
         initialWorkspaces={workspaces ?? []}
         canManage={session.role === 'owner' || session.role === 'admin'}
       />

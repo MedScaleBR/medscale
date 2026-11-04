@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ArrowLeft } from 'lucide-react'
-import { createClient } from '@/lib/supabase/server'
+import { createAdminClient, createClient } from '@/lib/supabase/server'
 import { WorkspacesClient } from '@/components/locais/WorkspacesClient'
 import { WorkspaceBotSettingsSection, type WorkspaceBotSettingsRow } from '@/components/admin/WorkspaceBotSettingsSection'
 import { getWorkspaceBotSettings } from '@/lib/bot/unit-settings'
@@ -30,7 +30,14 @@ export default async function AdminAccountWorkspacesPage({ params }: { params: P
     return supabase.from('workspaces').select(BOT_COLUMNS).eq('account_id', id)
   }
 
-  const [{ data: account }, { data: workspaces }, botSettingsResult, { data: presetRows }] = await Promise.all([
+  const [
+    { data: account },
+    { data: workspaces },
+    botSettingsResult,
+    { data: presetRows },
+    { data: emailRows, error: emailsError },
+    { data: botConfigRow },
+  ] = await Promise.all([
     supabase.from('accounts').select('id, name').eq('id', id).single(),
     supabase
       .from('workspaces')
@@ -41,7 +48,18 @@ export default async function AdminAccountWorkspacesPage({ params }: { params: P
     // continua abrindo (só sem a seção).
     loadBotSettings(),
     supabase.from('bot_presets').select(PRESET_COLUMNS).order('name'),
+    // Colunas novas lidas à parte: sem a migration, os campos só não aparecem.
+    supabase.from('workspaces').select('id, notification_emails').eq('account_id', id),
+    // bot_config não tem policy de staff MedScale: leitura pelo service role.
+    createAdminClient().from('bot_config').select('*').eq('account_id', id).maybeSingle(),
   ])
+  const emailsById = new Map(
+    (emailsError ? [] : (emailRows ?? [])).map((r) => [r.id, (r as { notification_emails?: string[] | null }).notification_emails ?? []])
+  )
+  const askInsuranceFirst =
+    typeof (botConfigRow as { ask_insurance_first?: unknown } | null)?.ask_insurance_first === 'boolean'
+      ? (botConfigRow as { ask_insurance_first: boolean }).ask_insurance_first
+      : null
   const presets = (presetRows ?? []) as BotPreset[]
 
   if (!account) notFound()
@@ -70,6 +88,7 @@ export default async function AdminAccountWorkspacesPage({ params }: { params: P
           presetId: row?.bot_preset_id ?? null,
           updatedByName: row?.bot_settings_updated_by ? (updaterName.get(row.bot_settings_updated_by) ?? null) : null,
           updatedAt: row?.bot_settings_updated_at ?? null,
+          notificationEmails: emailsError ? null : (emailsById.get(w.id) ?? []),
         }
       })
 
@@ -95,7 +114,12 @@ export default async function AdminAccountWorkspacesPage({ params }: { params: P
           A configuração da Clara por unidade fica disponível depois que a migration for aplicada.
         </p>
       ) : (
-        settingsRows.length > 0 && <WorkspaceBotSettingsSection accountId={id} rows={settingsRows} presets={presets} />
+        settingsRows.length > 0 && <WorkspaceBotSettingsSection
+            accountId={id}
+            rows={settingsRows}
+            presets={presets}
+            askInsuranceFirst={askInsuranceFirst}
+          />
       )}
     </div>
   )
