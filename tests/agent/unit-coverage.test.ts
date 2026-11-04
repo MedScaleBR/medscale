@@ -105,6 +105,26 @@ describe('Clara — convênios e particular por unidade', () => {
     expect(lastSentMessage()).toContain('Amil')
   })
 
+  it('sem particular em nenhuma unidade, avisa que não estão atendendo particular', async () => {
+    state.units = [
+      { ...CENTRO, acceptsPrivate: false },
+      { ...BARRA, acceptsPrivate: false },
+    ]
+    const supabase = mergeSupabaseConfig({
+      health_insurers: { select: { data: [amilBoth] } },
+      appointments: { select: { data: [] }, insert: { data: APPT }, update: { data: null } },
+    })
+    state.claudeResponses = [`Agendado!\nAGENDAMENTO_CONFIRMADO: ${SLOT}\nUNIDADE_ID: ${W1}\nCONVENIO_ID: PARTICULAR`]
+
+    await processIncomingMessage(PARAMS)
+
+    expect(supabase.callsTo('appointments', 'insert')).toHaveLength(0)
+    const msg = lastSentMessage()!
+    expect(msg).toContain('No momento não estamos trabalhando com atendimentos particulares')
+    expect(msg).toContain('Amil')
+    expect(systemPrompt()).toContain('## Atendimento particular — IMPORTANTE')
+  })
+
   it('agenda particular sem CONVENIO_ID em unidade sem convênios que atende particular', async () => {
     const supabase = setup({ insurers: [unimedOnlyBarra], centroPrivate: true })
     state.claudeResponses = [`Agendado!\nAGENDAMENTO_CONFIRMADO: ${SLOT}\nUNIDADE_ID: ${W1}`]

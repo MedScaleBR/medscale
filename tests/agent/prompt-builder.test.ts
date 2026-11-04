@@ -358,6 +358,35 @@ describe('wrapPatientMessage', () => {
   })
 })
 
+describe('buildDynamicSystemPrompt — nenhuma unidade atende particular', () => {
+  const INSURERS = [{ id: 'i1', name: 'Unimed' }]
+  const UNITS = [UNIT, { ...UNIT, id: 'w2', name: 'Barra' }]
+
+  it('pergunta o convênio direto e recusa particular com a mensagem fixa', () => {
+    const prompt = build({ acceptsPrivate: false }, { insurers: INSURERS, insurancePlans: ['Unimed'] })
+    expect(prompt).toContain('## Atendimento particular — IMPORTANTE')
+    expect(prompt).toContain('pergunte direto qual é o convênio')
+    expect(prompt).toContain('no momento não estamos trabalhando com atendimentos particulares')
+  })
+
+  it('a ordem convênio antes da unidade não menciona particular', () => {
+    const prompt = build(
+      { acceptsPrivate: false, askInsuranceFirst: true },
+      { units: UNITS, insurers: INSURERS, insurancePlans: ['Unimed'] }
+    )
+    const order = prompt.slice(prompt.indexOf('ORDEM DO AGENDAMENTO'))
+    expect(order).toContain('pergunte primeiro qual é o convênio do paciente')
+    expect(order.slice(0, 600)).not.toContain('particular')
+    expect(prompt).not.toContain('Pergunte primeiro o convênio do paciente (ou se é particular)')
+  })
+
+  it('com alguma unidade que atende particular, segue como antes', () => {
+    const prompt = build({ acceptsPrivate: true, askInsuranceFirst: true }, { units: UNITS, insurers: INSURERS, insurancePlans: ['Unimed'] })
+    expect(prompt).not.toContain('## Atendimento particular — IMPORTANTE')
+    expect(prompt).toContain('pergunte primeiro o convênio (ou se é particular)')
+  })
+})
+
 describe('buildDynamicSystemPrompt — unidade terceirizada', () => {
   const OUTSOURCED = { ...UNIT, isOutsourced: true }
   const MARKERS = ['NASCIMENTO_PACIENTE: DD/MM/AAAA', 'exige nome completo e data de nascimento antes de agendar', 'Nunca diga que uma consulta AGUARDANDO CONFIRMAÇÃO DA CLÍNICA está confirmada']

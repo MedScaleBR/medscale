@@ -10,10 +10,10 @@ import {
   BOT_INSTRUCTIONS_MAX,
   botInstructionsProblem,
   EXTERNAL_DEFAULT_FIELDS,
-  EXTERNAL_REQUIRED_FIELDS,
   INTAKE_FIELD_LABELS,
   INTAKE_FIELDS,
   normalizeIntakeFields,
+  requiredIntakeFields,
   SCHEDULING_MODE_LABELS,
   SCHEDULING_MODES,
   type BotSettingsUpdate,
@@ -210,7 +210,7 @@ export function WorkspaceBotSettingsForm({
         </p>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {INTAKE_FIELDS.map((f) => {
-            const required = mode === 'external' && EXTERNAL_REQUIRED_FIELDS.includes(f)
+            const required = requiredIntakeFields(mode, fields).includes(f)
             const unavailable = mode === 'internal' && f === 'preference'
             return (
               <label

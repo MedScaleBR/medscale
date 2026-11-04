@@ -9,6 +9,7 @@ import {
   missingIntakeFields,
   normalizeIntakeFields,
   parseBotSettingsBody,
+  requiredIntakeFields,
   type IntakeData,
 } from '@/lib/bot/unit-settings'
 import { parseCardNumber, parseCpf, parseEmail, parseIsoBirthDate, detectInjectionAttempt, sanitizeShortText } from '@/lib/bot/security'
@@ -33,6 +34,13 @@ describe('getWorkspaceBotSettings', () => {
       'cpf',
       'preference',
     ])
+  })
+
+  it('external com foto da carteirinha não obriga o convênio', () => {
+    expect(normalizeIntakeFields('external', ['insurance_card_photo'])).toEqual(['full_name', 'insurance_card_photo'])
+    expect(requiredIntakeFields('external', ['insurance_card_photo'])).toEqual(['full_name'])
+    expect(requiredIntakeFields('external', [])).toEqual(['full_name', 'insurance'])
+    expect(requiredIntakeFields('internal', ['insurance_card_photo'])).toEqual([])
   })
 
   it('internal descarta preferência e valores desconhecidos', () => {
