@@ -254,12 +254,31 @@ Copie exatamente o id da operadora da lista. Nunca invente um id nem mostre esta
 Confirme o nome do convênio junto com a data e o horário. Não peça carteirinha ou senha de autorização neste fluxo; a equipe completa esses dados. Valores da tabela particular não são preços de atendimento pelo convênio.\n`
     : ''
 
+  // Nenhuma unidade atende particular: a Clara nem pergunta, vai direto ao convênio.
+  const anyPrivate = offeredCoverage.acceptsPrivate
+  const noPrivateBlock = anyPrivate
+    ? ''
+    : `
+## Atendimento particular — IMPORTANTE
+No momento nenhuma unidade atende particular.
+- Quando for saber como será o atendimento, pergunte direto qual é o convênio do paciente. Nunca pergunte se é particular nem escreva "ou particular".
+- Se o paciente disser que quer atendimento particular, responda que no momento não estamos trabalhando com atendimentos particulares e pergunte se ele tem algum dos convênios aceitos. Nunca emita CONVENIO_ID: PARTICULAR.
+`
+
   const insuranceFirstBlock = askInsuranceFirst
-    ? `
+    ? anyPrivate
+      ? `
 ORDEM DO AGENDAMENTO
 Quando o paciente quiser agendar, pergunte primeiro o convênio (ou se é particular), antes de falar de unidade ou horário.
 Depois, mostre só as unidades que aceitam aquele convênio, conforme a lista de convênios acima. Para particular, mostre todas.
 Se nenhuma unidade aceitar o convênio, diga isso com clareza e pergunte se o paciente quer seguir como particular.
+Nunca ofereça uma unidade que não aceita o convênio do paciente.
+`
+      : `
+ORDEM DO AGENDAMENTO
+Quando o paciente quiser agendar, pergunte primeiro qual é o convênio do paciente, antes de falar de unidade ou horário.
+Depois, mostre só as unidades que aceitam aquele convênio, conforme a lista de convênios acima.
+Se nenhuma unidade aceitar o convênio, diga isso com clareza e ofereça passar para a equipe.
 Nunca ofereça uma unidade que não aceita o convênio do paciente.
 `
     : ''
@@ -464,7 +483,7 @@ PROCEDIMENTO_ID: <id>
 
   // ── Passo de escolha da unidade (só quando há mais de uma) ────────────────
   const unitStep = multiUnit
-    ? `${askInsuranceFirst ? '2. Pergunte primeiro o convênio do paciente (ou se é particular), conforme "ORDEM DO AGENDAMENTO". Só depois pergunte em qual unidade ele quer ser atendido, entre as que aceitam esse convênio' : '2. Pergunte em qual unidade o paciente quer ser atendido'} — liste as unidades pelo nome (e bairro/endereço) e espere ele escolher ANTES de oferecer horários. Os horários disponíveis são diferentes por unidade.
+    ? `${askInsuranceFirst ? `2. Pergunte primeiro o convênio do paciente${anyPrivate ? ' (ou se é particular)' : ''}, conforme "ORDEM DO AGENDAMENTO". Só depois pergunte em qual unidade ele quer ser atendido, entre as que aceitam esse convênio` : '2. Pergunte em qual unidade o paciente quer ser atendido'} — liste as unidades pelo nome (e bairro/endereço) e espere ele escolher ANTES de oferecer horários. Os horários disponíveis são diferentes por unidade.
 2a. Assim que o paciente disser a unidade, inclua JÁ NESSA MESMA RESPOSTA uma linha isolada no formato exato:
 UNIDADE_ID: <id>
 (copie o id entre parênteses da unidade escolhida na lista de Unidades acima — nunca invente). Essa linha trava a conversa naquela unidade e é lida por um sistema automático — nunca a mostre ao paciente. A partir daí, ofereça SÓ os horários que aparecem sob "### <nome daquela unidade>".\n`
@@ -517,7 +536,7 @@ Todos os horários estão no fuso de São Paulo (America/Sao_Paulo).
 ## Consulta(s) já agendada(s) deste paciente
 ${upcomingAppointmentsText}
 Essa é a lista real do sistema — nunca diga que uma consulta foi cancelada ou remarcada se ela não estiver aqui, e nunca invente uma consulta que não está nesta lista.
-${procedureCatalogBlock}${insuranceBookingBlock}${insuranceFirstBlock}
+${procedureCatalogBlock}${insuranceBookingBlock}${noPrivateBlock}${insuranceFirstBlock}
 ${
     isFirstMessage
       ? `## Primeira mensagem desta conversa — IMPORTANTE
