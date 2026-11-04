@@ -8,7 +8,15 @@ import { NOTIFICATION_EMAILS_MAX, parseNotificationEmails, splitEmails } from '@
 import { saveNotificationEmails } from './clara-api'
 
 // "E-mails que recebem as solicitações" de uma unidade (só equipe MedScale).
-export function NotificationEmailsForm({ workspaceId, initial }: { workspaceId: string; initial: string[] }) {
+export function NotificationEmailsForm({
+  workspaceId,
+  initial,
+  onSaved,
+}: {
+  workspaceId: string
+  initial: string[]
+  onSaved?: (emails: string[]) => void
+}) {
   const [text, setText] = useState(initial.join('\n'))
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null)
@@ -25,6 +33,7 @@ export function NotificationEmailsForm({ workspaceId, initial }: { workspaceId: 
     else {
       setText(res.data.notification_emails.join('\n'))
       setMessage({ ok: true, text: 'Salvo.' })
+      onSaved?.(res.data.notification_emails)
     }
   }
 

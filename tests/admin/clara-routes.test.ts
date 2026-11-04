@@ -18,6 +18,7 @@ import { GET as LIST_PRESETS, POST as CREATE_PRESET } from '@/app/api/admin/clar
 import { PATCH as UPDATE_PRESET, DELETE as DELETE_PRESET } from '@/app/api/admin/clara/presets/[id]/route'
 import { POST as APPLY_PRESET } from '@/app/api/admin/clara/presets/[id]/apply/route'
 import { PATCH as BOT_SETTINGS } from '@/app/api/admin/workspaces/[id]/bot-settings/route'
+import { PATCH as ACCOUNT_EMAILS } from '@/app/api/admin/accounts/[id]/notification-emails/route'
 import { matchesPreset, parsePresetBody, presetBadge, type BotPreset } from '@/lib/bot/presets'
 
 const ACCOUNT = '11111111-1111-4111-8111-111111111111'
@@ -167,6 +168,53 @@ describe('PATCH bot-settings — referência do modelo', () => {
     await BOT_SETTINGS(req('/x', 'PATCH', { ...body, bot_preset_id: PRESET_ID }), params('w1'))
     expect(s.callsTo('workspaces', 'update')[0].payload).toMatchObject({ bot_preset_id: PRESET_ID })
     expect((await BOT_SETTINGS(req('/x', 'PATCH', { ...body, bot_preset_id: 'nope' }), params('w1'))).status).toBe(400)
+  })
+})
+
+describe('PATCH e-mails de todas as unidades da account', () => {
+  it('só staff MedScale', async () => {
+    const s = setup({}, { admin: false })
+    const res = await ACCOUNT_EMAILS(req('/x', 'PATCH', { notification_emails: ['a@b.com'] }), params(ACCOUNT))
+    expect(res.status).toBe(403)
+    expect(s.callsTo('workspaces')).toHaveLength(0)
+  })
+
+  it('grava a lista normalizada em todas as unidades ativas da account', async () => {
+    const s = setup({
+      workspaces: {
+        update: {
+          data: [
+            { id: 'w1', notification_emails: ['secretaria@clinica.com'] },
+            { id: 'w2', notification_emails: ['secretaria@clinica.com'] },
+          ],
+        },
+      },
+    })
+    const res = await ACCOUNT_EMAILS(
+      req('/x', 'PATCH', { notification_emails: [' Secretaria@Clinica.com ', 'secretaria@clinica.com'] }),
+      params(ACCOUNT)
+    )
+    expect(res.status).toBe(200)
+    const [upd] = s.callsTo('workspaces', 'update')
+    expect(upd.payload).toEqual({ notification_emails: ['secretaria@clinica.com'] })
+    expect(upd.filters).toContainEqual(['eq', 'account_id', ACCOUNT])
+    expect(upd.filters).toContainEqual(['eq', 'is_active', true])
+    expect((await res.json()).workspaces).toHaveLength(2)
+  })
+
+  it('lista inválida ou com mais de 5: 400 e nada gravado', async () => {
+    const s = setup()
+    expect((await ACCOUNT_EMAILS(req('/x', 'PATCH', { notification_emails: ['nao-e-email'] }), params(ACCOUNT))).status).toBe(400)
+    const six = Array.from({ length: 6 }, (_, i) => `p${i}@x.com`)
+    expect((await ACCOUNT_EMAILS(req('/x', 'PATCH', { notification_emails: six }), params(ACCOUNT))).status).toBe(400)
+    expect(s.callsTo('workspaces')).toHaveLength(0)
+  })
+
+  it('lista vazia limpa os e-mails de todas', async () => {
+    const s = setup({ workspaces: { update: { data: [{ id: 'w1', notification_emails: [] }] } } })
+    const res = await ACCOUNT_EMAILS(req('/x', 'PATCH', { notification_emails: [] }), params(ACCOUNT))
+    expect(res.status).toBe(200)
+    expect(s.callsTo('workspaces', 'update')[0].payload).toEqual({ notification_emails: [] })
   })
 })
 
