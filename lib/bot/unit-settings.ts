@@ -46,19 +46,27 @@ export const INTAKE_FIELD_PROMPT: Record<IntakeField, string> = {
 }
 
 /**
- * Como pedir um dado à unidade. Só o convênio muda: a unidade que não atende
- * particular não pode oferecer particular, e a que só atende particular não
- * pergunta convênio. Sem cobertura conhecida, vale o texto padrão.
+ * Como pedir um dado à unidade. Só o convênio e a foto mudam: a unidade que não
+ * atende particular não pode oferecer particular, e a que só atende particular
+ * não pergunta convênio. Sem cobertura conhecida, vale o texto padrão.
  */
 export function intakeFieldPrompt(field: IntakeField, coverage?: Pick<UnitCoverage, 'acceptsPrivate' | 'insurers'>): string {
-  if (field !== 'insurance' || !coverage) return INTAKE_FIELD_PROMPT[field]
+  if (!coverage) return INTAKE_FIELD_PROMPT[field]
+  if (field === 'insurance_card_photo' && !coverage.acceptsPrivate) return 'foto da carteirinha do convênio'
+  if (field !== 'insurance') return INTAKE_FIELD_PROMPT[field]
   if (!coverage.acceptsPrivate) return 'convênio e o número da carteirinha (esta unidade não atende particular)'
   if (coverage.insurers.length === 0) return 'confirmação de que o atendimento será particular (esta unidade não atende convênio)'
   return INTAKE_FIELD_PROMPT[field]
 }
 
-/** Mínimo de uma unidade 'external': sem isto a equipe não consegue marcar. */
-export const EXTERNAL_REQUIRED_FIELDS: readonly IntakeField[] = ['full_name', 'insurance']
+/**
+ * Mínimo de uma unidade 'external': sem isto a equipe não consegue marcar.
+ * Com a foto da carteirinha, o convênio deixa de ser obrigatório (a foto já traz).
+ */
+export function requiredIntakeFields(mode: SchedulingMode, fields: readonly unknown[]): IntakeField[] {
+  if (mode !== 'external') return []
+  return fields.includes('insurance_card_photo') ? ['full_name'] : ['full_name', 'insurance']
+}
 /** Pré-marcados ao trocar uma unidade para 'external'. */
 export const EXTERNAL_DEFAULT_FIELDS: readonly IntakeField[] = ['full_name', 'birth_date', 'insurance', 'preference']
 
@@ -98,7 +106,7 @@ function isIntakeField(v: unknown): v is IntakeField {
  */
 export function normalizeIntakeFields(mode: SchedulingMode, fields: readonly unknown[]): IntakeField[] {
   const set = new Set(fields.filter(isIntakeField))
-  if (mode === 'external') EXTERNAL_REQUIRED_FIELDS.forEach((f) => set.add(f))
+  if (mode === 'external') requiredIntakeFields(mode, [...set]).forEach((f) => set.add(f))
   else set.delete('preference')
   return INTAKE_FIELDS.filter((f) => set.has(f))
 }
