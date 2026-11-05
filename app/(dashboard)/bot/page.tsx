@@ -10,15 +10,18 @@ export default async function BotPage() {
   const session = await resolveActiveSession()
   if (!session) return null
 
+  // Conversas de todas as unidades da account, inclusive as que ainda não têm
+  // unidade (a Clara só grava quando o paciente confirma). A RLS já limita às
+  // unidades que o usuário pode acessar.
   const supabase = await createClient()
   const { data: conversations } = await supabase
     .from('conversations')
     .select(
-      'id, patient_phone, patient_id, status, bot_paused, archived_at, started_at, patients(id, full_name, tags, notes), messages(id, role, content, sent_at)'
+      'id, workspace_id, patient_phone, patient_id, status, bot_paused, archived_at, started_at, workspaces(name), patients(id, full_name, tags, notes), messages(id, role, content, sent_at)'
     )
-    .eq('workspace_id', session.workspaceId)
+    .eq('account_id', session.accountId)
     .order('started_at', { ascending: false })
-    .limit(50)
+    .limit(100)
 
   // Última/próxima consulta da barra de contexto: o vínculo é o telefone, não
   // patient_id — conversa de paciente ainda não cadastrado só tem o número.
@@ -89,8 +92,10 @@ export default async function BotPage() {
       | { id: string; full_name: string; tags: string[] | null; notes: string | null }
       | null
     const visit = visits.get(c.patient_phone)
+    const unit = c.workspaces as unknown as { name: string } | null
     return {
       id: c.id,
+      unit_name: c.workspace_id ? (unit?.name ?? 'Unidade') : null,
       patient_phone: c.patient_phone,
       patient_name: patient?.full_name ?? null,
       patient_id: patient?.id ?? null,

@@ -46,7 +46,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .from('conversations')
     .update(updates)
     .eq('id', id)
-    .eq('workspace_id', session.workspaceId)
+    .eq('account_id', session.accountId)
     .select()
     .single()
 

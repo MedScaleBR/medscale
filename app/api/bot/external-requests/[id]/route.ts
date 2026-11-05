@@ -4,8 +4,8 @@ import { requireWorkspaceSession } from '@/lib/session/api'
 import { EXTERNAL_REQUEST_REASON } from '@/lib/bot/external-request'
 
 // Marca uma solicitação de agendamento (unidade com agenda externa) como
-// tratada pela equipe. Quem vê a conversa pode marcar: a RLS de handoff_logs
-// já limita às unidades do usuário.
+// tratada pela equipe. Quem vê a conversa pode marcar, de qualquer unidade que
+// esteja selecionada: a RLS de handoff_logs já limita às unidades do usuário.
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   const result = await requireWorkspaceSession(req)
@@ -26,7 +26,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         : { resolved_at: null, resolved_by: null }
     )
     .eq('id', id)
-    .eq('workspace_id', session.workspaceId)
     .eq('trigger_reason', EXTERNAL_REQUEST_REASON)
     .select('id, resolved_at')
     .maybeSingle()

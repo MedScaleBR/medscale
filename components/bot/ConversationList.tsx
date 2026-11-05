@@ -22,6 +22,8 @@ import type { ExternalRequestView } from './ExternalRequestCard'
 
 export interface ConversationListItem {
   id: string
+  // Unidade da conversa. null = a Clara ainda não confirmou qual.
+  unit_name: string | null
   patient_phone: string
   patient_name: string | null
   patient_id: string | null
@@ -205,6 +207,9 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
                       </span>
                       <p className="truncate text-xs text-gray-400">{c.last_message ?? 'Sem mensagens'}</p>
                     </div>
+                    <p className={cn('mt-1 truncate text-[11px]', c.unit_name ? 'text-gray-500' : 'italic text-gray-400')}>
+                      {c.unit_name ?? 'Sem unidade'}
+                    </p>
                   </div>
                 </button>
               </li>
