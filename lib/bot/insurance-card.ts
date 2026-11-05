@@ -92,25 +92,32 @@ type DownloadResult =
   | { ok: true; bytes: ArrayBuffer; mime: string }
   | { ok: false; reason: 'mime' | 'too_large' | 'download_failed' }
 
-/** Baixa a mídia pela Graph API: GET /{media-id} → URL → arquivo, com o token da account. */
+/**
+ * Baixa a mídia pela Graph API: GET /{media-id} → URL → arquivo, com o token da
+ * account. Por padrão aceita a foto da carteirinha; o áudio do paciente passa
+ * outro filtro de MIME e outro limite de tamanho.
+ */
 export async function downloadWhatsAppMedia(
   mediaId: string,
   token: string,
-  fetchImpl: typeof fetch = fetch
+  fetchImpl: typeof fetch = fetch,
+  options: { normalizeMime?: (mime: string | null | undefined) => string | null; maxBytes?: number } = {}
 ): Promise<DownloadResult> {
+  const normalizeMime = options.normalizeMime ?? normalizeCardMime
+  const maxBytes = options.maxBytes ?? INSURANCE_CARD_MAX_BYTES
   try {
     const metaRes = await fetchImpl(graphUrl(`/${mediaId}`), { headers: { Authorization: `Bearer ${token}` } })
     if (!metaRes.ok) return { ok: false, reason: 'download_failed' }
     const meta = (await metaRes.json()) as { url?: string; mime_type?: string; file_size?: number }
-    const mime = normalizeCardMime(meta.mime_type)
+    const mime = normalizeMime(meta.mime_type)
     if (!mime) return { ok: false, reason: 'mime' }
-    if (typeof meta.file_size === 'number' && meta.file_size > INSURANCE_CARD_MAX_BYTES) return { ok: false, reason: 'too_large' }
+    if (typeof meta.file_size === 'number' && meta.file_size > maxBytes) return { ok: false, reason: 'too_large' }
     if (!meta.url) return { ok: false, reason: 'download_failed' }
 
     const fileRes = await fetchImpl(meta.url, { headers: { Authorization: `Bearer ${token}` } })
     if (!fileRes.ok) return { ok: false, reason: 'download_failed' }
     const bytes = await fileRes.arrayBuffer()
-    if (bytes.byteLength > INSURANCE_CARD_MAX_BYTES) return { ok: false, reason: 'too_large' }
+    if (bytes.byteLength > maxBytes) return { ok: false, reason: 'too_large' }
     return { ok: true, bytes, mime }
   } catch {
     return { ok: false, reason: 'download_failed' }

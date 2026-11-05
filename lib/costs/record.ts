@@ -118,7 +118,9 @@ export async function recordClaudeCost(params: {
 export async function recordWhisperCost(params: {
   ctx: CostContext
   durationSeconds: number
-  transcriptionId: string
+  /** Null para o áudio do paciente no WhatsApp (não vira linha em transcriptions). */
+  transcriptionId: string | null
+  source?: 'consulta' | 'whatsapp_audio'
 }): Promise<void> {
   if (!params.durationSeconds || params.durationSeconds <= 0) return
 
@@ -131,7 +133,7 @@ export async function recordWhisperCost(params: {
     quantity: params.durationSeconds,
     costBrl: toBrl(usd),
     relatedId: params.transcriptionId,
-    metadata: { usd, fx: USD_BRL },
+    metadata: { usd, fx: USD_BRL, ...(params.source ? { source: params.source } : {}) },
   })
 }
 

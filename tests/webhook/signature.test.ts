@@ -12,6 +12,7 @@ const g = vi.hoisted(() => ({
   sendFinanceReply: null as unknown as MockFn,
   sendWhatsAppMessage: vi.fn(async () => undefined),
   receiveInsuranceCard: vi.fn<(p: unknown) => Promise<string | null>>(async () => null),
+  receiveVoiceMessage: vi.fn<(p: unknown) => Promise<{ kind: string; text?: string }>>(async () => ({ kind: 'failed' })),
 }))
 
 // `after()` só funciona dentro de um request scope do Next — aqui ele é
@@ -44,6 +45,11 @@ vi.mock('@/lib/crypto', () => ({
 vi.mock('@/lib/bot/insurance-card', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/bot/insurance-card')>()
   return { ...actual, receiveInsuranceCard: (p: unknown) => g.receiveInsuranceCard(p) }
+})
+
+vi.mock('@/lib/bot/voice-message', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/bot/voice-message')>()
+  return { ...actual, receiveVoiceMessage: (p: unknown) => g.receiveVoiceMessage(p) }
 })
 
 import { POST, GET } from '@/app/api/whatsapp/webhook/route'
@@ -258,6 +264,51 @@ describe('POST /api/whatsapp/webhook — roteamento da mensagem', () => {
 
     expect(g.handleUnsupportedMessage).toHaveBeenCalledWith(expect.objectContaining({ messageType: 'audio' }))
     expect(g.processIncomingMessage).not.toHaveBeenCalled()
+  })
+
+  const voicePayload = () =>
+    JSON.stringify({
+      entry: [{ changes: [{ value: {
+        metadata: { phone_number_id: PHONE_NUMBER_ID },
+        messages: [{ from: '5511988887777', id: 'wamid.voz', type: 'audio', audio: { id: 'media-voz', mime_type: 'audio/ogg; codecs=opus', voice: true } }],
+      } }] }],
+    })
+
+  it('áudio transcrito vira texto para a Clara', async () => {
+    g.receiveVoiceMessage.mockResolvedValueOnce({ kind: 'text', text: 'quero marcar consulta sexta' })
+    const body = voicePayload()
+    await POST(makeRequest(body, makeSignature(body, GLOBAL_SECRET)) as never)
+    await runAfterCallbacks()
+
+    expect(g.receiveVoiceMessage).toHaveBeenCalledWith({ accountId: 'acc1', mediaId: 'media-voz' })
+    expect(g.processIncomingMessage).toHaveBeenCalledWith({
+      accountId: 'acc1',
+      patientPhone: '5511988887777',
+      message: '[Áudio do paciente, transcrito automaticamente]\nquero marcar consulta sexta',
+      whatsappMessageId: 'wamid.voz',
+    })
+    expect(g.handleUnsupportedMessage).not.toHaveBeenCalled()
+  })
+
+  it('áudio acima de 2 minutos: Clara pede áudio mais curto ou texto', async () => {
+    g.receiveVoiceMessage.mockResolvedValueOnce({ kind: 'too_long' })
+    const body = voicePayload()
+    await POST(makeRequest(body, makeSignature(body, GLOBAL_SECRET)) as never)
+    await runAfterCallbacks()
+
+    expect(g.processIncomingMessage).not.toHaveBeenCalled()
+    expect(g.handleUnsupportedMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ messageType: 'audio', reply: expect.stringContaining('2 minutos') })
+    )
+  })
+
+  it('falha na transcrição: resposta padrão de mídia não suportada', async () => {
+    g.receiveVoiceMessage.mockResolvedValueOnce({ kind: 'failed' })
+    const body = voicePayload()
+    await POST(makeRequest(body, makeSignature(body, GLOBAL_SECRET)) as never)
+    await runAfterCallbacks()
+
+    expect(g.handleUnsupportedMessage).toHaveBeenCalledWith(expect.objectContaining({ messageType: 'audio', reply: undefined }))
   })
 
   const imagePayload = () =>
