@@ -162,6 +162,33 @@ describe('processIncomingMessage — montagem de contexto', () => {
     )
   })
 
+  it('guarda o nome do perfil do WhatsApp em whatsapp_name, sem mexer no nome do paciente', async () => {
+    const supabase = mergeSupabaseConfig({})
+
+    await processIncomingMessage({ ...PARAMS, profileName: 'Mari 🌸' })
+
+    const updates = supabase.callsTo('patients', 'update')
+    expect(updates[0]?.payload).toEqual({ whatsapp_name: 'Mari 🌸' })
+    expect(updates[0]?.filters).toContainEqual(['eq', 'id', PATIENT.id])
+    expect(updates.some((u) => 'full_name' in (u.payload as object))).toBe(false)
+  })
+
+  it('sem o nome do WhatsApp, não grava nada no paciente', async () => {
+    const supabase = mergeSupabaseConfig({})
+    await processIncomingMessage(PARAMS)
+    expect(supabase.callsTo('patients', 'update')).toHaveLength(0)
+  })
+
+  it('falha ao gravar o nome do WhatsApp (migration pendente) não impede a Clara de responder', async () => {
+    mergeSupabaseConfig({ patients: { update: { data: null, error: { message: 'column "whatsapp_name" does not exist' } } } })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    await processIncomingMessage({ ...PARAMS, profileName: 'Mari' })
+
+    expect(claudeCreate).toHaveBeenCalled()
+    warn.mockRestore()
+  })
+
   it('não deve chamar o Claude quando a conversa está com bot_paused', async () => {
     const supabase = mergeSupabaseConfig({
       conversations: { select: { data: { id: 'c1', status: 'open', bot_paused: true, archived_at: null } } },

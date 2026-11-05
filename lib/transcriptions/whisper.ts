@@ -25,3 +25,24 @@ export async function transcribeAudio(audioUrl: string): Promise<string> {
 
   return transcription as unknown as string
 }
+
+/**
+ * Transcreve um áudio já baixado (ex.: áudio do paciente no WhatsApp) e
+ * devolve também a duração que o Whisper mediu — usada para cobrar e para
+ * conferir o limite quando o arquivo não informa a duração.
+ */
+export async function transcribeAudioBytes(
+  bytes: ArrayBuffer,
+  mime: string,
+  filename: string
+): Promise<{ text: string; durationSeconds: number }> {
+  const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
+  const file = new File([new Blob([bytes], { type: mime })], filename, { type: mime })
+  const result = (await openai.audio.transcriptions.create({
+    file,
+    model: 'whisper-1',
+    language: process.env.WHISPER_LANGUAGE ?? 'pt',
+    response_format: 'verbose_json',
+  })) as unknown as { text?: string; duration?: number }
+  return { text: (result.text ?? '').trim(), durationSeconds: Number(result.duration) || 0 }
+}

@@ -82,3 +82,21 @@ export function sortConversations<T extends InboxEntry>(list: T[], sort: InboxSo
     return recency(b) - recency(a)
   })
 }
+
+// Nome que a Clara grava enquanto não sabe o nome real do paciente.
+export const PLACEHOLDER_PATIENT_NAME = 'Paciente'
+
+/** O paciente já tem um nome real (não o provisório da Clara)? */
+export function hasRealName(fullName: string | null | undefined): boolean {
+  const name = fullName?.trim()
+  return !!name && name !== PLACEHOLDER_PATIENT_NAME
+}
+
+/**
+ * Nome para mostrar no /bot: o nome real; senão o do perfil do WhatsApp;
+ * senão null (a tela cai no telefone).
+ */
+export function displayPatientName(fullName: string | null | undefined, whatsappName: string | null | undefined): string | null {
+  if (hasRealName(fullName)) return fullName!.trim()
+  return whatsappName?.trim() || null
+}

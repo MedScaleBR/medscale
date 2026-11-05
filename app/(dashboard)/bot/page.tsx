@@ -92,6 +92,14 @@ export default async function BotPage() {
     : { data: [], error: null }
   const pausedUntil = new Map((pauseError ? [] : (pauseRows ?? [])).map((r) => [r.id, r.bot_paused_until]))
 
+  // Nome do perfil do WhatsApp de cada paciente. Consulta à parte pelo mesmo
+  // motivo: sem a migration, só não aparece.
+  const patientIds = [...new Set((conversations ?? []).map((c) => c.patient_id).filter((v): v is string => !!v))]
+  const { data: waRows, error: waError } = patientIds.length
+    ? await supabase.from('patients').select('id, whatsapp_name').in('id', patientIds)
+    : { data: [], error: null }
+  const whatsappNames = new Map((waError ? [] : (waRows ?? [])).map((r) => [r.id, r.whatsapp_name]))
+
   const items: ConversationWithMessages[] = (conversations ?? []).map((c) => {
     const messages = [...(c.messages ?? [])].sort(
       (a, b) => new Date(a.sent_at).getTime() - new Date(b.sent_at).getTime()
@@ -106,6 +114,7 @@ export default async function BotPage() {
       unit_name: c.workspace_id ? (unit?.name ?? 'Unidade') : null,
       patient_phone: c.patient_phone,
       patient_name: patient?.full_name ?? null,
+      patient_whatsapp_name: patient ? (whatsappNames.get(patient.id) ?? null) : null,
       patient_id: patient?.id ?? null,
       patient_tags: patient?.tags ?? [],
       patient_notes: patient?.notes ?? null,

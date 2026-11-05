@@ -27,6 +27,8 @@ import {
 import type { MessageRole, ConversationStatus } from '@/types/database'
 import { InitialsAvatar } from './InitialsAvatar'
 import { ConversationContextBar } from './ConversationContextBar'
+import { PatientNameEditor } from './PatientNameEditor'
+import { displayPatientName, hasRealName } from '@/lib/bot/inbox'
 import { ScheduleDialog } from './ScheduleDialog'
 import { ExternalRequestCard, type ExternalRequestView } from './ExternalRequestCard'
 
@@ -41,6 +43,7 @@ interface ConversationDetailProps {
   conversationId: string
   patientPhone: string
   patientName: string | null
+  patientWhatsAppName: string | null
   patientId: string | null
   patientTags: string[]
   patientNotes: string | null
@@ -55,6 +58,7 @@ interface ConversationDetailProps {
   onToggleBotPaused: (paused: boolean) => Promise<void>
   onToggleArchived: (archived: boolean) => Promise<void>
   onNotesSaved: (notes: string) => void
+  onNameSaved: (fullName: string) => void
   onScheduled: (scheduledAt: string) => void
   onBack?: () => void
   externalRequest?: ExternalRequestView | null
@@ -110,6 +114,7 @@ export function ConversationDetail({
   conversationId,
   patientPhone,
   patientName,
+  patientWhatsAppName,
   patientId,
   patientTags,
   patientNotes,
@@ -124,6 +129,7 @@ export function ConversationDetail({
   onToggleBotPaused,
   onToggleArchived,
   onNotesSaved,
+  onNameSaved,
   onScheduled,
   onBack,
   externalRequest = null,
@@ -168,7 +174,10 @@ export function ConversationDetail({
     }
   }
 
-  const title = patientName ?? formatBrazilianPhone(patientPhone)
+  const displayName = displayPatientName(patientName, patientWhatsAppName)
+  const title = displayName ?? formatBrazilianPhone(patientPhone)
+  // Mostrando o nome do WhatsApp (e não um nome real): avisa na linha de baixo.
+  const showingWhatsAppName = !hasRealName(patientName) && !!displayName
   const info = statusInfo(status, botPaused, Boolean(archivedAt))
 
   return (
@@ -190,8 +199,18 @@ export function ConversationDetail({
         )}
         <InitialsAvatar label={title} seed={conversationId} />
         <div className="min-w-0">
-          <p className="truncate text-sm font-semibold text-[var(--navy)]">{title}</p>
-          <p className="truncate text-xs text-gray-400">{formatBrazilianPhone(patientPhone) || 'Sandbox'}</p>
+          <PatientNameEditor
+            key={patientId ?? conversationId}
+            patientId={patientId}
+            fullName={patientName}
+            whatsappName={patientWhatsAppName}
+            title={title}
+            onSaved={onNameSaved}
+          />
+          <p className="truncate text-xs text-gray-400">
+            {formatBrazilianPhone(patientPhone) || 'Sandbox'}
+            {showingWhatsAppName && ' · nome do WhatsApp'}
+          </p>
         </div>
         <span
           title={info.hint}
@@ -402,6 +421,7 @@ export function ConversationDetail({
       <ScheduleDialog
         open={scheduleOpen}
         onOpenChange={setScheduleOpen}
+        // Nome gravado na consulta: o nome do paciente, nunca o apelido do WhatsApp.
         patientName={patientName ?? formatBrazilianPhone(patientPhone)}
         patientPhone={patientPhone}
         patientId={patientId}

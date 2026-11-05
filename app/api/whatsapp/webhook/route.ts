@@ -13,6 +13,8 @@ import { confirmReminderAppointment } from '@/lib/whatsapp/confirm-appointment'
 import { resolveClinicSender, processClinicReplyMessage } from '@/lib/outsourced/clinic-reply'
 import { notifyOutsourcedIssue } from '@/lib/outsourced/notify'
 import { parseIncomingMedia, receiveInsuranceCard } from '@/lib/bot/insurance-card'
+import { receiveVoiceMessage, voiceTranscriptMessage, VOICE_TOO_LONG_REPLY } from '@/lib/bot/voice-message'
+import { parseProfileName } from '@/lib/whatsapp/profile-name'
 import type { ClinicSenderMatch } from '@/lib/outsourced/config'
 
 // Valida a assinatura HMAC enviada pela Meta para garantir que o payload
@@ -117,6 +119,7 @@ export async function POST(req: NextRequest) {
   }
 
   const from = message.from // telefone do paciente (ou do owner, no fluxo financeiro)
+  const profileName = parseProfileName(value.contacts, from)
   const text = message.type === 'text' ? message.text.body : null
 
   // Mensagem no número financeiro dedicado da MedScale — fora do modelo de
@@ -225,6 +228,16 @@ export async function POST(req: NextRequest) {
     // Imagem/documento numa unidade que pede a foto da carteirinha: salva o
     // arquivo e a Clara recebe um texto de sistema no lugar da imagem.
     let incomingText: string | null = text
+    let unsupportedReply: string | undefined
+
+    // Áudio: transcreve e a Clara recebe o texto. Acima de 2 minutos ou com
+    // falha, cai no fluxo de mídia não suportada (com resposta própria).
+    if (!incomingText && message.type === 'audio' && message.audio?.id) {
+      const voice = await receiveVoiceMessage({ accountId, mediaId: message.audio.id })
+      if (voice.kind === 'text') incomingText = voiceTranscriptMessage(voice.text)
+      else if (voice.kind === 'too_long') unsupportedReply = VOICE_TOO_LONG_REPLY
+    }
+
     if (!incomingText) {
       const media = parseIncomingMedia(message)
       if (media) {
@@ -246,6 +259,7 @@ export async function POST(req: NextRequest) {
         patientPhone: from,
         message: incomingText,
         whatsappMessageId: message.id,
+        profileName,
       }).catch(async (err) => {
         console.error('processIncomingMessage failed', err)
         if (webhookLog) {
@@ -262,6 +276,8 @@ export async function POST(req: NextRequest) {
         patientPhone: from,
         messageType: message.type,
         whatsappMessageId: message.id,
+        reply: unsupportedReply,
+        profileName,
       }).catch((err) => console.error('handleUnsupportedMessage failed', err))
     }
   })
