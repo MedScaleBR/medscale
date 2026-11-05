@@ -128,6 +128,16 @@ describe('POST /api/whatsapp/webhook — mensagem da clínica parceira', () => {
     expectPatientFlowSkipped()
   })
 
+  it('mensagem de grupo é ignorada — a Clara só responde conversas individuais', async () => {
+    const res = await deliver({ ...TEXT_MSG, group_id: 'grupo-123' })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ status: 'ignored' })
+    expect(g.resolveClinicSender).not.toHaveBeenCalled()
+    expect(g.processClinicReplyMessage).not.toHaveBeenCalled()
+    expectPatientFlowSkipped()
+  })
+
   it('áudio da clínica parceira também nunca cai no fluxo de paciente', async () => {
     g.resolveClinicSender.mockResolvedValue({ kind: 'match', workspaceId: 'w1' })
 

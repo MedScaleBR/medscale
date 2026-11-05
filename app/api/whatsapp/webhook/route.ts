@@ -89,6 +89,14 @@ export async function POST(req: NextRequest) {
   }
 
   const message = value.messages[0]
+
+  // Mensagens de grupo (API de Grupos da Meta) trazem group_id. A Clara só
+  // atende conversas individuais — sem isso, responderia no privado de quem
+  // escreveu no grupo.
+  if (message?.group_id) {
+    return NextResponse.json({ status: 'ignored' })
+  }
+
   const from = message.from // telefone do paciente (ou do owner, no fluxo financeiro)
   const text = message.type === 'text' ? message.text.body : null
 
