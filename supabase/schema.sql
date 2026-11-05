@@ -825,6 +825,9 @@ create table public.conversations (
   -- `status`: resolver a conversa não mexe nisso, só a equipe reativa
   -- explicitamente (ou o próprio handoff, quando aplicável).
   bot_paused      boolean not null default false,
+  -- Pausa temporária: a secretária respondeu pelo celular (coexistência). A
+  -- Clara fica em silêncio até esse horário.
+  bot_paused_until timestamptz,
   appointment_id  uuid references public.appointments(id) on delete set null,
   started_at      timestamptz not null default now(),
   resolved_at     timestamptz,

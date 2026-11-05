@@ -8,6 +8,7 @@ const g = vi.hoisted(() => ({
   afterCallbacks: [] as Array<() => unknown>,
   processIncomingMessage: null as unknown as MockFn,
   handleUnsupportedMessage: null as unknown as MockFn,
+  recordBusinessEcho: vi.fn(async () => undefined),
   resolveClinicSender: vi.fn(),
   processClinicReplyMessage: vi.fn(),
   notifyOutsourcedIssue: vi.fn(),
@@ -31,6 +32,7 @@ vi.mock('@/lib/supabase/server', () => ({
 vi.mock('@/lib/llm/agent', () => ({
   processIncomingMessage: (...args: unknown[]) => g.processIncomingMessage(...args),
   handleUnsupportedMessage: (...args: unknown[]) => g.handleUnsupportedMessage(...args),
+  recordBusinessEcho: g.recordBusinessEcho,
 }))
 vi.mock('@/lib/finance/agent', () => ({ processFinancialMessage: vi.fn(), sendFinanceReply: vi.fn() }))
 vi.mock('@/lib/finance/respond', () => ({ buildUnsupportedTypeMessage: () => 'Só entendo texto.' }))
@@ -125,6 +127,28 @@ describe('POST /api/whatsapp/webhook — mensagem da clínica parceira', () => {
     expect(g.resolveClinicSender).toHaveBeenCalledWith(g.supabase.client, 'acc1', CLINIC_PHONE)
     expect(g.processClinicReplyMessage).toHaveBeenCalledWith({ accountId: 'acc1', workspaceId: 'w1', message: TEXT_MSG })
     expect(g.notifyOutsourcedIssue).not.toHaveBeenCalled()
+    expectPatientFlowSkipped()
+  })
+
+  it('secretária respondendo pelo celular (message_echoes) → registra e pausa, sem fluxo de paciente', async () => {
+    g.recordBusinessEcho.mockClear()
+    const body = JSON.stringify({
+      entry: [{ changes: [{ field: 'smb_message_echoes', value: {
+        metadata: { phone_number_id: PHONE_NUMBER_ID },
+        message_echoes: [{ from: CLINIC_PHONE, to: '5571988887777', id: 'wamid.echo', type: 'text', text: { body: 'Oi, aqui é a Carla' } }],
+      } }] }],
+    })
+    const headers = new Headers({ 'content-type': 'application/json', 'x-hub-signature-256': makeSignature(body) })
+    const res = await POST(new Request('https://app.test/api/whatsapp/webhook', { method: 'POST', body, headers }) as never)
+    for (const cb of g.afterCallbacks.splice(0)) await cb()
+
+    expect(res.status).toBe(200)
+    expect(g.recordBusinessEcho).toHaveBeenCalledWith('acc1', {
+      patientPhone: '5571988887777',
+      whatsappMessageId: 'wamid.echo',
+      content: 'Oi, aqui é a Carla',
+    })
+    expect(g.resolveClinicSender).not.toHaveBeenCalled()
     expectPatientFlowSkipped()
   })
 

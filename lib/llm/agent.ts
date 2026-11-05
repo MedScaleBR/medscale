@@ -15,6 +15,7 @@ import {
   recordPendingExternalRequest,
 } from '@/lib/bot/external-request'
 import { executeHandoff, logHandoffUnavailable } from '@/lib/bot/handoff'
+import { isBotPaused, secretaryPauseUntil, type BusinessEcho } from '@/lib/bot/pause'
 import { sendExternalRequestEmail } from '@/lib/bot/request-email'
 import { broadcastToWorkspace } from '@/lib/realtime/broadcast'
 import { createBookingRevenueEntry } from '@/lib/revenue/cycle'
@@ -114,7 +115,7 @@ async function getOrCreateConversation(
 ) {
   const { data: existing } = await supabase
     .from('conversations')
-    .select('id, status, bot_paused, archived_at, workspace_id')
+    .select('id, status, bot_paused, bot_paused_until, archived_at, workspace_id')
     .eq('account_id', accountId)
     .eq('patient_phone', patientPhone)
     .order('started_at', { ascending: false })
@@ -130,7 +131,7 @@ async function getOrCreateConversation(
         patient_phone: patientPhone,
         workspace_id: defaultWorkspaceId,
       })
-      .select('id, status, bot_paused, archived_at, workspace_id')
+      .select('id, status, bot_paused, bot_paused_until, archived_at, workspace_id')
       .single()
     if (!newConv) throw new Error('Failed to create conversation')
     return newConv
@@ -230,7 +231,7 @@ export async function handleUnsupportedMessage(params: UnsupportedMessageParams)
   })
 
   // Pausado por intervenção manual/handoff — mesma regra do texto: só registra.
-  if (conversation.bot_paused) {
+  if (isBotPaused(conversation)) {
     await notifyHumanNeeded(conversation, patient)
     return
   }
@@ -246,6 +247,44 @@ export async function handleUnsupportedMessage(params: UnsupportedMessageParams)
     phoneNumberId: botConfig.phoneNumberId,
     token: decryptToken(botConfig.metaToken),
   })
+}
+
+// Secretária respondeu o paciente pelo app do WhatsApp Business no celular
+// (coexistência). Salva a mensagem na conversa e pausa a Clara por algumas
+// horas, para ela não responder por cima de quem está atendendo.
+export async function recordBusinessEcho(accountId: string, echo: BusinessEcho) {
+  const supabase = createAdminClient()
+
+  const units = await getAccountUnits(accountId)
+  const singleUnitId = units.length === 1 ? units[0].id : null
+  const patient = await getOrCreatePatient(supabase, accountId, echo.patientPhone)
+  const conversation = await getOrCreateConversation(supabase, accountId, patient?.id, echo.patientPhone, singleUnitId)
+
+  // A Meta pode reenviar o mesmo webhook — não duplica a mensagem.
+  let duplicate = false
+  if (echo.whatsappMessageId) {
+    const { data: already } = await supabase
+      .from('messages')
+      .select('id')
+      .eq('conversation_id', conversation.id)
+      .eq('whatsapp_id', echo.whatsappMessageId)
+      .limit(1)
+      .maybeSingle()
+    duplicate = Boolean(already)
+  }
+  if (duplicate) return
+
+  if (echo.content) {
+    await supabase.from('messages').insert({
+      conversation_id: conversation.id,
+      role: 'assistant',
+      content: echo.content,
+      whatsapp_id: echo.whatsappMessageId,
+    })
+  }
+
+  await supabase.from('conversations').update({ bot_paused_until: secretaryPauseUntil() }).eq('id', conversation.id)
+  console.log(`[coexistence] secretária respondeu pelo celular — Clara pausada na conversa ${conversation.id}`)
 }
 
 // O bot conversa e agenda 24/7 — nunca fica "fechado". Só o handoff para um
@@ -319,9 +358,10 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
     })
   }
 
-  // Bot pausado (intervenção manual ou handoff em andamento) — só registra.
-  if (conversation.bot_paused) {
-    console.log(`[handoff] conversa ${conversation.id} está bot_paused — mensagem só registrada, bot não responde`)
+  // Bot pausado (intervenção manual, handoff em andamento ou secretária
+  // respondendo pelo celular) — só registra.
+  if (isBotPaused(conversation)) {
+    console.log(`[handoff] conversa ${conversation.id} está pausada — mensagem só registrada, bot não responde`)
     await notifyHumanNeeded(conversation, patientRow)
     return
   }
