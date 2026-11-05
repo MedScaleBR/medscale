@@ -2064,15 +2064,28 @@ create policy "appointments: workspace members" on public.appointments
     and account_id = any(public.my_account_ids())
   );
 
+-- Conversa sem unidade (a Clara ainda não confirmou qual) é visível para
+-- todos os membros da account — ver migration_bot_todas_unidades.sql.
 create policy "conversations: workspace members" on public.conversations
-  for all using (workspace_id = any(public.my_workspace_ids()));
+  for all
+  using (
+    workspace_id = any(public.my_workspace_ids())
+    or (workspace_id is null and account_id = any(public.my_account_ids()))
+  )
+  with check (
+    (workspace_id = any(public.my_workspace_ids()) and account_id = any(public.my_account_ids()))
+    or (workspace_id is null and account_id = any(public.my_account_ids()))
+  );
 
 create policy "messages: via conversation" on public.messages
   for all using (
     exists (
       select 1 from public.conversations c
       where c.id = conversation_id
-        and c.workspace_id = any(public.my_workspace_ids())
+        and (
+          c.workspace_id = any(public.my_workspace_ids())
+          or (c.workspace_id is null and c.account_id = any(public.my_account_ids()))
+        )
     )
   );
 
@@ -3325,7 +3338,10 @@ create policy "conversation_attachments: workspace members read" on public.conve
     exists (
       select 1 from public.conversations c
        where c.id = conversation_id
-         and c.workspace_id = any(public.my_workspace_ids())
+         and (
+           c.workspace_id = any(public.my_workspace_ids())
+           or (c.workspace_id is null and c.account_id = any(public.my_account_ids()))
+         )
     )
   );
 
