@@ -241,7 +241,22 @@ describe('POST /api/whatsapp/webhook — roteamento da mensagem', () => {
       patientPhone: '5511988887777',
       message: 'Oi, quero marcar',
       whatsappMessageId: 'wamid.1',
+      profileName: null,
     })
+  })
+
+  it('repassa o nome do perfil do WhatsApp para a Clara', async () => {
+    const body = JSON.stringify({
+      entry: [{ changes: [{ value: {
+        metadata: { phone_number_id: PHONE_NUMBER_ID },
+        contacts: [{ wa_id: '5511988887777', profile: { name: 'Mari 🌸' } }],
+        messages: [{ from: '5511988887777', id: 'wamid.n', type: 'text', text: { body: 'Oi' } }],
+      } }] }],
+    })
+    await POST(makeRequest(body, makeSignature(body, GLOBAL_SECRET)) as never)
+    await runAfterCallbacks()
+
+    expect(g.processIncomingMessage).toHaveBeenCalledWith(expect.objectContaining({ profileName: 'Mari 🌸' }))
   })
 
   it('deve encaminhar mensagem de áudio para handleUnsupportedMessage', async () => {
@@ -286,6 +301,7 @@ describe('POST /api/whatsapp/webhook — roteamento da mensagem', () => {
       patientPhone: '5511988887777',
       message: '[Áudio do paciente, transcrito automaticamente]\nquero marcar consulta sexta',
       whatsappMessageId: 'wamid.voz',
+      profileName: null,
     })
     expect(g.handleUnsupportedMessage).not.toHaveBeenCalled()
   })

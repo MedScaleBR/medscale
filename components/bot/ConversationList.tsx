@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import {
+  displayPatientName,
   matchesFilter,
   sortConversations,
   type InboxFilter,
@@ -25,7 +26,10 @@ export interface ConversationListItem {
   // Unidade da conversa. null = a Clara ainda não confirmou qual.
   unit_name: string | null
   patient_phone: string
+  // Nome gravado no paciente ('Paciente' enquanto a Clara não souber o real).
   patient_name: string | null
+  // Nome do perfil do WhatsApp — mostrado enquanto não há nome real.
+  patient_whatsapp_name: string | null
   patient_id: string | null
   patient_tags: string[]
   patient_notes: string | null
@@ -93,6 +97,7 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
       if (!q) return true
       return (
         (c.patient_name ?? '').toLowerCase().includes(q) ||
+        (c.patient_whatsapp_name ?? '').toLowerCase().includes(q) ||
         (c.patient_phone ?? '').includes(q.replace(/\D/g, '') || q) ||
         formatBrazilianPhone(c.patient_phone ?? '').includes(q)
       )
@@ -158,7 +163,7 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
       ) : (
         <ul className="min-h-0 flex-1 overflow-y-auto">
           {visible.map((c) => {
-            const label = c.patient_name ?? formatBrazilianPhone(c.patient_phone)
+            const label = displayPatientName(c.patient_name, c.patient_whatsapp_name) ?? formatBrazilianPhone(c.patient_phone)
             const pill = STATUS_PILL[c.status]
             return (
               <li key={c.id} className="border-b border-[var(--navy-06)] last:border-b-0">

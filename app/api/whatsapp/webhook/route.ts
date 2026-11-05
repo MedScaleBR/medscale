@@ -14,6 +14,7 @@ import { resolveClinicSender, processClinicReplyMessage } from '@/lib/outsourced
 import { notifyOutsourcedIssue } from '@/lib/outsourced/notify'
 import { parseIncomingMedia, receiveInsuranceCard } from '@/lib/bot/insurance-card'
 import { receiveVoiceMessage, voiceTranscriptMessage, VOICE_TOO_LONG_REPLY } from '@/lib/bot/voice-message'
+import { parseProfileName } from '@/lib/whatsapp/profile-name'
 import type { ClinicSenderMatch } from '@/lib/outsourced/config'
 
 // Valida a assinatura HMAC enviada pela Meta para garantir que o payload
@@ -118,6 +119,7 @@ export async function POST(req: NextRequest) {
   }
 
   const from = message.from // telefone do paciente (ou do owner, no fluxo financeiro)
+  const profileName = parseProfileName(value.contacts, from)
   const text = message.type === 'text' ? message.text.body : null
 
   // Mensagem no número financeiro dedicado da MedScale — fora do modelo de
@@ -257,6 +259,7 @@ export async function POST(req: NextRequest) {
         patientPhone: from,
         message: incomingText,
         whatsappMessageId: message.id,
+        profileName,
       }).catch(async (err) => {
         console.error('processIncomingMessage failed', err)
         if (webhookLog) {
@@ -274,6 +277,7 @@ export async function POST(req: NextRequest) {
         messageType: message.type,
         whatsappMessageId: message.id,
         reply: unsupportedReply,
+        profileName,
       }).catch((err) => console.error('handleUnsupportedMessage failed', err))
     }
   })

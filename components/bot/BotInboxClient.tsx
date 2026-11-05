@@ -127,6 +127,14 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
     )
   }
 
+  // O nome também mora na ficha do paciente: atualiza todas as conversas dele.
+  const handleNameSaved = (fullName: string) => {
+    if (!selected?.patient_id) return
+    setConversations((prev) =>
+      prev.map((c) => (c.patient_id === selected.patient_id ? { ...c, patient_name: fullName } : c))
+    )
+  }
+
   const handleScheduled = (scheduledAt: string) => {
     if (!selected) return
     setConversations((prev) =>
@@ -175,6 +183,7 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
             conversationId={selected.id}
             patientPhone={selected.patient_phone}
             patientName={selected.patient_name}
+            patientWhatsAppName={selected.patient_whatsapp_name}
             patientId={selected.patient_id}
             patientTags={selected.patient_tags}
             patientNotes={selected.patient_notes}
@@ -189,6 +198,7 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
             onToggleBotPaused={handleToggleBotPaused}
             onToggleArchived={handleToggleArchived}
             onNotesSaved={handleNotesSaved}
+            onNameSaved={handleNameSaved}
             onScheduled={handleScheduled}
             onBack={() => setMobilePane('list')}
             externalRequest={selected.external_request ?? null}

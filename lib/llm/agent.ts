@@ -50,6 +50,8 @@ interface ProcessMessageParams {
   patientPhone: string
   message: string
   whatsappMessageId: string
+  // Nome do perfil do WhatsApp (contacts[].profile.name), quando a Meta manda.
+  profileName?: string | null
 }
 
 type SupabaseAdmin = SupabaseClient<Database>
@@ -94,6 +96,20 @@ async function getOrCreatePatient(supabase: SupabaseAdmin, accountId: string, pa
   if (!newPatient) throw new Error('getOrCreatePatient insert returned no data')
 
   return newPatient
+}
+
+// Guarda o nome do perfil do WhatsApp em patients.whatsapp_name — nunca em
+// full_name, que a Clara usa para saber se ainda precisa perguntar o nome.
+// getOrCreatePatient não lê a coluna (sem a migration, o select quebraria a
+// Clara inteira), então grava a cada mensagem. Falha não interrompe nada.
+async function saveWhatsAppName(
+  supabase: SupabaseAdmin,
+  patient: { id: string } | null,
+  profileName: string | null | undefined
+): Promise<void> {
+  if (!patient || !profileName) return
+  const { error } = await supabase.from('patients').update({ whatsapp_name: profileName }).eq('id', patient.id)
+  if (error) console.warn(`[patients] whatsapp_name não salvo patient=${patient.id}: ${error.message}`)
 }
 
 // Um único registro de conversa por paciente por account (o número da Clara é
@@ -195,6 +211,7 @@ interface UnsupportedMessageParams {
   whatsappMessageId: string
   // Resposta no lugar da padrão (ex.: áudio longo demais para transcrever).
   reply?: string
+  profileName?: string | null
 }
 
 // A Clara só entende texto. Isso avisa o paciente e pede pra escrever.
@@ -210,6 +227,7 @@ export async function handleUnsupportedMessage(params: UnsupportedMessageParams)
   const singleUnitId = units.length === 1 ? units[0].id : null
 
   const patient = await getOrCreatePatient(supabase, accountId, patientPhone)
+  await saveWhatsAppName(supabase, patient, params.profileName)
   const conversation = await getOrCreateConversation(
     supabase,
     accountId,
@@ -318,6 +336,7 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
 
   // 2. Paciente (por account).
   const patientRow = await getOrCreatePatient(supabase, accountId, patientPhone)
+  await saveWhatsAppName(supabase, patientRow, params.profileName)
 
   // 3. Conversa deste paciente (uma por account+telefone). Numa conta de uma
   // unidade só, a conversa já nasce ligada a ela e aparece no /conversa daquela
