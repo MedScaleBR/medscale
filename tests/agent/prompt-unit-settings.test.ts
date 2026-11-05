@@ -186,3 +186,30 @@ describe('prompt — unidade sem particular', () => {
     expect(prompt).toMatch(/• Dr\. Exemplo \(id: w3\).*NÃO atende particular: nunca ofereça particular nesta unidade\./)
   })
 })
+
+describe('prompt — pedido dos dados do paciente numa mensagem só', () => {
+  it('agenda externa: pede tudo de uma vez, em lista, e nunca um dado por vez', () => {
+    const prompt = build([
+      { id: 'w1', name: 'Clínica Parceira', ...base, botSettings: external(['full_name', 'birth_date', 'insurance']) },
+    ])
+    expect(prompt).toContain('## Como pedir os dados do paciente')
+    expect(prompt).toContain('peça TODOS os que faltam numa única mensagem')
+    expect(prompt).toContain('Nunca peça um dado por vez')
+    expect(prompt).toContain('peça todos os dados abaixo numa mensagem só')
+    expect(prompt).not.toContain('pode juntar dois itens')
+  })
+
+  it('agenda interna com dados a coletar: também pede tudo numa mensagem só', () => {
+    const prompt = build([
+      { id: 'w1', name: 'Centro', ...base, botSettings: { ...DEFAULT_BOT_SETTINGS, intakeFields: ['full_name', 'birth_date'] } },
+    ])
+    expect(prompt).toContain('## Dados a coletar antes de agendar — Centro')
+    expect(prompt).toContain('peça tudo o que faltar numa mensagem só')
+    expect(prompt).toContain('## Como pedir os dados do paciente')
+  })
+
+  it('sem nenhum dado a coletar, o prompt não ganha a seção', () => {
+    const prompt = build([{ id: 'w1', name: 'Centro', ...base }])
+    expect(prompt).not.toContain('## Como pedir os dados do paciente')
+  })
+})
