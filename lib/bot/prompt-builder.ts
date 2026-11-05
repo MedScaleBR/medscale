@@ -340,7 +340,7 @@ Cada unidade atende só nos dias listados em "Dias de atendimento" (veja "Unidad
   const outsourcedSection = units.some((u) => u.isOutsourced && !isExternalUnit(u))
     ? `
 ## Unidades com confirmação da clínica parceira — IMPORTANTE
-Nas unidades marcadas com ⚠️, antes de emitir AGENDAMENTO_CONFIRMADO você precisa ter: nome completo, data de nascimento e convênio (ou particular). Pergunte o que faltar.
+Nas unidades marcadas com ⚠️, antes de emitir AGENDAMENTO_CONFIRMADO você precisa ter: nome completo, data de nascimento e convênio (ou particular). Peça tudo o que faltar numa mensagem só (veja "Como pedir os dados do paciente").
 Assim que o paciente informar a data de nascimento, inclua na MESMA resposta uma linha isolada no formato exato:
 NASCIMENTO_PACIENTE: DD/MM/AAAA
 Nunca invente a data nem mostre esta linha ao paciente.
@@ -380,7 +380,7 @@ Quando a unidade tiver próximas datas listadas, você pode informar ao paciente
 Como agir quando o paciente quer consulta numa dessas unidades:
 1. Informe os locais e os convênios atendidos. Se o paciente perguntar se o doutor atende em um local que não está na lista de Unidades, diga que não atende ali e mostre onde atende.
 2. Nunca ofereça, sugira, invente ou confirme data ou horário para essas unidades. Nunca diga que a consulta está marcada. Se o paciente pedir horário, explique que a equipe confere a agenda da clínica e confirma com ele por aqui — mas, se a unidade tiver "Dias de atendimento", diga quais são esses dias. Para essas unidades, NUNCA emita AGENDAMENTO_CONFIRMADO nem LISTA_ESPERA.
-3. Se o paciente quiser agendar, peça os dados abaixo de forma natural e sem fazer parecer um formulário (pode juntar dois itens numa mesma mensagem):
+3. Se o paciente quiser agendar, peça todos os dados abaixo numa mensagem só, organizada em lista (veja "Como pedir os dados do paciente"):
 ${externalUnits.map((u) => `   ${u.name} →\n${intakeList(u.botSettings!.intakeFields, '     ', coverageOf(u))}`).join('\n')}
 ${externalPhotoNote(externalUnits)}   O telefone é o desta conversa: não pergunte. Só peça outro se o paciente disser que o contato é de outra pessoa.
    Peça somente os dados da lista daquela unidade. Se o paciente oferecer outro dado (como CPF), agradeça e diga que não é necessário.
@@ -397,7 +397,7 @@ ${externalPhotoNote(externalUnits)}   O telefone é o desta conversa: não pergu
 ## Dados a coletar antes de agendar — ${u.name}
 Antes de emitir AGENDAMENTO_CONFIRMADO para esta unidade, garanta que você tem:
 ${intakeList(fields, '', coverageOf(u))}
-Peça o que faltar de forma natural, depois que o paciente escolher o horário. Emita os marcadores desses dados junto com o AGENDAMENTO_CONFIRMADO.${
+Depois que o paciente escolher o horário, peça tudo o que faltar numa mensagem só, organizada em lista (veja "Como pedir os dados do paciente"). Emita os marcadores desses dados junto com o AGENDAMENTO_CONFIRMADO.${
         fields.includes('insurance')
           ? '\nNesta unidade, se for convênio, peça também o número da carteirinha (vale acima da orientação de não pedir carteirinha).'
           : ''
@@ -407,6 +407,24 @@ Peça o que faltar de forma natural, depois que o paciente escolher o horário. 
     .join('')
 
   const collectedFields = new Set([...externalUnits, ...intakeUnits].flatMap((u) => u.botSettings!.intakeFields))
+
+  // Pedido dos dados numa mensagem só, em vez de um dado por vez: o paciente
+  // responde tudo de uma vez e a conversa fica mais curta (e mais barata).
+  const asksPatientData = collectedFields.size > 0 || units.some((u) => u.isOutsourced && !isExternalUnit(u))
+  const askDataSection = asksPatientData
+    ? `
+## Como pedir os dados do paciente — IMPORTANTE
+Quando precisar de dados do paciente para agendar, peça TODOS os que faltam numa única mensagem, organizada em lista, um item por linha começando com "•". Nunca peça um dado por vez (nome, depois nascimento, depois convênio). Exemplo:
+"Para seguir com o agendamento, me envia por favor:
+• Nome completo
+• Data de nascimento
+• Convênio e número da carteirinha (ou se é particular)"
+- Liste só o que a unidade pede e o que ainda falta. Não peça de novo o que o paciente já informou na conversa.
+- Se o paciente responder só parte, agradeça e peça o que faltou, também numa mensagem só.
+- Essa lista é a exceção à regra de não usar formatação: use "•" no começo de cada item, sem asteriscos nem negrito.
+`
+    : ''
+
   const intakeFormatSection = collectedFields.size > 0
     ? `
 ## Formato dos dados coletados
@@ -574,7 +592,7 @@ Se o paciente estiver remarcando uma consulta existente (e não apenas criando u
 Assim que o paciente disser o próprio nome completo pela primeira vez na conversa (ele se apresentando, ou respondendo quando você pergunta o nome), inclua na MESMA resposta uma linha isolada no formato exato:
 NOME_PACIENTE: <nome completo exatamente como o paciente escreveu>
 Só inclua essa linha quando o paciente estiver claramente informando o próprio nome — nunca invente, nunca use o nome de outra pessoa que ele mencionar (ex: nome do médico, de um convênio). Essa linha é lida por um sistema automático e nunca deve ser mostrada ao paciente.
-${workingDaysSection}${outsourcedSection}${externalSection}${intakeSection}${intakeFormatSection}
+${workingDaysSection}${outsourcedSection}${externalSection}${intakeSection}${askDataSection}${intakeFormatSection}
 ## Regras absolutas — NUNCA viole
 - NUNCA diagnostique, sugira tratamentos, opine sobre resultados ou condutas clínicas
 - NUNCA prometa resultados de procedimentos estéticos ou cirúrgicos
