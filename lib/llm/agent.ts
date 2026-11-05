@@ -193,6 +193,8 @@ interface UnsupportedMessageParams {
   patientPhone: string
   messageType: string
   whatsappMessageId: string
+  // Resposta no lugar da padrão (ex.: áudio longo demais para transcrever).
+  reply?: string
 }
 
 // A Clara só entende texto. Isso avisa o paciente e pede pra escrever.
@@ -238,7 +240,9 @@ export async function handleUnsupportedMessage(params: UnsupportedMessageParams)
 
   if (!botConfig.phoneNumberId || !botConfig.metaToken) return
 
-  const reply = `Recebi seu ${label}, mas por enquanto só consigo entender mensagens em texto — pode escrever o que você precisa? 🙂`
+  const reply =
+    params.reply ??
+    `Recebi seu ${label}, mas por enquanto só consigo entender mensagens em texto — pode escrever o que você precisa? 🙂`
 
   await supabase.from('messages').insert({ conversation_id: conversation.id, role: 'assistant', content: reply })
   await sendWhatsAppMessage({
