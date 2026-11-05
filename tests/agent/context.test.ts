@@ -32,7 +32,7 @@ vi.mock('@anthropic-ai/sdk', async () => {
 const broadcastToWorkspace = vi.hoisted(() => vi.fn())
 vi.mock('@/lib/realtime/broadcast', () => ({ broadcastToWorkspace }))
 
-import { processIncomingMessage, handleUnsupportedMessage } from '@/lib/llm/agent'
+import { processIncomingMessage, handleUnsupportedMessage, recordBusinessEcho } from '@/lib/llm/agent'
 import { filterValue } from '../helpers/supabase-mock'
 import {
   resetAgentHarness,
@@ -175,6 +175,27 @@ describe('processIncomingMessage — montagem de contexto', () => {
     const inserted = supabase.callsTo('messages', 'insert')
     expect(inserted).toHaveLength(1)
     expect(inserted[0].payload).toMatchObject({ role: 'user', content: PARAMS.message })
+  })
+
+  it('não chama o Claude enquanto vale a pausa da secretária', async () => {
+    mergeSupabaseConfig({
+      conversations: { select: { data: { id: 'c1', status: 'open', bot_paused: false, bot_paused_until: '2999-01-01T00:00:00Z', archived_at: null } } },
+    })
+
+    await processIncomingMessage(PARAMS)
+
+    expect(claudeCreate).not.toHaveBeenCalled()
+    expect(sendWhatsAppMessage).not.toHaveBeenCalled()
+  })
+
+  it('volta a responder quando a pausa da secretária venceu', async () => {
+    mergeSupabaseConfig({
+      conversations: { select: { data: { id: 'c1', status: 'open', bot_paused: false, bot_paused_until: '2000-01-01T00:00:00Z', archived_at: null } } },
+    })
+
+    await processIncomingMessage(PARAMS)
+
+    expect(claudeCreate).toHaveBeenCalled()
   })
 
   it('deve emitir broadcast in-app quando o paciente escreve numa conversa pausada', async () => {
@@ -608,5 +629,51 @@ describe('handleUnsupportedMessage — mídia que a Clara não entende', () => {
     await handleUnsupportedMessage(unsupportedParams)
 
     expect(sendWhatsAppMessage).not.toHaveBeenCalled()
+  })
+})
+
+describe('recordBusinessEcho — secretária respondeu pelo celular', () => {
+  const echo = { patientPhone: PARAMS.patientPhone, whatsappMessageId: 'wamid.echo', content: 'Oi, aqui é a Carla' }
+
+  beforeEach(() => {
+    resetAgentHarness()
+  })
+
+  it('salva a mensagem na conversa e pausa a Clara por algumas horas', async () => {
+    const supabase = mergeSupabaseConfig({ messages: { select: { data: null }, insert: { data: null } } })
+
+    await recordBusinessEcho(PARAMS.accountId, echo)
+
+    expect(supabase.callsTo('messages', 'insert')[0].payload).toEqual({
+      conversation_id: 'c1',
+      role: 'assistant',
+      content: 'Oi, aqui é a Carla',
+      whatsapp_id: 'wamid.echo',
+    })
+    const update = supabase.callsTo('conversations', 'update').at(-1)
+    const until = new Date((update?.payload as { bot_paused_until: string }).bot_paused_until).getTime()
+    expect(until).toBeGreaterThan(Date.now() + 3 * 60 * 60 * 1000)
+    expect(update?.filters).toContainEqual(['eq', 'id', 'c1'])
+    expect(sendWhatsAppMessage).not.toHaveBeenCalled()
+    expect(claudeCreate).not.toHaveBeenCalled()
+  })
+
+  it('webhook repetido não duplica a mensagem nem estende a pausa', async () => {
+    const supabase = mergeSupabaseConfig({ messages: { select: { data: { id: 'm-ja-salva' } } } })
+
+    await recordBusinessEcho(PARAMS.accountId, echo)
+
+    expect(supabase.callsTo('messages', 'insert')).toHaveLength(0)
+    const pauses = supabase.callsTo('conversations', 'update').filter((c) => 'bot_paused_until' in (c.payload as object))
+    expect(pauses).toHaveLength(0)
+  })
+
+  it('apagar mensagem no celular pausa sem gravar nada', async () => {
+    const supabase = mergeSupabaseConfig({ messages: { select: { data: null } } })
+
+    await recordBusinessEcho(PARAMS.accountId, { ...echo, content: null })
+
+    expect(supabase.callsTo('messages', 'insert')).toHaveLength(0)
+    expect(supabase.callsTo('conversations', 'update').at(-1)?.payload).toHaveProperty('bot_paused_until')
   })
 })

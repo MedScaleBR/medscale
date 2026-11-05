@@ -920,6 +920,8 @@ export interface Database {
           patient_phone: string
           status: ConversationStatus
           bot_paused: boolean
+          // Pausa temporária (secretária respondeu pelo celular). Ver isBotPaused.
+          bot_paused_until: string | null
           appointment_id: string | null
           started_at: string
           resolved_at: string | null
