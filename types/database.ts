@@ -437,6 +437,8 @@ export interface Database {
           cpf: string | null // só dígitos
           notes: string | null
           tags: string[]
+          // Nome do perfil do WhatsApp (não é o nome real — ver displayPatientName).
+          whatsapp_name: string | null
           created_by: string | null
           created_at: string
         }

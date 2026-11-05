@@ -597,6 +597,8 @@ create table public.patients (
   cpf         text check (cpf is null or cpf ~ '^\d{11}$'),   -- só dígitos
   notes       text,
   tags        text[] default '{}',
+  -- Nome do perfil do WhatsApp. Separado de full_name: ver migration_patient_whatsapp_name.sql.
+  whatsapp_name text,
   created_by  uuid references auth.users(id),
   created_at  timestamptz not null default now(),
   unique(account_id, phone)
