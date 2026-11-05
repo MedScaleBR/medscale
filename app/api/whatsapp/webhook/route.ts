@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse, after } from 'next/server'
 import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/server'
-import { processIncomingMessage, handleUnsupportedMessage } from '@/lib/llm/agent'
+import { processIncomingMessage, handleUnsupportedMessage, recordBusinessEcho } from '@/lib/llm/agent'
+import { parseBusinessEcho, type BusinessEcho } from '@/lib/bot/pause'
 import { processFinancialMessage, sendFinanceReply } from '@/lib/finance/agent'
 import { buildUnsupportedTypeMessage } from '@/lib/finance/respond'
 import { decryptToken } from '@/lib/crypto'
@@ -82,6 +83,24 @@ export async function POST(req: NextRequest) {
       hasSignatureHeader: Boolean(signature),
     })
     return NextResponse.json({ error: 'Invalid signature' }, { status: 401 })
+  }
+
+  // Coexistência: a secretária respondeu o paciente pelo app do WhatsApp
+  // Business no celular. A Clara salva a mensagem e pausa naquela conversa.
+  if (Array.isArray(value?.message_echoes)) {
+    if (!botConn) return NextResponse.json({ status: 'account_not_found' })
+    const accountId = botConn.account_id
+    const echoes = value.message_echoes
+      .map(parseBusinessEcho)
+      .filter((e: BusinessEcho | null): e is BusinessEcho => e !== null)
+    after(async () => {
+      for (const echo of echoes) {
+        await recordBusinessEcho(accountId, echo).catch((err) =>
+          console.error(`[coexistence] recordBusinessEcho failed account=${accountId}`, err)
+        )
+      }
+    })
+    return NextResponse.json({ status: 'ok' })
   }
 
   if (!value?.messages) {

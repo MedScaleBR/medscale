@@ -2,6 +2,7 @@ import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { BotInboxClient, type ConversationWithMessages } from '@/components/bot/BotInboxClient'
 import { isUnread, summarizeVisits } from '@/lib/bot/inbox'
+import { isBotPaused } from '@/lib/bot/pause'
 import { formatExternalRequestLines } from '@/lib/bot/unit-settings'
 import type { ExternalRequestView } from '@/components/bot/ExternalRequestCard'
 import type { ExternalRequestSummary } from '@/types/database'
@@ -10,15 +11,18 @@ export default async function BotPage() {
   const session = await resolveActiveSession()
   if (!session) return null
 
+  // Conversas de todas as unidades da account, inclusive as que ainda não têm
+  // unidade (a Clara só grava quando o paciente confirma). A RLS já limita às
+  // unidades que o usuário pode acessar.
   const supabase = await createClient()
   const { data: conversations } = await supabase
     .from('conversations')
     .select(
-      'id, patient_phone, patient_id, status, bot_paused, archived_at, started_at, patients(id, full_name, tags, notes), messages(id, role, content, sent_at)'
+      'id, workspace_id, patient_phone, patient_id, status, bot_paused, archived_at, started_at, workspaces(name), patients(id, full_name, tags, notes), messages(id, role, content, sent_at)'
     )
-    .eq('workspace_id', session.workspaceId)
+    .eq('account_id', session.accountId)
     .order('started_at', { ascending: false })
-    .limit(50)
+    .limit(100)
 
   // Última/próxima consulta da barra de contexto: o vínculo é o telefone, não
   // patient_id — conversa de paciente ainda não cadastrado só tem o número.
@@ -81,6 +85,13 @@ export default async function BotPage() {
     })
   }
 
+  // Pausa temporária (secretária respondendo pelo celular). Consulta à parte:
+  // erro (ex.: migration pendente) = nenhuma pausa, sem quebrar a tela.
+  const { data: pauseRows, error: pauseError } = conversationIds.length
+    ? await supabase.from('conversations').select('id, bot_paused_until').in('id', conversationIds)
+    : { data: [], error: null }
+  const pausedUntil = new Map((pauseError ? [] : (pauseRows ?? [])).map((r) => [r.id, r.bot_paused_until]))
+
   const items: ConversationWithMessages[] = (conversations ?? []).map((c) => {
     const messages = [...(c.messages ?? [])].sort(
       (a, b) => new Date(a.sent_at).getTime() - new Date(b.sent_at).getTime()
@@ -89,8 +100,10 @@ export default async function BotPage() {
       | { id: string; full_name: string; tags: string[] | null; notes: string | null }
       | null
     const visit = visits.get(c.patient_phone)
+    const unit = c.workspaces as unknown as { name: string } | null
     return {
       id: c.id,
+      unit_name: c.workspace_id ? (unit?.name ?? 'Unidade') : null,
       patient_phone: c.patient_phone,
       patient_name: patient?.full_name ?? null,
       patient_id: patient?.id ?? null,
@@ -99,7 +112,7 @@ export default async function BotPage() {
       last_visit: visit?.last ?? null,
       next_appointment: visit?.next ?? null,
       status: c.status,
-      bot_paused: c.bot_paused,
+      bot_paused: isBotPaused({ bot_paused: c.bot_paused, bot_paused_until: pausedUntil.get(c.id) ?? null }),
       archived_at: c.archived_at,
       started_at: c.started_at,
       last_message: messages.at(-1)?.content ?? null,

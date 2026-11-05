@@ -29,6 +29,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     status?: ConversationStatus
     resolved_at?: string | null
     bot_paused?: boolean
+    bot_paused_until?: null
     archived_at?: string | null
   } = {}
   if (status !== undefined) {
@@ -37,6 +38,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (bot_paused !== undefined) {
     updates.bot_paused = bot_paused
+    // Reativar também encerra a pausa temporária (secretária no celular).
+    if (!bot_paused) updates.bot_paused_until = null
   }
   if (archived !== undefined) {
     updates.archived_at = archived ? new Date().toISOString() : null
@@ -46,7 +49,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     .from('conversations')
     .update(updates)
     .eq('id', id)
-    .eq('workspace_id', session.workspaceId)
+    .eq('account_id', session.accountId)
     .select()
     .single()
 
