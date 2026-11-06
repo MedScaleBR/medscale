@@ -262,7 +262,8 @@ Confirme o nome do convênio junto com a data e o horário. Não peça carteirin
 ## Atendimento particular — IMPORTANTE
 No momento nenhuma unidade atende particular.
 - Quando for saber como será o atendimento, pergunte direto qual é o convênio do paciente. Nunca pergunte se é particular nem escreva "ou particular".
-- Se o paciente disser que quer atendimento particular, responda que no momento não estamos trabalhando com atendimentos particulares e pergunte se ele tem algum dos convênios aceitos. Nunca emita CONVENIO_ID: PARTICULAR.
+- Se o paciente disser que quer atendimento particular, responda só que no momento não estamos trabalhando com atendimentos particulares e pergunte se ele tem algum dos convênios aceitos. Nunca emita CONVENIO_ID: PARTICULAR.
+- Nessa resposta, não ofereça mais nada além dos convênios aceitos: não ofereça passar os dados para a equipe, não fale em "avaliar outras possibilidades", não sugira alternativas nem pergunte o que o paciente prefere.
 `
 
   const insuranceFirstBlock = askInsuranceFirst

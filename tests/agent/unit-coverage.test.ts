@@ -122,6 +122,7 @@ describe('Clara — convênios e particular por unidade', () => {
     const msg = lastSentMessage()!
     expect(msg).toContain('No momento não estamos trabalhando com atendimentos particulares')
     expect(msg).toContain('Amil')
+    expect(msg).not.toContain('equipe')
     expect(systemPrompt()).toContain('## Atendimento particular — IMPORTANTE')
   })
 

@@ -63,7 +63,7 @@ function insuranceNotAcceptedMessage(
       const accepted = mergeCoverages(ctx.units.map((u) => coverageFor(ctx, u.id))).insurers.map((i) => i.name)
       return accepted.length > 0
         ? `No momento não estamos trabalhando com atendimentos particulares. Pode me dizer qual é o seu convênio? Aceitamos ${accepted.join(', ')}.`
-        : 'No momento não estamos trabalhando com atendimentos particulares. Quer que eu chame alguém da equipe para te ajudar?'
+        : 'No momento não estamos trabalhando com atendimentos particulares.'
     }
     return coverage.insurers.length > 0
       ? `A unidade ${unitName} não atende particular. Pode me dizer qual é o seu convênio? Lá aceitamos ${coverage.insurers.map((i) => i.name).join(', ')}.`

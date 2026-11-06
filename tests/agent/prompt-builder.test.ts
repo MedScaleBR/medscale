@@ -367,6 +367,7 @@ describe('buildDynamicSystemPrompt — nenhuma unidade atende particular', () =>
     expect(prompt).toContain('## Atendimento particular — IMPORTANTE')
     expect(prompt).toContain('pergunte direto qual é o convênio')
     expect(prompt).toContain('no momento não estamos trabalhando com atendimentos particulares')
+    expect(prompt).toContain('não ofereça mais nada além dos convênios aceitos')
   })
 
   it('a ordem convênio antes da unidade não menciona particular', () => {
