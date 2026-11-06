@@ -34,6 +34,7 @@ vi.mock('@/lib/realtime/broadcast', () => ({ broadcastToWorkspace }))
 
 import { processIncomingMessage, handleUnsupportedMessage, recordBusinessEcho } from '@/lib/llm/agent'
 import { filterValue } from '../helpers/supabase-mock'
+import { secretaryPauseUntil } from '@/lib/bot/pause'
 import {
   resetAgentHarness,
   mergeSupabaseConfig,
@@ -213,6 +214,32 @@ describe('processIncomingMessage — montagem de contexto', () => {
 
     expect(claudeCreate).not.toHaveBeenCalled()
     expect(sendWhatsAppMessage).not.toHaveBeenCalled()
+  })
+
+  it('desfaz a pausa criada pela saudação automática que chegou antes da mensagem (áudio transcrevendo)', async () => {
+    const sentAt = new Date(Date.now() - 8000)
+    // Saudação gravada 1s depois de o paciente enviar → pausa até +4h dali.
+    const pausedUntil = secretaryPauseUntil(new Date(sentAt.getTime() + 1000))
+    const supabase = mergeSupabaseConfig({
+      conversations: { select: { data: { id: 'c1', status: 'open', bot_paused: false, bot_paused_until: pausedUntil, archived_at: null } } },
+    })
+
+    await processIncomingMessage({ ...PARAMS, sentAt })
+
+    expect(supabase.callsTo('conversations', 'update').some((c) => (c.payload as { bot_paused_until?: unknown }).bot_paused_until === null)).toBe(true)
+    expect(claudeCreate).toHaveBeenCalled()
+  })
+
+  it('mantém a pausa quando a secretária respondeu antes do paciente escrever', async () => {
+    const sentAt = new Date()
+    const pausedUntil = secretaryPauseUntil(new Date(sentAt.getTime() - 60_000))
+    mergeSupabaseConfig({
+      conversations: { select: { data: { id: 'c1', status: 'open', bot_paused: false, bot_paused_until: pausedUntil, archived_at: null } } },
+    })
+
+    await processIncomingMessage({ ...PARAMS, sentAt })
+
+    expect(claudeCreate).not.toHaveBeenCalled()
   })
 
   it('volta a responder quando a pausa da secretária venceu', async () => {
@@ -693,6 +720,40 @@ describe('recordBusinessEcho — secretária respondeu pelo celular', () => {
     expect(supabase.callsTo('messages', 'insert')).toHaveLength(0)
     const pauses = supabase.callsTo('conversations', 'update').filter((c) => 'bot_paused_until' in (c.payload as object))
     expect(pauses).toHaveLength(0)
+  })
+
+  it('saudação automática do app (segundos depois do paciente) é salva, mas não pausa', async () => {
+    const supabase = mergeSupabaseConfig({
+      messages: {
+        insert: { data: null },
+        select: (call) =>
+          filterValue(call, 'eq', 'role') === 'user'
+            ? { data: { sent_at: new Date(Date.now() - 1000).toISOString() } }
+            : { data: null },
+      },
+    })
+
+    await recordBusinessEcho(PARAMS.accountId, { ...echo, content: 'Olá, tudo bem? Como podemos ajudar?' })
+
+    expect(supabase.callsTo('messages', 'insert')).toHaveLength(1)
+    const pauses = supabase.callsTo('conversations', 'update').filter((c) => 'bot_paused_until' in (c.payload as object))
+    expect(pauses).toHaveLength(0)
+  })
+
+  it('resposta da secretária minutos depois do paciente pausa', async () => {
+    const supabase = mergeSupabaseConfig({
+      messages: {
+        insert: { data: null },
+        select: (call) =>
+          filterValue(call, 'eq', 'role') === 'user'
+            ? { data: { sent_at: new Date(Date.now() - 3 * 60 * 1000).toISOString() } }
+            : { data: null },
+      },
+    })
+
+    await recordBusinessEcho(PARAMS.accountId, echo)
+
+    expect(supabase.callsTo('conversations', 'update').at(-1)?.payload).toHaveProperty('bot_paused_until')
   })
 
   it('apagar mensagem no celular pausa sem gravar nada', async () => {

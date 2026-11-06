@@ -1,5 +1,53 @@
 import { describe, it, expect } from 'vitest'
-import { isBotPaused, parseBusinessEcho, secretaryPauseUntil, SECRETARY_PAUSE_HOURS } from '@/lib/bot/pause'
+import {
+  echoTimeFromPause,
+  isAutoReply,
+  isBotPaused,
+  parseBusinessEcho,
+  parseMetaTimestamp,
+  secretaryPauseUntil,
+  SECRETARY_PAUSE_HOURS,
+} from '@/lib/bot/pause'
+
+describe('isAutoReply — saudação automática do app', () => {
+  const patientAt = new Date('2026-11-06T12:20:28Z')
+  const after = (ms: number) => new Date(patientAt.getTime() + ms)
+
+  it('echo menos de 1s depois do paciente é automático (caso real)', () => {
+    expect(isAutoReply(after(645), patientAt)).toBe(true)
+  })
+
+  it('echo 10s depois ainda é automático; 11s já é a secretária', () => {
+    expect(isAutoReply(after(10_000), patientAt)).toBe(true)
+    expect(isAutoReply(after(11_000), patientAt)).toBe(false)
+  })
+
+  it('echo antes da mensagem do paciente é a secretária (paciente respondendo a ela)', () => {
+    expect(isAutoReply(after(-5_000), patientAt)).toBe(false)
+  })
+
+  it('tolera o arredondamento em segundos da Meta', () => {
+    expect(isAutoReply(after(-900), patientAt)).toBe(true)
+  })
+})
+
+describe('echoTimeFromPause', () => {
+  it('desfaz o prazo de secretaryPauseUntil', () => {
+    const at = new Date('2026-11-06T12:20:28.844Z')
+    expect(echoTimeFromPause(secretaryPauseUntil(at)).getTime()).toBe(at.getTime())
+  })
+})
+
+describe('parseMetaTimestamp', () => {
+  it('segundos Unix em string', () => {
+    expect(parseMetaTimestamp('1762431628')?.toISOString()).toBe('2025-11-06T12:20:28.000Z')
+  })
+
+  it('vazio ou inválido vira null', () => {
+    expect(parseMetaTimestamp(undefined)).toBeNull()
+    expect(parseMetaTimestamp('abc')).toBeNull()
+  })
+})
 
 const NOW = new Date('2026-11-05T12:00:00Z')
 
