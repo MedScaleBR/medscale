@@ -24,7 +24,7 @@ import { missingDataMessage, requestedMessage } from '@/lib/outsourced/messages'
 import { coverageFor, isExternalUnit, type AgentContext, type AgentPatient } from '@/lib/llm/agent-context'
 import type { ExternalRequestSummary, HandoffTriggerReason } from '@/types/database'
 import { attendsOn, closedDayMessage, type UnitWorkingDays } from '@/lib/bot/working-days'
-import { mergeCoverages } from '@/lib/bot/unit-insurance'
+import { NO_PRIVATE_MESSAGE } from '@/lib/bot/prompt-builder'
 
 // Etapa 3 do agente: ler a resposta crua do Claude, validar os marcadores e
 // decidir O QUE aconteceria — sem fazer nada. A produção executa o plano em
@@ -59,12 +59,7 @@ function insuranceNotAcceptedMessage(
   const coverage = coverageFor(ctx, unitId)
   if (!insurer) {
     // Nenhuma unidade atende particular: a recusa vale para a clínica toda.
-    if (!ctx.units.some((u) => coverageFor(ctx, u.id).acceptsPrivate)) {
-      const accepted = mergeCoverages(ctx.units.map((u) => coverageFor(ctx, u.id))).insurers.map((i) => i.name)
-      return accepted.length > 0
-        ? `No momento não estamos trabalhando com atendimentos particulares. Pode me dizer qual é o seu convênio? Aceitamos ${accepted.join(', ')}.`
-        : 'No momento não estamos trabalhando com atendimentos particulares. Quer que eu chame alguém da equipe para te ajudar?'
-    }
+    if (!ctx.units.some((u) => coverageFor(ctx, u.id).acceptsPrivate)) return NO_PRIVATE_MESSAGE
     return coverage.insurers.length > 0
       ? `A unidade ${unitName} não atende particular. Pode me dizer qual é o seu convênio? Lá aceitamos ${coverage.insurers.map((i) => i.name).join(', ')}.`
       : `A unidade ${unitName} não atende particular. Quer que eu chame alguém da equipe para te ajudar?`

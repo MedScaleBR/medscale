@@ -120,8 +120,7 @@ describe('Clara — convênios e particular por unidade', () => {
 
     expect(supabase.callsTo('appointments', 'insert')).toHaveLength(0)
     const msg = lastSentMessage()!
-    expect(msg).toContain('No momento não estamos trabalhando com atendimentos particulares')
-    expect(msg).toContain('Amil')
+    expect(msg).toBe('No momento não estamos trabalhando com atendimentos particulares, apenas com convênios. Se tiver interesse, é só me dizer qual é o seu convênio.')
     expect(systemPrompt()).toContain('## Atendimento particular — IMPORTANTE')
   })
 
