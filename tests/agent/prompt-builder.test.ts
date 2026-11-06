@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ANTI_INJECTION_BLOCK, buildDynamicSystemPrompt, wrapPatientMessage } from '@/lib/bot/prompt-builder'
+import { ANTI_INJECTION_BLOCK, NO_PRIVATE_MESSAGE, buildDynamicSystemPrompt, wrapPatientMessage } from '@/lib/bot/prompt-builder'
 import type { BotConfig } from '@/lib/bot/config'
 
 const BASE: BotConfig = {
@@ -366,8 +366,8 @@ describe('buildDynamicSystemPrompt — nenhuma unidade atende particular', () =>
     const prompt = build({ acceptsPrivate: false }, { insurers: INSURERS, insurancePlans: ['Unimed'] })
     expect(prompt).toContain('## Atendimento particular — IMPORTANTE')
     expect(prompt).toContain('pergunte direto qual é o convênio')
-    expect(prompt).toContain('no momento não estamos trabalhando com atendimentos particulares')
-    expect(prompt).toContain('não ofereça mais nada além dos convênios aceitos')
+    expect(prompt).toContain(`responda exatamente: "${NO_PRIVATE_MESSAGE}"`)
+    expect(prompt).toContain('Não acrescente mais nada a essa resposta')
   })
 
   it('a ordem convênio antes da unidade não menciona particular', () => {
