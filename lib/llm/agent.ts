@@ -15,7 +15,7 @@ import {
   recordPendingExternalRequest,
 } from '@/lib/bot/external-request'
 import { executeHandoff, logHandoffUnavailable } from '@/lib/bot/handoff'
-import { isBotPaused, secretaryPauseUntil, type BusinessEcho } from '@/lib/bot/pause'
+import { echoTimeFromPause, isAutoReply, isBotPaused, secretaryPauseUntil, type BusinessEcho } from '@/lib/bot/pause'
 import { sendExternalRequestEmail } from '@/lib/bot/request-email'
 import { broadcastToWorkspace } from '@/lib/realtime/broadcast'
 import { createBookingRevenueEntry } from '@/lib/revenue/cycle'
@@ -52,6 +52,9 @@ interface ProcessMessageParams {
   whatsappMessageId: string
   // Nome do perfil do WhatsApp (contacts[].profile.name), quando a Meta manda.
   profileName?: string | null
+  // Quando o paciente enviou (timestamp da Meta). O áudio é gravado só depois
+  // da transcrição, então a hora da gravação pode atrasar alguns segundos.
+  sentAt?: Date | null
 }
 
 type SupabaseAdmin = SupabaseClient<Database>
@@ -305,7 +308,23 @@ export async function recordBusinessEcho(accountId: string, echo: BusinessEcho) 
     })
   }
 
-  await supabase.from('conversations').update({ bot_paused_until: secretaryPauseUntil() }).eq('id', conversation.id)
+  // Saudação/ausência automática do app sai segundos depois da mensagem do
+  // paciente — não é a secretária, então a Clara segue respondendo.
+  const now = new Date()
+  const { data: lastPatientMessage } = await supabase
+    .from('messages')
+    .select('sent_at')
+    .eq('conversation_id', conversation.id)
+    .eq('role', 'user')
+    .order('sent_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+  if (lastPatientMessage?.sent_at && isAutoReply(now, new Date(lastPatientMessage.sent_at))) {
+    console.log(`[coexistence] resposta automática do app — Clara segue ativa na conversa ${conversation.id}`)
+    return
+  }
+
+  await supabase.from('conversations').update({ bot_paused_until: secretaryPauseUntil(now) }).eq('id', conversation.id)
   console.log(`[coexistence] secretária respondeu pelo celular — Clara pausada na conversa ${conversation.id}`)
 }
 
@@ -379,6 +398,20 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
       ctx: { accountId, workspaceId: conversation.workspace_id },
       conversationId: conversation.id,
     })
+  }
+
+  // A saudação automática do app chegou antes desta mensagem ser gravada (ex.:
+  // áudio esperando a transcrição) e pausou a Clara. Não era a secretária:
+  // desfaz a pausa.
+  if (
+    !conversation.bot_paused &&
+    conversation.bot_paused_until &&
+    isBotPaused(conversation) &&
+    isAutoReply(echoTimeFromPause(conversation.bot_paused_until), params.sentAt ?? new Date())
+  ) {
+    console.log(`[coexistence] pausa veio de resposta automática do app — Clara segue ativa na conversa ${conversation.id}`)
+    await supabase.from('conversations').update({ bot_paused_until: null }).eq('id', conversation.id)
+    conversation.bot_paused_until = null
   }
 
   // Bot pausado (intervenção manual, handoff em andamento ou secretária

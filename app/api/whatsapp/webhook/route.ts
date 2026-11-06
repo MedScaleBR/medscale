@@ -2,7 +2,7 @@ import { NextRequest, NextResponse, after } from 'next/server'
 import crypto from 'crypto'
 import { createAdminClient } from '@/lib/supabase/server'
 import { processIncomingMessage, handleUnsupportedMessage, recordBusinessEcho } from '@/lib/llm/agent'
-import { parseBusinessEcho, type BusinessEcho } from '@/lib/bot/pause'
+import { parseBusinessEcho, parseMetaTimestamp, type BusinessEcho } from '@/lib/bot/pause'
 import { processFinancialMessage, sendFinanceReply } from '@/lib/finance/agent'
 import { buildUnsupportedTypeMessage } from '@/lib/finance/respond'
 import { decryptToken } from '@/lib/crypto'
@@ -260,6 +260,7 @@ export async function POST(req: NextRequest) {
         message: incomingText,
         whatsappMessageId: message.id,
         profileName,
+        sentAt: parseMetaTimestamp(message.timestamp),
       }).catch(async (err) => {
         console.error('processIncomingMessage failed', err)
         if (webhookLog) {

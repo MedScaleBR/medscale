@@ -242,6 +242,7 @@ describe('POST /api/whatsapp/webhook — roteamento da mensagem', () => {
       message: 'Oi, quero marcar',
       whatsappMessageId: 'wamid.1',
       profileName: null,
+      sentAt: null,
     })
   })
 
@@ -302,6 +303,7 @@ describe('POST /api/whatsapp/webhook — roteamento da mensagem', () => {
       message: '[Áudio do paciente, transcrito automaticamente]\nquero marcar consulta sexta',
       whatsappMessageId: 'wamid.voz',
       profileName: null,
+      sentAt: null,
     })
     expect(g.handleUnsupportedMessage).not.toHaveBeenCalled()
   })
