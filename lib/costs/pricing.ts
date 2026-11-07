@@ -17,10 +17,11 @@ interface ModelPrice {
 }
 
 // Preços da API da Anthropic, em USD por 1M tokens. `claude-opus-5` é o modelo
-// do interpretador financeiro (lib/finance/interpret.ts); `claude-sonnet-4-5`
-// é o de todas as outras chamadas.
+// do interpretador financeiro (lib/finance/interpret.ts); `claude-sonnet-5-5`
+// é o da Clara (lib/llm/agent-reply.ts); `claude-sonnet-4-5` é o das demais.
 const CLAUDE_PRICES: Record<string, ModelPrice> = {
   'claude-sonnet-4-5': { inputPerMTok: 3, outputPerMTok: 15 },
+  'claude-sonnet-5-5': { inputPerMTok: 2, outputPerMTok: 10 },
   'claude-opus-5': { inputPerMTok: 5, outputPerMTok: 25 },
 }
 

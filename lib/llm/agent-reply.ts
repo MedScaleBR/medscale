@@ -8,7 +8,7 @@ import type { AgentContext } from '@/lib/llm/agent-context'
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY })
 
-export const BOT_MODEL = 'claude-sonnet-4-5'
+export const BOT_MODEL = 'claude-sonnet-5-5'
 export const NO_REPLY_FALLBACK = 'Não consegui processar sua mensagem. Pode repetir?'
 
 export interface ClaudeTurn {
@@ -85,7 +85,10 @@ export async function generateReply(
   for (let attempt = 1; attempt <= 2 && responseText === null; attempt++) {
     const response = await anthropic.messages.create({
       model: BOT_MODEL,
-      max_tokens: 1024,
+      // O raciocínio interno conta dentro de max_tokens; esforço baixo basta
+      // para conversa e mantém custo e tempo de resposta sob controle.
+      max_tokens: 4096,
+      output_config: { effort: 'low' },
       system: systemPrompt,
       messages,
     })
@@ -103,8 +106,11 @@ export async function generateReply(
       ...(opts.costMetadata ? { metadata: opts.costMetadata } : {}),
     })
 
-    if (response.content[0]?.type === 'text' && response.content[0].text.trim()) {
-      responseText = response.content[0].text
+    // O Sonnet 5.5 devolve um bloco de raciocínio antes do texto — por isso
+    // procura o bloco de texto em vez de assumir que ele vem primeiro.
+    const textBlock = response.content.find((b) => b.type === 'text')
+    if (textBlock?.type === 'text' && textBlock.text.trim()) {
+      responseText = textBlock.text
     } else {
       console.error(`Claude não retornou um bloco de texto (tentativa ${attempt}/2)`, {
         accountId: ctx.accountId,

@@ -20,6 +20,12 @@ describe('claudeCostUsd', () => {
     expect(claudeCostUsd('claude-sonnet-4-5', 1000, 500)).toBeCloseTo(0.0105, 10)
   })
 
+  it('cobra o sonnet-5-5 da Clara pela tabela dele', () => {
+    // sonnet-5-5: $2/MTok entrada, $10/MTok saída.
+    expect(claudeCostUsd('claude-sonnet-5-5', 1_000_000, 0)).toBeCloseTo(2, 10)
+    expect(claudeCostUsd('claude-sonnet-5-5', 0, 1_000_000)).toBeCloseTo(10, 10)
+  })
+
   it('opus-5 é mais caro que sonnet-4-5 no mesmo usage', () => {
     const usage = [1000, 500] as const
     expect(claudeCostUsd('claude-opus-5', ...usage)).toBeGreaterThan(claudeCostUsd('claude-sonnet-4-5', ...usage))
@@ -37,6 +43,7 @@ describe('claudeCostUsd', () => {
   it('reconhece os modelos realmente usados no app', () => {
     expect(isKnownClaudeModel('claude-sonnet-4-5')).toBe(true)
     expect(isKnownClaudeModel('claude-opus-5')).toBe(true)
+    expect(isKnownClaudeModel('claude-sonnet-5-5')).toBe(true)
   })
 })
 
