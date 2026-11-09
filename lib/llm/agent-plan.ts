@@ -23,7 +23,7 @@ import { missingOutsourcedFields, type OutsourcedMissingField } from '@/lib/outs
 import { missingDataMessage, requestedMessage } from '@/lib/outsourced/messages'
 import { coverageFor, isExternalUnit, type AgentContext, type AgentPatient } from '@/lib/llm/agent-context'
 import type { ExternalRequestSummary, HandoffTriggerReason } from '@/types/database'
-import { attendsOn, closedDayMessage, type UnitWorkingDays } from '@/lib/bot/working-days'
+import { attendsOn, bookingNotOpenMessage, closedDayMessage, isBookingOpen, type UnitWorkingDays } from '@/lib/bot/working-days'
 import { NO_PRIVATE_MESSAGE } from '@/lib/bot/prompt-builder'
 
 // Etapa 3 do agente: ler a resposta crua do Claude, validar os marcadores e
@@ -94,7 +94,7 @@ export type BlockReason =
   | 'outsourced_missing_data'
   | 'discount_not_configured'
 
-export type IgnoreReason = 'external_unit' | 'internal_unit' | 'invalid_value' | 'no_unit' | 'module_disabled' | 'closed_day'
+export type IgnoreReason = 'external_unit' | 'internal_unit' | 'invalid_value' | 'no_unit' | 'module_disabled' | 'closed_day' | 'booking_not_open'
 
 /** O que aconteceria com esta resposta. Os de "aviso" não executam nada. */
 export type AgentEffect =
@@ -351,18 +351,27 @@ export async function planEffects(
   // Dia em que a unidade não atende: não agenda nem pede à clínica parceira —
   // a Clara avisa os dias de atendimento (mensagem fixa abaixo).
   const bookingUnitForDays = requestedBookingUnitId ? unitById.get(requestedBookingUnitId) : undefined
-  let closedDay: { unitName: string; days: number[]; unit: UnitWorkingDays } | null = null
-  if (
-    !externalBookingBlocked &&
-    markers.confirmedDate !== null &&
-    bookingUnitForDays &&
-    !attendsOn(bookingUnitForDays, saoPauloDate(markers.confirmedDate))
-  ) {
-    console.warn(`[working-days] AGENDAMENTO_CONFIRMADO em dia sem atendimento workspace=${bookingUnitForDays.id}`)
-    effects.push({ kind: 'ignored_marker', marker: 'AGENDAMENTO_CONFIRMADO', reason: 'closed_day', workspace_id: bookingUnitForDays.id })
-    closedDay = { unitName: bookingUnitForDays.name, days: bookingUnitForDays.workingDays!, unit: bookingUnitForDays }
+  let closedDay: { unitName: string; days: number[]; unit: UnitWorkingDays; date: string } | null = null
+  // Data depois da agenda aberta da unidade: não marca, avisa até quando está aberta.
+  let bookingNotOpen: { unitName: string; openUntil: string } | null = null
+  if (!externalBookingBlocked && markers.confirmedDate !== null && bookingUnitForDays) {
+    const date = saoPauloDate(markers.confirmedDate)
+    if (!attendsOn(bookingUnitForDays, date)) {
+      console.warn(`[working-days] AGENDAMENTO_CONFIRMADO em dia sem atendimento workspace=${bookingUnitForDays.id}`)
+      effects.push({ kind: 'ignored_marker', marker: 'AGENDAMENTO_CONFIRMADO', reason: 'closed_day', workspace_id: bookingUnitForDays.id })
+      closedDay = { unitName: bookingUnitForDays.name, days: bookingUnitForDays.workingDays!, unit: bookingUnitForDays, date }
+    } else if (!isBookingOpen(bookingUnitForDays, date)) {
+      console.warn(`[working-days] AGENDAMENTO_CONFIRMADO depois da agenda aberta workspace=${bookingUnitForDays.id}`)
+      effects.push({
+        kind: 'ignored_marker',
+        marker: 'AGENDAMENTO_CONFIRMADO',
+        reason: 'booking_not_open',
+        workspace_id: bookingUnitForDays.id,
+      })
+      bookingNotOpen = { unitName: bookingUnitForDays.name, openUntil: bookingUnitForDays.bookingOpenUntil! }
+    }
   }
-  const confirmedDate = externalBookingBlocked || closedDay ? null : markers.confirmedDate
+  const confirmedDate = externalBookingBlocked || closedDay || bookingNotOpen ? null : markers.confirmedDate
 
   const insuranceChoice = markers.insuranceChoice
   const selectedInsurer =
@@ -488,6 +497,7 @@ export async function planEffects(
     outsourcedMissing === null &&
     !externalBookingBlocked &&
     closedDay === null &&
+    bookingNotOpen === null &&
     intakeMissing === null
   ) {
     effects.push({
@@ -509,7 +519,12 @@ export async function planEffects(
       // A vaga nunca vai abrir: a unidade não atende nesse dia.
       console.warn(`[working-days] LISTA_ESPERA em dia sem atendimento workspace=${waitlistUnit.id}`)
       effects.push({ kind: 'ignored_marker', marker: 'LISTA_ESPERA', reason: 'closed_day', workspace_id: waitlistUnit.id })
-      closedDay ??= { unitName: waitlistUnit.name, days: waitlistUnit.workingDays!, unit: waitlistUnit }
+      closedDay ??= {
+        unitName: waitlistUnit.name,
+        days: waitlistUnit.workingDays!,
+        unit: waitlistUnit,
+        date: markers.waitlistDesired.date,
+      }
     } else if (waitlistUnitId) {
       effects.push({
         kind: 'waitlist',
@@ -628,7 +643,9 @@ export async function planEffects(
   const fixed = externalBookingBlocked
     ? EXTERNAL_BOOKING_BLOCKED_MESSAGE
     : closedDay
-      ? closedDayMessage(closedDay.unitName, closedDay.days, closedDay.unit, saoPauloDate(ctx.now))
+      ? closedDayMessage(closedDay.unitName, closedDay.days, closedDay.unit, saoPauloDate(ctx.now), closedDay.date)
+    : bookingNotOpen
+      ? bookingNotOpenMessage(bookingNotOpen.unitName, bookingNotOpen.openUntil, ctx.waitlistEnabled)
     : insuranceNotAccepted
       ? insuranceNotAcceptedMessage(ctx, requestedBookingUnitId!, selectedInsurer)
     : requestInsurerNotAccepted

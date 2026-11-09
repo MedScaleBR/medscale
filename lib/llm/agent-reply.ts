@@ -38,6 +38,7 @@ export function buildAgentPrompt(ctx: AgentContext): string {
       extraDates: u.extraDates,
       scheduleRules: u.scheduleRules,
       blockedDates: u.blockedDates,
+      bookingOpenUntil: u.bookingOpenUntil,
       directionsParking: u.directionsParking,
       contactInfo: u.contactInfo,
       isOutsourced: u.isOutsourced,
