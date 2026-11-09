@@ -3391,3 +3391,9 @@ begin
   return new;
 end;
 $$;
+
+-- ============================================================
+-- AGENDA ABERTA ATÉ (ver migration_agenda_aberta_ate.sql)
+-- ============================================================
+-- Último dia em que a Clara oferece ou marca horário na unidade. Nulo = sem limite.
+alter table public.workspaces add column if not exists booking_open_until date;

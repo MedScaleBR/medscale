@@ -4,6 +4,7 @@ import {
   formatWorkingDays,
   hasSpacedRule,
   hasWorkingDays,
+  isBookingOpen,
   upcomingAttendanceDates,
   type UnitWorkingDays,
 } from '@/lib/bot/working-days'
@@ -93,6 +94,42 @@ function workingDaysText(u: UnitInfo): string {
 function spacedScheduleLine(u: UnitInfo | undefined): string {
   if (!u || !hasSpacedRule(u)) return ''
   return `Atendimento nesta unidade: ${describeSchedule(u.scheduleRules!)}.\n`
+}
+
+const brDate = (date: string) => date.split('-').reverse().join('/')
+
+// Dias bloqueados inteiros (feriado, férias) dentro da agenda aberta, a partir
+// de amanhã. Máximo 8, para o prompt não crescer.
+function blockedDatesLine(u: UnitInfo, today: string): string {
+  const blocked = (u.blockedDates ?? [])
+    .filter((d) => d > today && isBookingOpen(u, d))
+    .sort()
+    .slice(0, 8)
+  if (blocked.length === 0) return ''
+  return `Sem atendimento (dia bloqueado) em: ${blocked.map(brDate).join(', ')}. Nunca ofereça, marque nem registre preferência nesses dias.\n`
+}
+
+// Agenda aberta até uma data: nada depois dela. Vazio sem limite.
+function bookingWindowLine(u: UnitInfo, waitlistEnabled: boolean): string {
+  if (!u.bookingOpenUntil) return ''
+  const after = isExternalUnit(u)
+    ? 'não registre preferência para depois dessa data.'
+    : waitlistEnabled
+      ? 'ofereça os horários disponíveis até lá ou a lista de espera para a data que ele queria (LISTA_ESPERA).'
+      : 'ofereça os horários disponíveis até lá.'
+  return `Agenda aberta até ${brDate(u.bookingOpenUntil)}. Não ofereça nem marque nada depois disso: se o paciente pedir uma data posterior, diga que a agenda desse período ainda não foi liberada e ${after}\n`
+}
+
+// Limite da agenda e dias bloqueados de uma unidade (vazio quando não há nenhum).
+function unitCalendarNotes(u: UnitInfo | undefined, today: string, waitlistEnabled: boolean): string {
+  if (!u) return ''
+  return `${bookingWindowLine(u, waitlistEnabled)}${blockedDatesLine(u, today)}`
+}
+
+// Mesmas notas, recuadas sob o item da unidade com agenda externa.
+function externalCalendarNotes(u: UnitInfo, today: string, waitlistEnabled: boolean): string {
+  const notes = unitCalendarNotes(u, today, waitlistEnabled).trimEnd()
+  return notes ? `\n  ${notes.replace(/\n/g, '\n  ')}` : ''
 }
 
 // Agenda externa com expediente cadastrado: o expediente e as 3 próximas datas
@@ -366,10 +403,10 @@ Nessas unidades o horário só fica garantido depois que a clínica parceira con
   const slotsSection = multiUnit
     ? `⚠️ Os horários abaixo são POR UNIDADE. Os que aparecem sob "### <nome>" valem SÓ para aquela unidade. NUNCA ofereça a um paciente um horário listado sob outra unidade — mesmo que exista vaga lá. Se o paciente escolheu a Unidade X, use exclusivamente a lista sob "### X"; se essa lista estiver vazia, diga que não há horário nessa unidade nos próximos dias.\n\n` +
       (slotUnits.length > 0
-        ? slotUnits.map((u) => `### ${u.name}\n${spacedScheduleLine(u)}${formatSlotsByDay(freeSlotsByUnit[u.id] ?? {})}`).join('\n\n')
+        ? slotUnits.map((u) => `### ${u.name}\n${spacedScheduleLine(u)}${unitCalendarNotes(u, localNow, waitlistEnabled)}${formatSlotsByDay(freeSlotsByUnit[u.id] ?? {})}`).join('\n\n')
         : noInternalSlots)
     : slotUnits.length > 0
-      ? `${spacedScheduleLine(units[0])}${formatSlotsByDay(freeSlotsByUnit[units[0]?.id] ?? {})}`
+      ? `${spacedScheduleLine(units[0])}${unitCalendarNotes(units[0], localNow, waitlistEnabled)}${formatSlotsByDay(freeSlotsByUnit[units[0]?.id] ?? {})}`
       : noInternalSlots
 
   // ── Clara por unidade: agenda externa, dados a coletar, instruções ────────
@@ -378,7 +415,7 @@ Nessas unidades o horário só fica garantido depois que a clínica parceira con
     ? `
 ## Unidades com agenda externa — IMPORTANTE
 Nestas unidades o doutor atende pela agenda da própria clínica. Você NÃO tem acesso aos horários delas:
-${externalUnits.map((u) => `• ${u.name} (id: ${u.id}) — ${u.address ?? 'endereço não informado'} — ${unitInsuranceText(u)}${coverageOf(u).acceptsPrivate ? '' : ' NÃO atende particular: nunca ofereça particular nesta unidade.'}${externalDatesText(u, localNow)}`).join('\n')}
+${externalUnits.map((u) => `• ${u.name} (id: ${u.id}) — ${u.address ?? 'endereço não informado'} — ${unitInsuranceText(u)}${coverageOf(u).acceptsPrivate ? '' : ' NÃO atende particular: nunca ofereça particular nesta unidade.'}${externalDatesText(u, localNow)}${externalCalendarNotes(u, localNow, waitlistEnabled)}`).join('\n')}
 ${externalUnits.some((u) => externalDatesText(u, localNow)) ? `
 Quando a unidade tiver próximas datas listadas, você pode informar ao paciente em quais datas o doutor atende lá e perguntar qual delas ele prefere. Deixe claro que o horário exato é confirmado pela equipe com a clínica. Nunca ofereça um horário específico nem diga que a consulta está marcada. A data escolhida vai na preferência do paciente (PREFERENCIA_HORARIO, por exemplo "ter 25/11, manhã").
 ` : ''}

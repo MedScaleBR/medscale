@@ -6,6 +6,7 @@ import { resolveActiveSession } from '@/lib/session/server'
 import { UnitDetailForm } from '@/components/locais/UnitDetailForm'
 import { AvailabilitySettings } from '@/components/configuracoes/AvailabilitySettings'
 import { UnitBotSummary } from '@/components/locais/UnitBotSummary'
+import { BookingWindowSetting } from '@/components/locais/BookingWindowSetting'
 import { getWorkspaceBotSettings } from '@/lib/bot/unit-settings'
 
 export default async function UnitPage({ params }: { params: Promise<{ id: string }> }) {
@@ -23,7 +24,7 @@ export default async function UnitPage({ params }: { params: Promise<{ id: strin
     .maybeSingle()
   if (!workspace) notFound()
   const canManage = session.role === 'owner' || session.role === 'admin'
-  const [{ data: rules }, { data: exceptions }, botSettingsResult] = await Promise.all([
+  const [{ data: rules }, { data: exceptions }, botSettingsResult, bookingWindowResult] = await Promise.all([
     supabase.from('availability_rules').select('*').eq('workspace_id', id).order('day_of_week').order('start_time'),
     supabase.from('availability_exceptions').select('*').eq('workspace_id', id).order('date'),
     // Só owner/admin veem o resumo. À parte para a página abrir mesmo antes da
@@ -31,7 +32,11 @@ export default async function UnitPage({ params }: { params: Promise<{ id: strin
     canManage
       ? supabase.from('workspaces').select('scheduling_mode, intake_fields').eq('id', id).maybeSingle()
       : Promise.resolve({ data: null, error: null }),
+    // À parte: sem a migration da agenda aberta, a página abre sem o campo.
+    supabase.from('workspaces').select('booking_open_until').eq('id', id).maybeSingle(),
   ])
+  const bookingWindowReady = !bookingWindowResult.error
+  const bookingOpenUntil = bookingWindowResult.data?.booking_open_until ?? null
   const botSettings =
     canManage && !botSettingsResult.error && botSettingsResult.data
       ? getWorkspaceBotSettings(botSettingsResult.data)
@@ -54,6 +59,9 @@ export default async function UnitPage({ params }: { params: Promise<{ id: strin
       {botSettings && <UnitBotSummary settings={botSettings} />}
       <section className="rounded-xl border border-[var(--navy-06)] bg-white p-6 shadow-[var(--shadow-sm)]">
         <h2 className="mb-4 text-xs font-medium uppercase tracking-wide text-gray-500">Expediente presencial</h2>
+        {bookingWindowReady && (
+          <BookingWindowSetting workspaceId={workspace.id} initialValue={bookingOpenUntil} canManage={canManage} />
+        )}
         <AvailabilitySettings
           key={workspace.id}
           initialRules={rules ?? []}
