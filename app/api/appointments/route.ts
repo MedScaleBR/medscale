@@ -11,6 +11,7 @@ import { ensureGuideSafely } from '@/lib/billing/guides'
 import { unitPaymentProblem } from '@/lib/billing/insurer-units'
 import { PENDING_EXTERNAL_STATUS } from '@/types/database'
 import { PENDING_STATUS_FORBIDDEN_ERROR } from '@/lib/outsourced/config'
+import { appointmentDedupKey, queueLeadConversion } from '@/lib/meta/conversions'
 
 export async function GET(req: NextRequest) {
   const result = await requireWorkspaceSession(req)
@@ -208,6 +209,17 @@ export async function POST(req: NextRequest) {
     // Faturamento TISS: consulta de convênio que já nasce realizada ganha a
     // guia. Nunca derruba a criação da consulta.
     if (data.billing_type === 'convenio' && data.status === 'realizado') await ensureGuideSafely(data.id)
+
+    // Paciente que veio de anúncio: avisa a Meta (LeadSubmitted). Best-effort,
+    // nunca lança.
+    if (data.patient_phone && data.status !== 'cancelado') {
+      await queueLeadConversion({
+        accountId: session.accountId,
+        patientPhone: data.patient_phone,
+        dedupKey: appointmentDedupKey(data.id),
+        appointmentId: data.id,
+      })
+    }
   }
 
   return NextResponse.json(data, { status: 201 })

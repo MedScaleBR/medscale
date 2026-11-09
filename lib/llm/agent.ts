@@ -35,6 +35,7 @@ import { notifyOutsourcedIssue } from '@/lib/outsourced/notify'
 import { requestExternalConfirmation } from '@/lib/outsourced/request'
 import { buildAgentContext, loadAccountUnits, loadStoredIntake, type AgentContext, type AgentPatient } from '@/lib/llm/agent-context'
 import { generateReply } from '@/lib/llm/agent-reply'
+import { appointmentDedupKey, queueLeadConversion } from '@/lib/meta/conversions'
 import {
   isLoopBreak,
   planEffects,
@@ -531,6 +532,16 @@ async function applyEffects(ctx: AgentContext, plan: AgentPlan, io: ApplyIo) {
           phoneNumberId: botConfig.phoneNumberId,
           metaToken: botConfig.metaToken ? decryptToken(botConfig.metaToken) : null,
         })
+        // A Clara criou a solicitação (mesmo se o template à clínica falhou):
+        // conta como agendamento para a Meta.
+        if (result.kind === 'requested' || result.kind === 'send_failed') {
+          await queueLeadConversion({
+            accountId,
+            patientPhone,
+            dedupKey: appointmentDedupKey(result.appointmentId),
+            appointmentId: result.appointmentId,
+          })
+        }
         outsourcedNotRequested = result.kind !== 'requested'
         outcome.outsourcedMessage =
           result.kind === 'requested'
@@ -778,6 +789,13 @@ async function bookAppointment(
     .single()
 
   if (!appt) return false
+
+  await queueLeadConversion({
+    accountId,
+    patientPhone,
+    dedupKey: appointmentDedupKey(appt.id),
+    appointmentId: appt.id,
+  })
 
   await supabase
     .from('conversations')
