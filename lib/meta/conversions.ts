@@ -71,6 +71,20 @@ export function externalRequestDedupKey(conversationId: string, at: Date): strin
 
 type Admin = ReturnType<typeof createAdminClient>
 
+// A chamada acontece antes da resposta ao paciente / da tela da recepção: a
+// Meta travada não pode segurar nenhum dos dois. Estourou, o cron reenvia.
+const META_TIMEOUT_MS = 5_000
+
+class MetaTimeoutError extends Error {}
+
+function withTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new MetaTimeoutError()), META_TIMEOUT_MS)
+  })
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+
 export interface QueueLeadConversionInput {
   accountId: string
   patientPhone: string
@@ -156,9 +170,10 @@ export async function sendConversionEvent(
     }
 
     const token = decryptToken(config.meta_token)
-    const datasetId = config.meta_dataset_id ?? (await ensureDatasetId(event.account_id, config.waba_id, token, client))
+    const datasetId =
+      config.meta_dataset_id ?? (await withTimeout(ensureDatasetId(event.account_id, config.waba_id, token, client)))
 
-    await graphFetch(`/${datasetId}/events`, {
+    await withTimeout(graphFetch(`/${datasetId}/events`, {
       method: 'POST',
       token,
       body: buildLeadSubmittedPayload({
@@ -167,13 +182,17 @@ export async function sendConversionEvent(
         wabaId: config.waba_id,
         ctwaClid: event.ctwa_clid,
       }),
-    })
+    }))
 
     await mark({ status: 'sent', attempts, sent_at: new Date().toISOString(), last_error: null })
     return 'sent'
   } catch (err) {
     const lastError =
-      err instanceof MetaApiError ? `${err.code ?? err.status}:${err.message}`.slice(0, 300) : 'internal_error'
+      err instanceof MetaApiError
+        ? `${err.code ?? err.status}:${err.message}`.slice(0, 300)
+        : err instanceof MetaTimeoutError
+          ? 'timeout'
+          : 'internal_error'
     console.error(`[meta-capi] envio falhou event=${eventId} error=${lastError.split(':')[0]}`)
     try {
       await mark({ status: 'failed', attempts: Math.max(attempts, 1), last_error: lastError })

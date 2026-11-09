@@ -157,6 +157,21 @@ describe('queueLeadConversion', () => {
     expect((upd.payload as { last_error: string }).last_error.startsWith('200:')).toBe(true)
   })
 
+  it('Meta que não responde não segura o agendamento: desiste em 5s e marca failed', async () => {
+    vi.useFakeTimers()
+    try {
+      graphFetch.mockImplementation(() => new Promise(() => {}))
+      const db = mockDb()
+      const done = queueLeadConversion(input, db.client as never)
+      await vi.advanceTimersByTimeAsync(5_000)
+      await expect(done).resolves.toBeUndefined()
+      const [upd] = db.callsTo('meta_conversion_events', 'update')
+      expect(upd.payload).toEqual(expect.objectContaining({ status: 'failed', last_error: 'timeout' }))
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('não lança quando o banco explode', async () => {
     const db = mockDb({ lead_attributions: { select: () => { throw new Error('boom') } } })
     await expect(queueLeadConversion(input, db.client as never)).resolves.toBeUndefined()
