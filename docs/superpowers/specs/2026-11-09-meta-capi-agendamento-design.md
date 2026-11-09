@@ -66,8 +66,10 @@ leads por mensagem", que aprende com esse evento.
 - `account_id`, `ctwa_clid`, `event_name` (`LeadSubmitted`), `event_time`
 - `dedup_key` **único por account** — é a garantia de "uma vez só":
   - agenda interna: `appt:<appointment_id>`
-  - agenda externa: `ext:<handoff_log_id>`
-- `appointment_id` / `handoff_log_id` (nullable, para rastrear)
+  - agenda externa: `ext:<conversation_id>:<AAAA-MM-DD em São Paulo>` (o
+    `executeHandoff` não devolve o id do `handoff_logs`; uma solicitação por
+    conversa por dia)
+- `appointment_id` (nullable, para rastrear)
 - `status` (`pending` | `sent` | `failed`), `attempts`, `last_error`
   (só código/mensagem da Meta, nunca dado de paciente), `sent_at`
 
@@ -77,7 +79,7 @@ outras tabelas de account; escrita só pelo admin client.
 ### 2. Gatilho
 
 Função única, ex. `queueLeadConversion({ accountId, patientPhone, dedupKey,
-appointmentId?, handoffLogId?, occurredAt })` em `lib/meta/conversions.ts`:
+appointmentId?, occurredAt })` em `lib/meta/conversions.ts`:
 
 1. Busca em `lead_attributions` o `ctwa_clid` mais recente não nulo daquela
    account + telefone com `occurred_at` ≤ `occurredAt`. Sem `ctwa_clid` → não
@@ -90,8 +92,8 @@ Chamada nos quatro pontos acima, depois do insert da consulta / da gravação da
 solicitação dar certo.
 
 **Telefone:** `appointments.patient_phone` e `lead_attributions.patient_phone`
-podem estar em formatos diferentes. Normalizar com o que já existe em
-`lib/phone.ts` antes de comparar.
+podem estar em formatos diferentes (máscara, nono dígito). Comparar com
+`brazilianPhoneKey` de `lib/phone.ts`, como `lib/trafego/attribution.ts` já faz.
 
 ### 3. Envio
 
@@ -158,7 +160,6 @@ desiste (fora da janela a Meta não otimiza com ele de qualquer jeito).
 - Clique mais recente anterior ao agendamento quando o paciente veio de mais de
   um anúncio.
 - Reenvio limitado a 5 tentativas / 7 dias.
-- Agenda externa deduplica por solicitação (`handoff_log_id`). Se o paciente
-  refaz a solicitação e a anterior é fechada como substituída
-  (`closeSupersededExternalRequests`), sai um segundo evento — aceito, é raro.
+- Agenda externa deduplica por conversa + dia: refazer a solicitação no mesmo
+  dia não gera segundo evento; em outro dia, gera.
 - `partner_agent: "medscale"`.
