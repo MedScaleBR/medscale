@@ -74,6 +74,16 @@ async function loadRules(supabase: SupabaseAdmin, workspaceId: string, dayOfWeek
   return (legacy.data ?? []) as unknown as RuleRow[]
 }
 
+/**
+ * Último dia da agenda aberta da unidade (AAAA-MM-DD) ou null = sem limite.
+ * Sem a coluna (migration pendente) ou com erro de leitura, também null.
+ */
+export async function loadBookingOpenUntil(supabase: SupabaseAdmin, workspaceId: string): Promise<string | null> {
+  const { data, error } = await supabase.from('workspaces').select('booking_open_until').eq('id', workspaceId).maybeSingle()
+  if (error) return null
+  return (data as { booking_open_until?: string | null } | null)?.booking_open_until ?? null
+}
+
 /** Eventos do Google Calendar no período, como intervalos ocupados. */
 async function googleBusy(workspaceId: string, from: Date, to: Date): Promise<Interval[]> {
   try {
@@ -178,12 +188,24 @@ function buildDaySlots(dateStr: string, rules: RuleRow[], exceptions: ExceptionR
   }))
 }
 
-// Retorna todos os slots (livres e ocupados) para uma workspace numa data específica
-export async function getAvailableSlots(workspaceId: string, date: Date): Promise<TimeSlot[]> {
+// Retorna todos os slots (livres e ocupados) para uma workspace numa data específica.
+// `forPatient`: horário que vai para o paciente (Clara, lista de espera) — depois
+// da agenda aberta (workspaces.booking_open_until) não há horário. A agenda da
+// equipe não passa a opção e enxerga tudo.
+export async function getAvailableSlots(
+  workspaceId: string,
+  date: Date,
+  { forPatient = false }: { forPatient?: boolean } = {}
+): Promise<TimeSlot[]> {
   const supabase = createAdminClient()
   const zoned = new TZDate(date, TZ)
   const dayOfWeek = zoned.getDay() // 0=Dom ... 6=Sáb
   const dateStr = format(zoned, 'yyyy-MM-dd')
+
+  if (forPatient) {
+    const openUntil = await loadBookingOpenUntil(supabase, workspaceId)
+    if (openUntil && dateStr > openUntil) return []
+  }
 
   // 1. Regras do dia da semana que valem NESTA data (repetição quinzenal etc.).
   const rules = (await loadRules(supabase, workspaceId, dayOfWeek)).filter((r) =>
@@ -231,19 +253,28 @@ export function botSlotsLookaheadDays(): number {
 
 /**
  * Horários livres da unidade para a Clara, a partir do dia seguinte a `from`:
- * para quando achar `maxDays` dias com vaga ou chegar a `lookaheadDays`.
+ * para quando achar `maxDays` dias com vaga, chegar a `lookaheadDays` ou passar
+ * da agenda aberta (`openUntil`; ausente = lê da unidade, null = sem limite).
+ * Dias bloqueados inteiros ficam de fora.
  * Lê regras, exceções, consultas e Google Calendar uma vez para o período
  * inteiro. Devolve { 'AAAA-MM-DD': ['08:00', ...] } só com os dias com vaga.
  */
 export async function getFreeSlotsByDayForBot(
   workspaceId: string,
   from: Date,
-  { maxDays = 4, lookaheadDays = botSlotsLookaheadDays() }: { maxDays?: number; lookaheadDays?: number } = {}
+  {
+    maxDays = 4,
+    lookaheadDays = botSlotsLookaheadDays(),
+    openUntil,
+  }: { maxDays?: number; lookaheadDays?: number; openUntil?: string | null } = {}
 ): Promise<Record<string, string[]>> {
   const supabase = createAdminClient()
   const today = format(new TZDate(from, TZ), 'yyyy-MM-dd')
   const firstDate = addDaysToDate(today, 1)
-  const lastDate = addDaysToDate(today, lookaheadDays)
+  const limit = openUntil === undefined ? await loadBookingOpenUntil(supabase, workspaceId) : openUntil
+  const lookaheadEnd = addDaysToDate(today, lookaheadDays)
+  const lastDate = limit && limit < lookaheadEnd ? limit : lookaheadEnd
+  if (lastDate < firstDate) return {}
 
   const rules = await loadRules(supabase, workspaceId)
   const { data: exceptionRows } = await supabase
@@ -259,8 +290,7 @@ export async function getFreeSlotsByDayForBot(
 
   // Datas com alguma janela possível (regra que vale ou horário extra).
   const dates: string[] = []
-  for (let i = 0; i < lookaheadDays; i++) {
-    const date = addDaysToDate(firstDate, i)
+  for (let date = firstDate; date <= lastDate; date = addDaysToDate(date, 1)) {
     const exc = exceptionsOn(date)
     if (hasFullDayBlock(exc)) continue
     if (hasExtraWindow(exc) || rulesOn(date).length > 0) dates.push(date)
@@ -301,7 +331,7 @@ export async function getFreeSlotsForBot(workspaceId: string, date: Date): Promi
 
 // Verifica se um horário específico (instante exato) está disponível
 export async function isSlotAvailable(workspaceId: string, start: Date, durationMin: number): Promise<boolean> {
-  const slots = await getAvailableSlots(workspaceId, start)
+  const slots = await getAvailableSlots(workspaceId, start, { forPatient: true })
   const end = addMinutes(start, durationMin)
   return slots.some((s) => s.available && s.start.getTime() === start.getTime() && s.end.getTime() <= end.getTime())
 }

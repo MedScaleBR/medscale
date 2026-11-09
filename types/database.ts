@@ -196,6 +196,8 @@ export interface Database {
           accepts_private: boolean
           // Quem recebe por e-mail as solicitações de agendamento (máx. 5). Só MedScale altera.
           notification_emails: string[]
+          // Último dia (AAAA-MM-DD) em que a Clara oferece horário. null = sem limite.
+          booking_open_until: string | null
           cnes: string | null
           cnpj: string | null
           legal_name: string | null

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { resolveActiveSession } from '@/lib/session/server'
 import { parseProviderFields } from '@/lib/billing/validation'
+import { parseBookingOpenUntil } from '@/lib/scheduling/booking-window'
 import {
   isOutsourcedWorkspace,
   OUTSOURCED_DISABLE_WITH_PENDING_ERROR,
@@ -60,6 +61,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       return NextResponse.json({ error: 'accepts_private deve ser verdadeiro ou falso.' }, { status: 400 })
     }
     update.accepts_private = body.accepts_private
+  }
+
+  // Agenda aberta até: a Clara não oferece nem marca horário depois dessa data.
+  if ('booking_open_until' in body) {
+    const openUntil = parseBookingOpenUntil(body.booking_open_until)
+    if (!openUntil.ok) return NextResponse.json({ error: openUntil.error }, { status: 400 })
+    update.booking_open_until = openUntil.value
   }
 
   // Faturamento TISS: identificação do prestador (CNES, CNPJ, razão social).
