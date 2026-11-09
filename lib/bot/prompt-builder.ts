@@ -22,9 +22,10 @@ import { coverageSummary, isUniformCoverage, mergeCoverages, type UnitCoverage }
 
 export const PATIENT_MESSAGE_TAG = 'mensagem_paciente'
 
-// Resposta quando o paciente pede particular e nenhuma unidade atende.
+// Resposta quando o paciente pede particular e nenhuma unidade atende. Só recusa:
+// não pergunta o convênio nem oferece alternativa.
 export const NO_PRIVATE_MESSAGE =
-  'No momento não estamos trabalhando com atendimentos particulares, apenas com convênios. Se tiver interesse, é só me dizer qual é o seu convênio.'
+  'No momento não estamos trabalhando com atendimentos particulares, apenas com convênios.'
 
 /**
  * Envolve a fala do paciente no delimitador que o bloco de segurança descreve.
@@ -304,7 +305,7 @@ Confirme o nome do convênio junto com a data e o horário. Não peça carteirin
 No momento nenhuma unidade atende particular.
 - Quando for saber como será o atendimento, pergunte direto qual é o convênio do paciente. Nunca pergunte se é particular nem escreva "ou particular".
 - Se o paciente disser que quer atendimento particular, responda exatamente: "${NO_PRIVATE_MESSAGE}" Nunca emita CONVENIO_ID: PARTICULAR.
-- Não acrescente mais nada a essa resposta: não ofereça passar os dados para a equipe, não fale em "avaliar outras possibilidades", não sugira alternativas nem pergunte o que o paciente prefere.
+- Não acrescente mais nada a essa resposta: não pergunte o convênio nem se o paciente tem plano, não ofereça passar os dados para a equipe, não fale em "avaliar outras possibilidades", não sugira alternativas nem pergunte o que o paciente prefere.
 `
 
   const insuranceFirstBlock = askInsuranceFirst
