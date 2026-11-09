@@ -61,6 +61,9 @@ const UNIT_COLUMNS =
   'id, name, address, directions_parking, contact_info, handoff_number, display_order, is_outsourced, external_clinic_phone'
 const BOT_SETTINGS_COLUMNS = 'scheduling_mode, intake_fields, bot_instructions'
 const COVERAGE_COLUMNS = 'accepts_private'
+const BOOKING_WINDOW_COLUMNS = 'booking_open_until'
+// Até quantos dias à frente os bloqueios de dia inteiro são carregados.
+const BLOCKED_DATES_HORIZON_DAYS = 180
 
 // Cache simples em memória (por processo) — evita query ao banco em cada mensagem.
 // Em ambiente serverless cada instância tem seu próprio cache, então o TTL curto
@@ -112,7 +115,7 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
     'id' | 'name' | 'address' | 'directions_parking' | 'contact_info' | 'handoff_number' | 'is_outsourced' | 'external_clinic_phone'
   > &
     Partial<
-      Pick<Database['public']['Tables']['workspaces']['Row'], 'scheduling_mode' | 'intake_fields' | 'bot_instructions' | 'accepts_private'>
+      Pick<Database['public']['Tables']['workspaces']['Row'], 'scheduling_mode' | 'intake_fields' | 'bot_instructions' | 'accepts_private' | 'booking_open_until'>
     >
 
   const query = async (columns: string) => {
@@ -128,6 +131,7 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
   // Colunas por unidade que podem ainda não existir (migration pendente): cai
   // para o conjunto seguinte e segue com o padrão em vez de deixar a Clara sem unidades.
   const attempts = [
+    `${UNIT_COLUMNS}, ${BOT_SETTINGS_COLUMNS}, ${COVERAGE_COLUMNS}, ${BOOKING_WINDOW_COLUMNS}`,
     `${UNIT_COLUMNS}, ${BOT_SETTINGS_COLUMNS}, ${COVERAGE_COLUMNS}`,
     `${UNIT_COLUMNS}, ${BOT_SETTINGS_COLUMNS}`,
     UNIT_COLUMNS,
@@ -171,7 +175,7 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
       .eq('type', 'extra')
       .gte('date', today)
       .order('date'),
-    // Dias bloqueados inteiros nos próximos 60 dias — saem das "próximas datas".
+    // Dias bloqueados inteiros à frente — saem das "próximas datas" e a Clara não marca neles.
     supabase
       .from('availability_exceptions')
       .select('workspace_id, date, type, start_time')
@@ -179,7 +183,7 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
       .eq('type', 'blocked')
       .is('start_time', null)
       .gte('date', today)
-      .lte('date', addDaysToDate(today, 60))
+      .lte('date', addDaysToDate(today, BLOCKED_DATES_HORIZON_DAYS))
       .order('date'),
   ])
   const rules = (rulesResult.data ?? []) as unknown as RuleRow[]
@@ -233,6 +237,7 @@ export async function getAccountUnits(accountId: string): Promise<UnitContext[]>
     extraDates: extraDates.get(w.id) ?? [],
     scheduleRules: scheduleRules.get(w.id) ?? [],
     blockedDates: blockedDates.get(w.id) ?? [],
+    bookingOpenUntil: w.booking_open_until ?? null,
     directionsParking: w.directions_parking,
     contactInfo: w.contact_info,
     handoffNumber: w.handoff_number,

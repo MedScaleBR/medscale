@@ -81,7 +81,7 @@ export async function POST(req: NextRequest) {
 
       for (let i = 1; i <= DAYS_AHEAD; i++) {
         const day = addDays(today, i)
-        const free = (await getAvailableSlots(entry.workspace_id, day)).filter((s) => s.available)
+        const free = (await getAvailableSlots(entry.workspace_id, day, { forPatient: true })).filter((s) => s.available)
         if (free.length === 0) continue
 
         const times = free.slice(0, 3).map((s) => format(s.start, 'HH:mm')).join(', ')
@@ -125,7 +125,7 @@ export async function POST(req: NextRequest) {
         slot = ok ? formatBotSlot(entry.desired_date, entry.desired_time, []) : null
       } else {
         const day = new TZDate(`${entry.desired_date}T12:00:00`, TZ)
-        const free = (await getAvailableSlots(entry.workspace_id, day)).filter((s) => s.available)
+        const free = (await getAvailableSlots(entry.workspace_id, day, { forPatient: true })).filter((s) => s.available)
         slot = free.length
           ? formatBotSlot(entry.desired_date, null, free.slice(0, 3).map((s) => format(s.start, 'HH:mm')))
           : null

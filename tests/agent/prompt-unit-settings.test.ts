@@ -213,3 +213,29 @@ describe('prompt — pedido dos dados do paciente numa mensagem só', () => {
     expect(prompt).not.toContain('## Como pedir os dados do paciente')
   })
 })
+
+describe('prompt — agenda aberta até e dias bloqueados', () => {
+  it('unidade com agenda na MedScale: limite e dias bloqueados sob os horários dela', () => {
+    const prompt = build([
+      { id: 'w1', name: 'Centro', ...base, bookingOpenUntil: '2026-12-31', blockedDates: ['2026-11-15', '2027-01-05', '2026-10-01'] },
+      { id: 'w2', name: 'Sul', ...base },
+    ])
+    const centro = prompt.slice(prompt.indexOf('### Centro'), prompt.indexOf('### Sul'))
+    expect(centro).toContain('Agenda aberta até 31/12/2026. Não ofereça nem marque nada depois disso')
+    // Só os bloqueios futuros e dentro da agenda aberta.
+    expect(centro).toContain('Sem atendimento (dia bloqueado) em: 15/11/2026.')
+    expect(prompt).not.toContain('05/01/2027')
+    expect(prompt.slice(prompt.indexOf('### Sul'))).not.toContain('Agenda aberta até')
+  })
+
+  it('agenda externa: limite sem lista de espera', () => {
+    const prompt = build([{ id: 'w1', name: 'Parceira', ...base, botSettings: external(['full_name']), bookingOpenUntil: '2026-12-31' }])
+    expect(prompt).toContain('Agenda aberta até 31/12/2026')
+    expect(prompt).toContain('não registre preferência para depois dessa data')
+  })
+
+  it('sem limite e sem bloqueios o prompt não muda', () => {
+    const plain = build([{ id: 'w1', name: 'Centro', ...base }])
+    expect(build([{ id: 'w1', name: 'Centro', ...base, bookingOpenUntil: null, blockedDates: [] }])).toBe(plain)
+  })
+})

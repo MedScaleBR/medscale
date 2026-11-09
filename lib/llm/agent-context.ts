@@ -119,8 +119,14 @@ export async function loadAccountUnits(supabase: SupabaseAdmin, accountId: strin
 // Slots livres de uma unidade: até `maxDays` dias com vaga, procurando até
 // BOT_SLOTS_LOOKAHEAD_DAYS dias à frente de `now` (o simulador pode passar
 // outra data). Cada unidade tem a própria contagem.
-export async function collectFreeSlots(unitId: string, now: Date, maxDays = 4): Promise<Record<string, string[]>> {
-  return getFreeSlotsByDayForBot(unitId, now, { maxDays }).catch(() => ({}))
+// `openUntil` é a agenda aberta da unidade (já carregada em getAccountUnits).
+export async function collectFreeSlots(
+  unitId: string,
+  now: Date,
+  maxDays = 4,
+  openUntil?: string | null
+): Promise<Record<string, string[]>> {
+  return getFreeSlotsByDayForBot(unitId, now, { maxDays, openUntil }).catch(() => ({}))
 }
 
 /** Dados da coleta já salvos no paciente — só quando alguma unidade coleta algo. */
@@ -171,7 +177,7 @@ export async function buildAgentContext(input: BuildAgentContextInput): Promise<
   // Horários livres reais por unidade (availability_rules + Google Calendar).
   // Unidade com agenda externa não tem horários na MedScale.
   const slotsPerUnit = await Promise.all(
-    units.map((u) => (isExternalUnit(base, u.id) ? Promise.resolve({}) : collectFreeSlots(u.id, now)))
+    units.map((u) => (isExternalUnit(base, u.id) ? Promise.resolve({}) : collectFreeSlots(u.id, now, 4, u.bookingOpenUntil ?? null)))
   )
   const freeSlotsByUnit: Record<string, Record<string, string[]>> = {}
   units.forEach((u, i) => {

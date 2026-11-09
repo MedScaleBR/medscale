@@ -1,6 +1,7 @@
 import { TZDate } from '@date-fns/tz'
 import {
   addDaysToDate,
+  formatDayMonth,
   formatShortDate,
   intervalAdverb,
   nextRuleDates,
@@ -23,6 +24,18 @@ export interface UnitWorkingDays {
   scheduleRules?: ScheduleRule[]
   /** Dias bloqueados inteiros à frente (AAAA-MM-DD). */
   blockedDates?: string[]
+  /** Último dia (AAAA-MM-DD) em que a agenda está aberta. null/ausente = sem limite. */
+  bookingOpenUntil?: string | null
+}
+
+/** A data está dentro da agenda aberta da unidade (sem limite = sempre). */
+export function isBookingOpen(unit: UnitWorkingDays, date: string): boolean {
+  return !unit.bookingOpenUntil || date <= unit.bookingOpenUntil
+}
+
+/** Dia bloqueado inteiro (feriado, férias etc.). */
+export function isBlockedDate(unit: UnitWorkingDays, date: string): boolean {
+  return (unit.blockedDates ?? []).includes(date)
 }
 
 export interface ScheduleRule extends RecurrenceRule {
@@ -52,7 +65,10 @@ export function upcomingAttendanceDates(unit: UnitWorkingDays, today: string, co
     ...(unit.extraDates ?? []).map((date) => ({ date, type: 'extra' })),
     ...(unit.blockedDates ?? []).map((date) => ({ date, type: 'blocked', start_time: null })),
   ]
-  return nextRuleDates(unit.scheduleRules ?? [], exceptions, addDaysToDate(today, 1), count, maxDays)
+  // Só datas dentro da agenda aberta.
+  return nextRuleDates(unit.scheduleRules ?? [], exceptions, addDaysToDate(today, 1), count, maxDays).filter((d) =>
+    isBookingOpen(unit, d)
+  )
 }
 
 const WEEKDAY_PLURAL = ['domingos', 'segundas', 'terças', 'quartas', 'quintas', 'sextas', 'sábados']
@@ -89,6 +105,8 @@ export function weekdayOf(date: string): number {
  * Clara não bloqueia o que não sabe.
  */
 export function attendsOn(unit: UnitWorkingDays, date: string): boolean {
+  // Dia bloqueado inteiro vale mais que expediente e data avulsa.
+  if (isBlockedDate(unit, date)) return false
   if (!hasWorkingDays(unit)) return true
   if ((unit.extraDates ?? []).includes(date)) return true
   // Com as regras carregadas, a repetição decide (terça da semana "errada" não vale).
@@ -96,8 +114,28 @@ export function attendsOn(unit: UnitWorkingDays, date: string): boolean {
   return unit.workingDays!.includes(weekdayOf(date))
 }
 
+/** Mensagem fixa quando a Clara tentou marcar num dia depois da agenda aberta. */
+export function bookingNotOpenMessage(unitName: string, openUntil: string, waitlistEnabled: boolean): string {
+  const offer = waitlistEnabled
+    ? ' Se quiser, coloco você na lista de espera e aviso assim que abrir.'
+    : ' Posso ver um horário até lá para você?'
+  return `A agenda da unidade ${unitName} está aberta até ${formatDayMonth(openUntil)}. Depois disso ainda não foi liberada.${offer}`
+}
+
 /** Mensagem fixa quando a Clara tentou marcar (ou pôr na lista de espera) num dia sem atendimento. */
-export function closedDayMessage(unitName: string, days: number[], unit?: UnitWorkingDays, today?: string): string {
+export function closedDayMessage(
+  unitName: string,
+  days: number[],
+  unit?: UnitWorkingDays,
+  today?: string,
+  date?: string
+): string {
+  // Dia bloqueado (feriado, férias): diz que nesse dia não há atendimento.
+  if (unit && date && isBlockedDate(unit, date)) {
+    const next = today ? upcomingAttendanceDates(unit, today) : []
+    const dates = next.length > 0 ? ` As próximas datas com atendimento são ${joinPt(next.map(formatShortDate))}.` : ''
+    return `Em ${formatDayMonth(date)} não haverá atendimento na unidade ${unitName}.${dates} Qual fica melhor para você?`
+  }
   // Expediente a cada N semanas: diz a repetição e as próximas datas certas.
   if (unit && today && hasSpacedRule(unit)) {
     const next = upcomingAttendanceDates(unit, today)

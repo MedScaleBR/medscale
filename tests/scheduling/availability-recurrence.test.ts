@@ -15,8 +15,9 @@ import { getAvailableSlots, getFreeSlotsByDayForBot, isSlotAvailable } from '@/l
 const BIWEEKLY = { day_of_week: 2, start_time: '08:00', end_time: '09:00', slot_duration: 30, interval_weeks: 2, anchor_date: '2025-11-11' }
 const WEEKLY_THU = { day_of_week: 4, start_time: '14:00', end_time: '15:00', slot_duration: 30, interval_weeks: 1, anchor_date: null }
 
-function setup(rules: unknown[], exceptions: unknown[] = []) {
+function setup(rules: unknown[], exceptions: unknown[] = [], openUntil: string | null = null) {
   g.supabase = createSupabaseMock({
+    workspaces: { select: { data: { booking_open_until: openUntil } } },
     availability_rules: { select: { data: rules } },
     availability_exceptions: { select: { data: exceptions } },
     appointments: { select: { data: [] } },
@@ -93,5 +94,48 @@ describe('disponibilidade com repetição', () => {
   it('regras sem as colunas novas (migration pendente) valem toda semana', async () => {
     setup([{ day_of_week: 2, start_time: '08:00', end_time: '08:30', slot_duration: 30 }])
     expect(Object.keys(await getFreeSlotsByDayForBot('w1', new Date(), { maxDays: 2 }))).toEqual(['2025-11-18', '2025-11-25'])
+  })
+
+  describe('agenda aberta até', () => {
+    it('a Clara não oferece dias depois do limite', async () => {
+      setup([WEEKLY_THU], [], '2025-11-27')
+      expect(Object.keys(await getFreeSlotsByDayForBot('w1', new Date()))).toEqual(['2025-11-13', '2025-11-20', '2025-11-27'])
+    })
+
+    it('dia bloqueado dentro do limite também fica de fora', async () => {
+      setup([WEEKLY_THU], [{ date: '2025-11-20', type: 'blocked', start_time: null, end_time: null }], '2025-11-27')
+      expect(Object.keys(await getFreeSlotsByDayForBot('w1', new Date()))).toEqual(['2025-11-13', '2025-11-27'])
+    })
+
+    it('limite passado: nenhuma vaga, sem ler o Google', async () => {
+      setup([WEEKLY_THU], [], '2025-11-10')
+      expect(await getFreeSlotsByDayForBot('w1', new Date())).toEqual({})
+      expect(g.listEvents).not.toHaveBeenCalled()
+    })
+
+    it('openUntil passado pela unidade evita a leitura e null é sem limite', async () => {
+      setup([WEEKLY_THU], [], '2025-11-13')
+      expect(Object.keys(await getFreeSlotsByDayForBot('w1', new Date(), { openUntil: null }))).toHaveLength(4)
+      expect(g.supabase.callsTo('workspaces')).toHaveLength(0)
+    })
+
+    it('isSlotAvailable recusa depois do limite; a agenda da equipe enxerga tudo', async () => {
+      setup([WEEKLY_THU], [], '2025-11-20')
+      expect(await isSlotAvailable('w1', new Date('2025-11-20T14:00:00-03:00'), 30)).toBe(true)
+      expect(await isSlotAvailable('w1', new Date('2025-11-27T14:00:00-03:00'), 30)).toBe(false)
+      expect(await getAvailableSlots('w1', new Date('2025-11-27T12:00:00-03:00'))).toHaveLength(2)
+      expect(await getAvailableSlots('w1', new Date('2025-11-27T12:00:00-03:00'), { forPatient: true })).toEqual([])
+    })
+
+    it('coluna ausente (migration pendente): sem limite', async () => {
+      setup([WEEKLY_THU])
+      g.supabase = createSupabaseMock({
+        workspaces: { select: { data: null, error: { message: 'column does not exist' } } },
+        availability_rules: { select: { data: [WEEKLY_THU] } },
+        availability_exceptions: { select: { data: [] } },
+        appointments: { select: { data: [] } },
+      })
+      expect(Object.keys(await getFreeSlotsByDayForBot('w1', new Date()))).toHaveLength(4)
+    })
   })
 })
