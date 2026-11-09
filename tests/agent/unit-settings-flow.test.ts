@@ -33,6 +33,11 @@ vi.mock('@anthropic-ai/sdk', async () => {
 })
 vi.mock('@/lib/realtime/broadcast', () => ({ broadcastToWorkspace: vi.fn(), workspaceChannel: (id: string) => `handoff-toast:${id}` }))
 vi.mock('@/lib/push/send', () => ({ sendHandoffPush }))
+const queueLeadConversion = vi.hoisted(() => vi.fn(async () => undefined))
+vi.mock('@/lib/meta/conversions', async (orig) => ({
+  ...(await orig<typeof import('@/lib/meta/conversions')>()),
+  queueLeadConversion,
+}))
 
 import { processIncomingMessage } from '@/lib/llm/agent'
 import { mergeSupabaseConfig, resetAgentHarness, sentMessages, state, UNIT, PARAMS, getFreeSlotsForBot } from '../helpers/agent-harness'
@@ -73,6 +78,7 @@ describe('Clara por unidade — fluxo do agente', () => {
   beforeEach(() => {
     resetAgentHarness()
     sendHandoffPush.mockClear()
+    queueLeadConversion.mockClear()
     logs = []
     for (const level of ['log', 'warn', 'error'] as const) {
       vi.spyOn(console, level).mockImplementation((...args: unknown[]) => {
@@ -156,6 +162,9 @@ describe('Clara por unidade — fluxo do agente', () => {
       expect.objectContaining({ payload: expect.objectContaining({ status: 'handoff', bot_paused: true }) })
     )
     expect(sentMessages()[0]).toBe(externalRequestInHoursMessage('Clínica Norte'))
+    expect(queueLeadConversion).toHaveBeenCalledWith(
+      expect.objectContaining({ accountId: 'acc1', patientPhone: PARAMS.patientPhone, dedupKey: expect.stringMatching(/^ext:.+:\d{4}-\d{2}-\d{2}$/) })
+    )
     expect(sendHandoffPush).toHaveBeenCalledWith(
       'w1',
       expect.objectContaining({ title: '📋 Solicitação de agendamento', body: expect.stringContaining('Preferência: terça de manhã') })
@@ -180,6 +189,9 @@ describe('Clara por unidade — fluxo do agente', () => {
     })
     expect(s.callsTo('conversations', 'update').some((c) => (c.payload as { bot_paused?: boolean }).bot_paused)).toBe(false)
     expect(sentMessages()).toEqual([externalRequestOutOfHoursMessage('Clínica Norte')])
+    expect(queueLeadConversion).toHaveBeenCalledWith(
+      expect.objectContaining({ dedupKey: expect.stringMatching(/^ext:.+:\d{4}-\d{2}-\d{2}$/) })
+    )
     expect(sendHandoffPush).toHaveBeenCalledWith('w1', expect.objectContaining({ title: '📋 Solicitação de agendamento' }))
   })
 
