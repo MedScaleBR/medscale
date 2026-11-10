@@ -35,6 +35,11 @@ vi.mock('@anthropic-ai/sdk', async () => {
 vi.mock('@/lib/realtime/broadcast', () => ({ broadcastToWorkspace: vi.fn(), workspaceChannel: (id: string) => `handoff-toast:${id}` }))
 vi.mock('@/lib/outsourced/request', () => ({ requestExternalConfirmation }))
 vi.mock('@/lib/outsourced/notify', () => ({ notifyOutsourcedIssue }))
+const queueLeadConversion = vi.hoisted(() => vi.fn(async () => undefined))
+vi.mock('@/lib/meta/conversions', async (orig) => ({
+  ...(await orig<typeof import('@/lib/meta/conversions')>()),
+  queueLeadConversion,
+}))
 
 import { processIncomingMessage } from '@/lib/llm/agent'
 import {
@@ -445,5 +450,44 @@ CANCELAMENTO_CONFIRMADO: ${OLD_APPT}`]
 
     expect(cancelUpdates(supabase)).toHaveLength(1)
     expect(deleteEvent).toHaveBeenCalledWith('w1', 'ev1')
+  })
+
+  describe('conversão para a Meta', () => {
+    beforeEach(() => queueLeadConversion.mockClear())
+
+    it('Clara marcando direto dispara appt:<id>', async () => {
+      mergeSupabaseConfig({ appointments: { select: { data: [] }, insert: { data: APPT }, update: { data: null } } })
+      state.claudeResponses = [`Confirmado!
+AGENDAMENTO_CONFIRMADO: ${SLOT}`]
+
+      await processIncomingMessage(PARAMS)
+
+      expect(queueLeadConversion).toHaveBeenCalledWith(
+        expect.objectContaining({ accountId: 'acc1', patientPhone: PARAMS.patientPhone, dedupKey: 'appt:appt-1', appointmentId: 'appt-1' })
+      )
+    })
+
+    it('solicitação terceirizada dispara appt:<id>', async () => {
+      outsourced()
+      completePatient()
+      state.claudeResponses = [CLAUDE_OK]
+
+      await processIncomingMessage(PARAMS)
+
+      expect(queueLeadConversion).toHaveBeenCalledWith(
+        expect.objectContaining({ dedupKey: 'appt:ext-1', appointmentId: 'ext-1' })
+      )
+    })
+
+    it('already_pending não dispara', async () => {
+      outsourced()
+      completePatient()
+      requestExternalConfirmation.mockResolvedValue({ kind: 'already_pending' })
+      state.claudeResponses = [CLAUDE_OK]
+
+      await processIncomingMessage(PARAMS)
+
+      expect(queueLeadConversion).not.toHaveBeenCalled()
+    })
   })
 })

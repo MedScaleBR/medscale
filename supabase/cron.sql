@@ -289,3 +289,21 @@ select cron.schedule(
 -- from cron.job_run_details
 -- where status = 'failed'
 -- order by start_time desc;
+
+-- META-CONVERSIONS: reenvia LeadSubmitted que falharam para a Meta (Conversions
+-- API for Business Messaging) — ver lib/meta/conversions.ts. A cada 30 min; só
+-- eventos dos últimos 7 dias com menos de 5 tentativas.
+select cron.schedule(
+  'meta-conversions',
+  '*/30 * * * *',
+  $$
+    select net.http_post(
+      url     := 'https://medscalebr.com/api/cron/meta-conversions',
+      headers := jsonb_build_object(
+        'Content-Type',  'application/json',
+        'Authorization', 'Bearer ' || public.cron_secret()
+      ),
+      body    := '{}'::jsonb
+    );
+  $$
+);
