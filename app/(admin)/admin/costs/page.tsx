@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { createClient } from '@/lib/supabase/server'
 import { CostAlertList } from '@/components/admin/CostAlertList'
+import { ClaraCacheTrendSection } from '@/components/admin/ClaraCacheTrendSection'
+import { getClaraCacheTrend } from '@/lib/admin/clara-cache-trend'
 import {
   COST_PERIODS,
   getCostOverview,
@@ -58,7 +60,11 @@ export default async function AdminCostsPage({ searchParams }: { searchParams: P
   const days = normalizeCostDays(daysParam)
 
   const supabase = await createClient()
-  const [overview, taskedRefs] = await Promise.all([getCostOverview(supabase, days), getTaskedRefs(supabase)])
+  const [overview, taskedRefs, claraTrend] = await Promise.all([
+    getCostOverview(supabase, days),
+    getTaskedRefs(supabase),
+    getClaraCacheTrend(supabase, days),
+  ])
 
   const total = overview.summary.total
   const change = overview.previous ? percentChange(total, overview.previous.total) : null
@@ -120,6 +126,8 @@ export default async function AdminCostsPage({ searchParams }: { searchParams: P
       </div>
 
       <CostAlertList alerts={overview.alerts} taskedRefs={taskedRefs} />
+
+      <ClaraCacheTrendSection trend={claraTrend} />
 
       <section className={`${CARD} overflow-hidden`}>
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--navy-06)] px-5 py-3">
