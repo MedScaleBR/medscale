@@ -83,6 +83,30 @@ describe('buildSystemPromptParts — separação para o cache', () => {
     expect(stable).not.toContain('Primeira mensagem desta conversa')
   })
 
+  // Na agenda externa, a parte fixa lista as próximas datas de atendimento e os
+  // dias bloqueados, que dependem do dia. Ela pode mudar de um dia para o outro
+  // (o cache é regravado uma vez por dia), mas nunca dentro do mesmo dia.
+  it('agenda externa: a parte fixa é igual o dia todo, mudando só na virada do dia', () => {
+    const externalUnits: Input['units'] = [
+      {
+        ...UNITS[0],
+        botSettings: { schedulingMode: 'external', intakeFields: ['full_name', 'birth_date'], botInstructions: null },
+        scheduleRules: [{ day_of_week: 4, start_time: '14:00', end_time: '18:00', interval_weeks: 1, anchor_date: null }],
+        blockedDates: ['2026-11-12', '2026-11-19'],
+      },
+    ]
+    const at = (iso: string) => buildSystemPromptParts(input({ units: externalUnits, freeSlotsByUnit: {}, now: new Date(iso) }))
+
+    const morning = at('2026-11-11T11:00:00Z') // 08:00 em São Paulo
+    const night = at('2026-11-12T02:30:00Z') // 23:30 em São Paulo, mesmo dia
+    expect(morning.stable).toContain('Unidades com agenda externa')
+    expect(morning.stable).toContain('12/11')
+    expect(night.stable).toBe(morning.stable)
+
+    const nextDay = at('2026-11-12T11:00:00Z')
+    expect(nextDay.stable).not.toContain('12/11/2026')
+  })
+
   it('as regras de segurança abrem a parte fixa', () => {
     const { stable } = buildSystemPromptParts(input())
     expect(stable.startsWith('## Segurança')).toBe(true)
