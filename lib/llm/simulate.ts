@@ -2,6 +2,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import { getBotConfig, type BotConfig } from '@/lib/bot/config'
 import { getWorkspaceBotSettings, parseBotSettingsBody, type BotSettingsUpdate } from '@/lib/bot/unit-settings'
 import { claudeCostUsd } from '@/lib/costs/pricing'
+import { claudeCacheTokens } from '@/lib/costs/record'
 import { buildAgentContext, loadAccountUnits, type HistoryMessage, type StoredIntake } from '@/lib/llm/agent-context'
 import { generateReply } from '@/lib/llm/agent-reply'
 import { planEffects, type AgentEffect } from '@/lib/llm/agent-plan'
@@ -251,11 +252,15 @@ export async function runSimulation(input: SimulationInput, opts: { staffUserId:
   const booked = plan.effects.find((e) => e.kind === 'book' || e.kind === 'handoff')
   const nextUnitId = booked && 'workspace_id' in booked ? booked.workspace_id : plan.conversationUnitId
 
-  const costUsd = claudeCostUsd(reply.model, reply.usage.input_tokens, reply.usage.output_tokens)
+  const cache = claudeCacheTokens(reply.usage)
+  const costUsd = claudeCostUsd(reply.model, reply.usage.input_tokens, reply.usage.output_tokens, cache)
+  // Entrada total, com e sem cache — o que o simulador mostra como "tokens de entrada".
+  const inputTokens =
+    reply.usage.input_tokens + reply.usage.cache_read_input_tokens + reply.usage.cache_creation_input_tokens
 
   // Só metadados — nunca o texto da conversa nem o prompt (LGPD).
   console.log(
-    `[simulador] account=${accountId} mensagens=${history.length} tokens_in=${reply.usage.input_tokens} tokens_out=${reply.usage.output_tokens}`
+    `[simulador] account=${accountId} mensagens=${history.length} tokens_in=${inputTokens} cache_lido=${reply.usage.cache_read_input_tokens} tokens_out=${reply.usage.output_tokens}`
   )
 
   return {
@@ -270,6 +275,6 @@ export async function runSimulation(input: SimulationInput, opts: { staffUserId:
     conversation_unit_id: nextUnitId ?? null,
     now: now.toISOString(),
     notes,
-    usage: { input_tokens: reply.usage.input_tokens, output_tokens: reply.usage.output_tokens, cost_usd: costUsd },
+    usage: { input_tokens: inputTokens, output_tokens: reply.usage.output_tokens, cost_usd: costUsd },
   }
 }
