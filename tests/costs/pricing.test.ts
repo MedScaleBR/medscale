@@ -26,6 +26,23 @@ describe('claudeCostUsd', () => {
     expect(claudeCostUsd('claude-sonnet-5-5', 0, 1_000_000)).toBeCloseTo(10, 10)
   })
 
+  // Com cache, a API separa a entrada em três: sem cache (preço cheio),
+  // gravada no cache (1,25× no de 5 min, 2× no de 1 h) e lida do cache
+  // (sonnet-5-5: $0,10/MTok). Somar tudo como entrada cheia faria o painel
+  // mostrar a Clara mais cara do que ela é.
+  it('cobra leitura e gravação de cache pelo preço de cada uma', () => {
+    expect(claudeCostUsd('claude-sonnet-5-5', 0, 0, { readTokens: 1_000_000 })).toBeCloseTo(0.1, 10)
+    expect(claudeCostUsd('claude-sonnet-5-5', 0, 0, { write5mTokens: 1_000_000 })).toBeCloseTo(2.5, 10)
+    expect(claudeCostUsd('claude-sonnet-5-5', 0, 0, { write1hTokens: 1_000_000 })).toBeCloseTo(4, 10)
+    expect(
+      claudeCostUsd('claude-sonnet-5-5', 1_000_000, 1_000_000, { readTokens: 1_000_000, write1hTokens: 1_000_000 })
+    ).toBeCloseTo(2 + 10 + 0.1 + 4, 10)
+  })
+
+  it('leitura de cache de modelo sem preço próprio sai a 10% da entrada', () => {
+    expect(claudeCostUsd('claude-modelo-que-nao-existe', 0, 0, { readTokens: 1_000_000 })).toBeCloseTo(0.5, 10)
+  })
+
   it('opus-5 é mais caro que sonnet-4-5 no mesmo usage', () => {
     const usage = [1000, 500] as const
     expect(claudeCostUsd('claude-opus-5', ...usage)).toBeGreaterThan(claudeCostUsd('claude-sonnet-4-5', ...usage))

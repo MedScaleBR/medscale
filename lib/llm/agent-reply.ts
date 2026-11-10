@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk'
-import { buildDynamicSystemPrompt, wrapPatientMessage } from '@/lib/bot/prompt-builder'
+import { buildSystemPromptParts, wrapPatientMessage } from '@/lib/bot/prompt-builder'
 import { recordClaudeCost } from '@/lib/costs/record'
 import type { AgentContext } from '@/lib/llm/agent-context'
 
@@ -21,12 +21,19 @@ export interface RawReply {
   messages: ClaudeTurn[]
   /** Resposta crua do Claude, com marcadores (ou o fallback se veio vazia). */
   raw: string
-  usage: { input_tokens: number; output_tokens: number }
+  /** Soma das tentativas. input_tokens é só a entrada sem cache. */
+  usage: {
+    input_tokens: number
+    output_tokens: number
+    cache_read_input_tokens: number
+    cache_creation_input_tokens: number
+    cache_creation: { ephemeral_5m_input_tokens: number; ephemeral_1h_input_tokens: number }
+  }
   model: string
 }
 
-export function buildAgentPrompt(ctx: AgentContext): string {
-  return buildDynamicSystemPrompt({
+export function buildAgentPrompt(ctx: AgentContext): { stable: string; dynamic: string } {
+  return buildSystemPromptParts({
     accountName: ctx.accountName,
     config: ctx.botConfig,
     units: ctx.units.map((u) => ({
@@ -78,9 +85,16 @@ export async function generateReply(
   ctx: AgentContext,
   opts: { costProvider: 'claude_agendamento' | 'claude_simulador'; costMetadata?: Record<string, unknown> }
 ): Promise<RawReply> {
-  const systemPrompt = buildAgentPrompt(ctx)
+  const prompt = buildAgentPrompt(ctx)
+  const systemPrompt = prompt.stable + prompt.dynamic
   const messages = buildClaudeMessages(ctx)
-  const usage = { input_tokens: 0, output_tokens: 0 }
+  const usage: RawReply['usage'] = {
+    input_tokens: 0,
+    output_tokens: 0,
+    cache_read_input_tokens: 0,
+    cache_creation_input_tokens: 0,
+    cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 },
+  }
 
   let responseText: string | null = null
   for (let attempt = 1; attempt <= 2 && responseText === null; attempt++) {
@@ -90,11 +104,21 @@ export async function generateReply(
       // para conversa e mantém custo e tempo de resposta sob controle.
       max_tokens: 4096,
       output_config: { effort: 'low' },
-      system: systemPrompt,
+      // A parte fixa é igual para todo paciente da clínica: fica no cache e
+      // sai a 5% do preço. Cache de 1 h porque 93% das respostas chegam em até
+      // 1 h da anterior na mesma clínica, e só 72% em até 5 min (prod, nov/2026).
+      system: [
+        { type: 'text', text: prompt.stable, cache_control: { type: 'ephemeral', ttl: '1h' } },
+        { type: 'text', text: prompt.dynamic },
+      ],
       messages,
     })
     usage.input_tokens += response.usage?.input_tokens ?? 0
     usage.output_tokens += response.usage?.output_tokens ?? 0
+    usage.cache_read_input_tokens += response.usage?.cache_read_input_tokens ?? 0
+    usage.cache_creation_input_tokens += response.usage?.cache_creation_input_tokens ?? 0
+    usage.cache_creation.ephemeral_5m_input_tokens += response.usage?.cache_creation?.ephemeral_5m_input_tokens ?? 0
+    usage.cache_creation.ephemeral_1h_input_tokens += response.usage?.cache_creation?.ephemeral_1h_input_tokens ?? 0
 
     // Dentro do laço: a segunda tentativa é cobrada igual à primeira, e é
     // justamente o retry repetido que denuncia bot mal configurado no painel.
