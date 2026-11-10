@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { ConversationList, type ConversationListItem } from './ConversationList'
 import { ConversationDetail, type DetailMessage } from './ConversationDetail'
@@ -20,6 +20,27 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
   const [mobilePane, setMobilePane] = useState<'list' | 'detail'>('list')
   const analyticsBase = useAnalyticsBase()
   const { setActiveConversationId, pendingConversationId, clearPendingConversation } = useActiveConversation()
+
+  // Busca no banco: conversas antigas que não vieram na carga inicial entram na
+  // lista. As que já estão ficam como estão (podem ter edições locais).
+  const [searching, setSearching] = useState(false)
+  const lastSearch = useRef('')
+  const handleSearch = useCallback(async (query: string) => {
+    lastSearch.current = query
+    setSearching(true)
+    try {
+      const res = await fetch(`/api/bot/conversations/search?q=${encodeURIComponent(query)}`)
+      if (!res.ok) return
+      const { conversations: found } = (await res.json()) as { conversations: ConversationWithMessages[] }
+      setConversations((prev) => {
+        const known = new Set(prev.map((c) => c.id))
+        const fresh = found.filter((c) => !known.has(c.id))
+        return fresh.length ? [...prev, ...fresh] : prev
+      })
+    } finally {
+      if (lastSearch.current === query) setSearching(false)
+    }
+  }, [])
 
   const handleSelect = (id: string) => {
     setSelectedId(id)
@@ -166,7 +187,13 @@ export function BotInboxClient({ initialConversations }: { initialConversations:
           mobilePane === 'detail' && 'hidden md:block',
         )}
       >
-        <ConversationList conversations={conversations} selectedId={selectedId} onSelect={handleSelect} />
+        <ConversationList
+          conversations={conversations}
+          selectedId={selectedId}
+          onSelect={handleSelect}
+          onSearch={handleSearch}
+          searching={searching}
+        />
       </div>
 
       {/* DETALHE — painel no desktop; overlay full-screen no mobile */}

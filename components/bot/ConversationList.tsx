@@ -1,7 +1,7 @@
 'use client'
 import { formatBrazilianPhone } from '@/lib/phone'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import {
@@ -18,6 +18,7 @@ import {
   type InboxFilter,
   type InboxSort,
 } from '@/lib/bot/inbox'
+import { matchesConversationQuery } from '@/lib/bot/conversation-search'
 import { InitialsAvatar } from './InitialsAvatar'
 import type { ExternalRequestView } from './ExternalRequestCard'
 
@@ -50,6 +51,10 @@ interface ConversationListProps {
   conversations: ConversationListItem[]
   selectedId: string | null
   onSelect: (id: string) => void
+  // Busca no banco (a lista só tem as conversas mais recentes). Chamada com
+  // atraso enquanto a pessoa digita; o resultado entra em `conversations`.
+  onSearch?: (query: string) => void
+  searching?: boolean
 }
 
 const FILTERS: { key: InboxFilter; label: string }[] = [
@@ -76,10 +81,17 @@ function shortDate(iso: string | null) {
     : d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })
 }
 
-export function ConversationList({ conversations, selectedId, onSelect }: ConversationListProps) {
+export function ConversationList({ conversations, selectedId, onSelect, onSearch, searching = false }: ConversationListProps) {
   const [filter, setFilter] = useState<InboxFilter>('all')
   const [sort, setSort] = useState<InboxSort>('recent')
   const [query, setQuery] = useState('')
+
+  useEffect(() => {
+    const q = query.trim()
+    if (!onSearch || !q) return
+    const timer = setTimeout(() => onSearch(q), 300)
+    return () => clearTimeout(timer)
+  }, [query, onSearch])
 
   const counts = useMemo(
     () =>
@@ -91,16 +103,11 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
   )
 
   const visible = useMemo(() => {
-    const q = query.trim().toLowerCase()
+    const q = query.trim()
     const list = conversations.filter((c) => {
       if (!matchesFilter(c, filter)) return false
       if (!q) return true
-      return (
-        (c.patient_name ?? '').toLowerCase().includes(q) ||
-        (c.patient_whatsapp_name ?? '').toLowerCase().includes(q) ||
-        (c.patient_phone ?? '').includes(q.replace(/\D/g, '') || q) ||
-        formatBrazilianPhone(c.patient_phone ?? '').includes(q)
-      )
+      return matchesConversationQuery(c, q)
     })
     return sortConversations(list, sort)
   }, [conversations, filter, sort, query])
@@ -158,7 +165,7 @@ export function ConversationList({ conversations, selectedId, onSelect }: Conver
 
       {visible.length === 0 ? (
         <p className="p-6 text-center text-sm text-gray-400">
-          {query.trim() ? 'Nenhuma conversa encontrada.' : 'Nenhuma conversa nesta aba.'}
+          {!query.trim() ? 'Nenhuma conversa nesta aba.' : searching ? 'Buscando…' : 'Nenhuma conversa encontrada.'}
         </p>
       ) : (
         <ul className="min-h-0 flex-1 overflow-y-auto">
