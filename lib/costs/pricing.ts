@@ -14,14 +14,27 @@ interface ModelPrice {
   inputPerMTok: number
   /** USD por 1M tokens de saída. */
   outputPerMTok: number
+  /** USD por 1M tokens lidos do cache. Ausente = 10% da entrada (padrão da Anthropic). */
+  cacheReadPerMTok?: number
 }
+
+/** Entrada que passou pelo cache de prompt, separada por tipo de cobrança. */
+export interface ClaudeCacheTokens {
+  readTokens?: number
+  write5mTokens?: number
+  write1hTokens?: number
+}
+
+// Gravar no cache custa mais que a entrada normal; o de 1 h custa o dobro.
+const CACHE_WRITE_5M_MULTIPLIER = 1.25
+const CACHE_WRITE_1H_MULTIPLIER = 2
 
 // Preços da API da Anthropic, em USD por 1M tokens. `claude-opus-5` é o modelo
 // do interpretador financeiro (lib/finance/interpret.ts); `claude-sonnet-5-5`
 // é o da Clara (lib/llm/agent-reply.ts); `claude-sonnet-4-5` é o das demais.
 const CLAUDE_PRICES: Record<string, ModelPrice> = {
   'claude-sonnet-4-5': { inputPerMTok: 3, outputPerMTok: 15 },
-  'claude-sonnet-5-5': { inputPerMTok: 2, outputPerMTok: 10 },
+  'claude-sonnet-5-5': { inputPerMTok: 2, outputPerMTok: 10, cacheReadPerMTok: 0.1 },
   'claude-opus-5': { inputPerMTok: 5, outputPerMTok: 25 },
 }
 
@@ -35,10 +48,25 @@ export function isKnownClaudeModel(model: string): boolean {
   return model in CLAUDE_PRICES
 }
 
-/** Custo em USD de uma chamada ao Claude, a partir do usage da resposta. */
-export function claudeCostUsd(model: string, inputTokens: number, outputTokens: number): number {
+/**
+ * Custo em USD de uma chamada ao Claude, a partir do usage da resposta.
+ * `inputTokens` é só a entrada sem cache; o que passou pelo cache vem em `cache`.
+ */
+export function claudeCostUsd(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+  cache: ClaudeCacheTokens = {}
+): number {
   const price = CLAUDE_PRICES[model] ?? FALLBACK_PRICE
-  return (inputTokens / 1_000_000) * price.inputPerMTok + (outputTokens / 1_000_000) * price.outputPerMTok
+  const readPrice = price.cacheReadPerMTok ?? price.inputPerMTok * 0.1
+  return (
+    (inputTokens / 1_000_000) * price.inputPerMTok +
+    (outputTokens / 1_000_000) * price.outputPerMTok +
+    ((cache.readTokens ?? 0) / 1_000_000) * readPrice +
+    ((cache.write5mTokens ?? 0) / 1_000_000) * price.inputPerMTok * CACHE_WRITE_5M_MULTIPLIER +
+    ((cache.write1hTokens ?? 0) / 1_000_000) * price.inputPerMTok * CACHE_WRITE_1H_MULTIPLIER
+  )
 }
 
 // Whisper (OpenAI) cobra por minuto de áudio, arredondado ao segundo.

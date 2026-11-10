@@ -1228,6 +1228,8 @@ export interface Database {
           phone_number_id: string | null
           meta_token: string | null
           waba_id: string | null
+          // Dataset da Conversions API ligado ao WABA, criado no primeiro envio.
+          meta_dataset_id: string | null
           whatsapp_pin: string | null
           number_source: NumberSource
           onboarding_step: OnboardingStep
@@ -1367,6 +1369,38 @@ export interface Database {
             foreignKeyName: 'lead_attributions_conversation_id_fkey'
             columns: ['conversation_id']
             referencedRelation: 'conversations'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      meta_conversion_events: {
+        Row: {
+          id: string
+          account_id: string
+          appointment_id: string | null
+          // appt:<appointment_id> ou ext:<conversation_id>:<AAAA-MM-DD>
+          dedup_key: string
+          event_name: string
+          ctwa_clid: string
+          event_time: string
+          status: 'pending' | 'sent' | 'failed'
+          attempts: number
+          last_error: string | null
+          sent_at: string | null
+          created_at: string
+        }
+        Insert: Partial<Database['public']['Tables']['meta_conversion_events']['Row']> & {
+          account_id: string
+          dedup_key: string
+          ctwa_clid: string
+          event_time: string
+        }
+        Update: Partial<Database['public']['Tables']['meta_conversion_events']['Row']>
+        Relationships: [
+          {
+            foreignKeyName: 'meta_conversion_events_account_id_fkey'
+            columns: ['account_id']
+            referencedRelation: 'accounts'
             referencedColumns: ['id']
           },
         ]

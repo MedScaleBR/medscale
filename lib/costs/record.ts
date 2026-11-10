@@ -3,6 +3,7 @@ import { createAdminClient } from '@/lib/supabase/server'
 import {
   USD_BRL,
   claudeCostUsd,
+  type ClaudeCacheTokens,
   isKnownClaudeModel,
   toBrl,
   whatsappConversationCostBrl,
@@ -67,8 +68,20 @@ async function insertCostEvent(input: RecordCostInput): Promise<void> {
 
 /** Formato mínimo do usage da resposta do Claude — evita acoplar ao SDK. */
 export interface ClaudeUsage {
+  /** Só a entrada sem cache. */
   input_tokens?: number | null
   output_tokens?: number | null
+  cache_read_input_tokens?: number | null
+  cache_creation_input_tokens?: number | null
+  cache_creation?: { ephemeral_5m_input_tokens?: number | null; ephemeral_1h_input_tokens?: number | null } | null
+}
+
+/** Separa a entrada gravada no cache por TTL. Sem a quebra, cobra como 5 min. */
+export function claudeCacheTokens(usage: ClaudeUsage | null | undefined): ClaudeCacheTokens {
+  const written = usage?.cache_creation_input_tokens ?? 0
+  const write1hTokens = usage?.cache_creation?.ephemeral_1h_input_tokens ?? 0
+  const write5mTokens = usage?.cache_creation ? (usage.cache_creation.ephemeral_5m_input_tokens ?? 0) : written
+  return { readTokens: usage?.cache_read_input_tokens ?? 0, write5mTokens, write1hTokens }
 }
 
 /**
@@ -86,13 +99,18 @@ export async function recordClaudeCost(params: {
   /** Dado técnico extra (ex.: origem do simulador). Nunca conteúdo de paciente. */
   metadata?: Record<string, unknown>
 }): Promise<void> {
-  const inputTokens = params.usage?.input_tokens ?? 0
+  const uncachedTokens = params.usage?.input_tokens ?? 0
   const outputTokens = params.usage?.output_tokens ?? 0
+  const cache = claudeCacheTokens(params.usage)
+  const cacheWriteTokens = (cache.write5mTokens ?? 0) + (cache.write1hTokens ?? 0)
+  // Entrada total da chamada, com e sem cache — mantém a coluna comparável com
+  // as linhas de antes do cache.
+  const inputTokens = uncachedTokens + (cache.readTokens ?? 0) + cacheWriteTokens
   // Resposta sem usage não gera linha: zero token registrado seria indistinguível
   // de uma chamada barata de verdade e sujaria a média por conversa.
   if (inputTokens === 0 && outputTokens === 0) return
 
-  const usd = claudeCostUsd(params.model, inputTokens, outputTokens)
+  const usd = claudeCostUsd(params.model, uncachedTokens, outputTokens, cache)
 
   await insertCostEvent({
     ...params.ctx,
@@ -107,6 +125,9 @@ export async function recordClaudeCost(params: {
       usd,
       fx: USD_BRL,
       ...(params.stage ? { stage: params.stage } : {}),
+      ...(cache.readTokens || cacheWriteTokens
+        ? { cache_read_tokens: cache.readTokens ?? 0, cache_write_tokens: cacheWriteTokens }
+        : {}),
       // Marca o custo calculado por fallback — no painel, um preço de modelo
       // desconhecido é a explicação mais provável de um número fora da curva.
       ...(isKnownClaudeModel(params.model) ? {} : { unknown_model: true }),

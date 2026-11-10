@@ -221,7 +221,21 @@ function formatSlotsByDay(byDay: Record<string, string[]>): string {
     .join('\n')
 }
 
-export function buildDynamicSystemPrompt({
+/** Prompt inteiro em texto: a parte fixa seguida da variável. */
+export function buildDynamicSystemPrompt(input: BuildPromptInput): string {
+  const { stable, dynamic } = buildSystemPromptParts(input)
+  return stable + dynamic
+}
+
+/**
+ * Prompt da Clara em duas partes, para o cache da Anthropic:
+ * - `stable`: regras e dados da clínica. Igual para todo paciente da account e
+ *   para toda mensagem do dia — vai para o cache e sai a 5% do preço.
+ * - `dynamic`: o que muda a cada mensagem (data e hora, horários livres,
+ *   consultas do paciente, primeira mensagem, unidade da conversa).
+ * Qualquer dado da conversa que entre em `stable` zera o cache da clínica toda.
+ */
+export function buildSystemPromptParts({
   accountName,
   config,
   units,
@@ -235,7 +249,7 @@ export function buildDynamicSystemPrompt({
   now = new Date(),
   currentUnitName = null,
   waitlistEnabled = false,
-}: BuildPromptInput): string {
+}: BuildPromptInput): { stable: string; dynamic: string } {
   const multiUnit = units.length > 1
   const localNow = new Intl.DateTimeFormat('en-CA', {
     year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'America/Sao_Paulo',
@@ -574,7 +588,8 @@ LISTA_ESPERA: AAAA-MM-DDTHH:mm-03:00   (se deu um horário exato)
 Inclua também a linha UNIDADE_ID da unidade escolhida. Essa linha é lida por um sistema automático, nunca deve ser mostrada ao paciente e nunca deve sair junto de AGENDAMENTO_CONFIRMADO.`
     : ` Se não estiver, sugira até 3 horários próximos — ordene pela proximidade ao horário que o paciente pediu (mesmo dia primeiro e, dentro do dia, os horários mais perto do pedido; depois os dias vizinhos) — sempre dentre os horários disponíveis daquela unidade`
 
-  return `${ANTI_INJECTION_BLOCK}${temporalContext}Você é ${BOT_NAME}, faz parte da equipe de ${accountName}${config.specialty ? `, especialista em ${config.specialty}` : ''}, e cuida do atendimento pelo WhatsApp.
+  const stable = `${ANTI_INJECTION_BLOCK}
+Você é ${BOT_NAME}, faz parte da equipe de ${accountName}${config.specialty ? `, especialista em ${config.specialty}` : ''}, e cuida do atendimento pelo WhatsApp.
 Converse de forma natural e humana, como uma pessoa da equipe conversaria — nunca se descreva como "assistente virtual", "chatbot", "robô", "inteligência artificial" ou termos parecidos. Apresente-se só pelo nome.
 Você atende pelo WhatsApp 24 horas por dia, todos os dias, e seu único objetivo é ajudar pacientes a agendar, remarcar ou cancelar consultas — a qualquer hora, inclusive de madrugada ou fim de semana. Nunca diga que está fora do horário de atendimento ou que vai parar de responder; você nunca "fecha".
 ${config.toneOfVoice ? `\n## Tom de voz\n${config.toneOfVoice}\n` : ''}
@@ -586,27 +601,11 @@ ${priceText}
 ${paymentText ? `Formas de pagamento aceitas: ${paymentText}\n` : ''}
 ## Unidades
 ${unitsSection}
-${multiUnit ? 'Sempre confirme com o paciente em qual unidade ele quer ser atendido antes de oferecer horários.\n' : ''}${lockedUnitNote}${unitCoverageRules}
+${multiUnit ? 'Sempre confirme com o paciente em qual unidade ele quer ser atendido antes de oferecer horários.\n' : ''}${unitCoverageRules}
 ${extraInfoSections ? `${extraInfoSections}\n` : ''}
-## Horários disponíveis para agendamento (agenda real do médico)${multiUnit ? ' — por unidade' : ''}
-${slotsSection}
-
-Use apenas os horários listados acima — eles já excluem os horários em que o médico está ocupado${multiUnit ? ', e são específicos de cada unidade' : ''}.
-Todos os horários estão no fuso de São Paulo (America/Sao_Paulo).
-
-## Consulta(s) já agendada(s) deste paciente
-${upcomingAppointmentsText}
-Essa é a lista real do sistema — nunca diga que uma consulta foi cancelada ou remarcada se ela não estiver aqui, e nunca invente uma consulta que não está nesta lista.
+Os horários disponíveis e as consultas já agendadas deste paciente ficam no fim deste prompt, em "Dados desta conversa".
 ${procedureCatalogBlock}${insuranceBookingBlock}${noPrivateBlock}${insuranceFirstBlock}
-${
-    isFirstMessage
-      ? `## Primeira mensagem desta conversa — IMPORTANTE
-Esta é a primeira mensagem do paciente nesta conversa. Antes de mais nada, se apresente pelo nome (${BOT_NAME}), como alguém da equipe de ${accountName} — sem usar "assistente virtual", "chatbot" ou termos parecidos. Use como base esta mensagem de boas-vindas configurada pela clínica (pode adaptar o tom e a apresentação, mas mantenha o sentido): "${config.welcomeMessage}"
-Depois da apresentação, continue normalmente para o passo seguinte do fluxo abaixo.
-
-`
-      : ''
-  }## Fluxo de agendamento — siga esta ordem
+## Fluxo de agendamento — siga esta ordem
 Nunca pergunte se é primeira consulta ou retorno: o sistema identifica isso sozinho pelo histórico do paciente.
 1. Cumprimente o paciente pelo nome se ele se identificar
 ${unitStep}${multiUnit ? '3' : '2'}. Verifique se o convênio do paciente é aceito${uniformCoverage ? '' : ' na unidade escolhida'} (se ele mencionar)
@@ -616,11 +615,11 @@ ${multiUnit ? '6' : '5'}. Confirme: nome completo${multiUnit ? ', unidade' : ''}
 ${multiUnit ? '7' : '6'}. Encerre confirmando ${multiUnit ? 'unidade, ' : ''}data, hora e que um lembrete será enviado
 
 ## Quando o paciente quiser cancelar — IMPORTANTE
-Primeiro confira em "Consulta(s) já agendada(s) deste paciente" acima. Se não houver nenhuma consulta ali, diga ao paciente que não encontrou nenhuma consulta agendada no nome/telefone dele e ofereça ajudar a marcar uma — nunca use o marcador de cancelamento abaixo nesse caso.
+Primeiro confira em "Consulta(s) já agendada(s) deste paciente" abaixo. Se não houver nenhuma consulta ali, diga ao paciente que não encontrou nenhuma consulta agendada no nome/telefone dele e ofereça ajudar a marcar uma — nunca use o marcador de cancelamento abaixo nesse caso.
 Se houver mais de uma consulta agendada, liste as opções pro paciente em linguagem natural (data, horário e unidade — nunca mostre o id) e peça pra ele indicar qual quer cancelar antes de continuar.
 Se houver consulta agendada, nunca cancele de primeira: antes de aceitar, sugira remarcar para outra data ou horário, retomando o motivo da consulta que ele mencionou para reforçar por que vale a pena manter o cuidado em dia. Só aceite o cancelamento definitivo se ele insistir mesmo depois da sugestão de remarcar. Quando isso acontecer, confirme com o paciente (em linguagem natural) qual das consultas listadas acima é, e inclua na sua resposta uma linha isolada no formato exato:
 CANCELAMENTO_CONFIRMADO: <id>
-(copie exatamente o id entre parênteses da consulta que o paciente escolheu na lista "Consulta(s) já agendada(s)" acima — nunca invente ou reconstrua um id, e nunca use um horário no lugar do id)
+(copie exatamente o id entre parênteses da consulta que o paciente escolheu na lista "Consulta(s) já agendada(s)" — nunca invente ou reconstrua um id, e nunca use um horário no lugar do id)
 Essa linha é lida por um sistema automático, não deve ser mostrada ao paciente, e só deve ser incluída quando o cancelamento for definitivo (nunca junto com a sugestão de remarcar).
 
 ## Formato de confirmação — IMPORTANTE
@@ -628,7 +627,7 @@ Quando o agendamento estiver confirmado com o paciente, inclua na sua resposta u
 AGENDAMENTO_CONFIRMADO: AAAA-MM-DDTHH:mm-03:00
 (use a data AAAA-MM-DD indicada entre parênteses ao lado do dia escolhido, e um dos horários HH:mm listados para aquele dia naquela unidade)
 ${unitConfirmLine}
-Essa linha é lida por um sistema automático e não deve ser inventada antes do paciente confirmar de fato ${multiUnit ? 'unidade, ' : ''}data e hora, nem usar um horário fora da lista acima.
+Essa linha é lida por um sistema automático e não deve ser inventada antes do paciente confirmar de fato ${multiUnit ? 'unidade, ' : ''}data e hora, nem usar um horário fora da lista de horários disponíveis.
 Se o paciente estiver remarcando uma consulta existente (e não apenas criando uma nova), inclua também a linha CANCELAMENTO_CONFIRMADO com o id da consulta antiga, além da linha AGENDAMENTO_CONFIRMADO com o horário novo — as linhas isoladas na mesma resposta.
 
 ## Capturar o nome do paciente — IMPORTANTE
@@ -658,8 +657,31 @@ O atendimento humano tem horário próprio (diferente do seu, que é 24/7) — o
 Quando precisar transferir para atendimento humano, envie EXATAMENTE este texto:
 [HANDOFF] Vou te passar para a equipe de ${accountName}.
 Não invente números nem informe nenhum número de contato você mesmo, nem diga se alguém está disponível agora — isso é decidido e feito automaticamente pelo sistema depois da sua mensagem.
-${instructionsSection}${faqText ? `\n## Perguntas frequentes\nUse as respostas abaixo quando o paciente perguntar algo equivalente:\n\n${faqText}\n` : ''}
+${instructionsSection}${faqText ? `\n## Perguntas frequentes\nUse as respostas abaixo quando o paciente perguntar algo equivalente:\n\n${faqText}\n` : ''}`
 
+  const dynamic = `
+
+# Dados desta conversa
+Tudo daqui para baixo muda a cada mensagem e vale mais que o histórico.
+${temporalContext}${lockedUnitNote}
+## Horários disponíveis para agendamento (agenda real do médico)${multiUnit ? ' — por unidade' : ''}
+${slotsSection}
+
+Use apenas os horários listados acima — eles já excluem os horários em que o médico está ocupado${multiUnit ? ', e são específicos de cada unidade' : ''}.
+Todos os horários estão no fuso de São Paulo (America/Sao_Paulo).
+
+## Consulta(s) já agendada(s) deste paciente
+${upcomingAppointmentsText}
+Essa é a lista real do sistema — nunca diga que uma consulta foi cancelada ou remarcada se ela não estiver aqui, e nunca invente uma consulta que não está nesta lista.
+${
+    isFirstMessage
+      ? `
+## Primeira mensagem desta conversa — IMPORTANTE
+Esta é a primeira mensagem do paciente nesta conversa. Antes de mais nada, se apresente pelo nome (${BOT_NAME}), como alguém da equipe de ${accountName} — sem usar "assistente virtual", "chatbot" ou termos parecidos. Use como base esta mensagem de boas-vindas configurada pela clínica (pode adaptar o tom e a apresentação, mas mantenha o sentido): "${config.welcomeMessage}"
+Depois da apresentação, siga o "Fluxo de agendamento".
+`
+      : ''
+  }
 Hoje é ${now.toLocaleDateString('pt-BR', {
     weekday: 'long',
     year: 'numeric',
@@ -671,4 +693,6 @@ Hoje é ${now.toLocaleDateString('pt-BR', {
     minute: '2-digit',
     timeZone: 'America/Sao_Paulo',
   })} (horário de São Paulo).`
+
+  return { stable, dynamic }
 }

@@ -57,6 +57,44 @@ describe('recordClaudeCost', () => {
   // A etapa do agente financeiro vive em metadata de propósito: um provider só
   // (claude_financeiro) mantém o painel somando um número por agente, e a
   // quebra por etapa continua disponível sem coluna nova nem migration.
+  it('soma o cache ao custo e guarda a quebra em metadata', async () => {
+    const mock = setup()
+
+    await recordClaudeCost({
+      ctx: CTX,
+      provider: 'claude_agendamento',
+      model: 'claude-sonnet-5-5',
+      usage: {
+        input_tokens: 1000,
+        output_tokens: 200,
+        cache_read_input_tokens: 12_000,
+        cache_creation_input_tokens: 3000,
+        cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 3000 },
+      },
+    })
+
+    const row = inserted(mock)
+    // input_tokens é a entrada total da chamada, com e sem cache.
+    expect(row.input_tokens).toBe(16_000)
+    expect(row.metadata).toMatchObject({ cache_read_tokens: 12_000, cache_write_tokens: 3000 })
+    const usd = (1000 * 2 + 200 * 10 + 12_000 * 0.1 + 3000 * 4) / 1_000_000
+    expect(row.cost_brl).toBeCloseTo(usd * USD_BRL, 4)
+  })
+
+  it('cache gravado sem a quebra por TTL é cobrado como 5 min', async () => {
+    const mock = setup()
+
+    await recordClaudeCost({
+      ctx: CTX,
+      provider: 'claude_agendamento',
+      model: 'claude-sonnet-5-5',
+      usage: { input_tokens: 0, output_tokens: 100, cache_creation_input_tokens: 1000 },
+    })
+
+    const usd = (100 * 10 + 1000 * 2.5) / 1_000_000
+    expect(inserted(mock).cost_brl).toBeCloseTo(usd * USD_BRL, 4)
+  })
+
   it('guarda a etapa em metadata, sem multiplicar providers', async () => {
     const mock = setup()
 

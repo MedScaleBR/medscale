@@ -51,8 +51,15 @@ import {
 
 /** System prompt enviado ao Claude na chamada mais recente. */
 function systemPrompt(): string {
-  const calls = claudeCreate.mock.calls as unknown as Array<[{ system: string }]>
-  return calls.at(-1)?.[0]?.system ?? ''
+  return systemBlocks().map((b) => b.text).join('')
+}
+
+type SystemBlock = { type: string; text: string; cache_control?: { type: string; ttl?: string } }
+
+/** Blocos do system prompt na chamada mais recente: fixo (com cache) e variável. */
+function systemBlocks(): SystemBlock[] {
+  const calls = claudeCreate.mock.calls as unknown as Array<[{ system: SystemBlock[] }]>
+  return calls.at(-1)?.[0]?.system ?? []
 }
 
 /** Mensagens da conversa enviadas ao Claude na chamada mais recente. */
@@ -443,6 +450,22 @@ describe('processIncomingMessage — montagem de contexto', () => {
     await processIncomingMessage(PARAMS)
 
     expect(systemPrompt()).not.toContain('Primeira mensagem desta conversa')
+  })
+
+  // A parte fixa vai em cache de 1 h; a variável vem depois, sem cache. Se a
+  // ordem inverter ou o marcador sumir, a Clara volta a pagar o prompt cheio.
+  it('manda a parte fixa do prompt em cache de 1 h e a variável depois, sem cache', async () => {
+    state.claudeResponses = ['Olá! Sou a Clara.']
+
+    await processIncomingMessage(PARAMS)
+
+    const [stable, dynamic] = systemBlocks()
+    expect(systemBlocks()).toHaveLength(2)
+    expect(stable.cache_control).toEqual({ type: 'ephemeral', ttl: '1h' })
+    expect(stable.text).toContain('## Fluxo de agendamento')
+    expect(dynamic.cache_control).toBeUndefined()
+    expect(dynamic.text).toContain('Data atual:')
+    expect(dynamic.text).toContain('Primeira mensagem desta conversa')
   })
 
   it('deve enviar o histórico ao Claude em ordem cronológica começando por uma mensagem do paciente', async () => {
