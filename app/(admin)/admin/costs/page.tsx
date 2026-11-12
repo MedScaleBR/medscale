@@ -180,6 +180,17 @@ export default async function AdminCostsPage({ searchParams }: { searchParams: P
                       {formatShare(account.share)}
                     </span>
                   </div>
+                  <ul
+                    aria-label={`Custo de ${account.name} por serviço`}
+                    className="mt-1 flex flex-wrap gap-x-4 pl-52 text-xs text-gray-500"
+                  >
+                    {PROVIDER_GROUP_ORDER.filter((group) => account.byGroup[group] > 0).map((group) => (
+                      <li key={group} className="flex items-center gap-1.5 whitespace-nowrap">
+                        <span aria-hidden className={`size-2 rounded-sm ${GROUP_BAR[group]}`} />
+                        {PROVIDER_GROUP_LABELS[group]} · {formatBRL(account.byGroup[group])}
+                      </li>
+                    ))}
+                  </ul>
                   {account.units.length > 1 && (
                     <ul
                       aria-label={`Unidades de ${account.name}`}
