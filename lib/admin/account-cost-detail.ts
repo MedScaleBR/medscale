@@ -40,3 +40,20 @@ export async function getAccountCostDetail(
     error: result.error,
   }
 }
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+/**
+ * Cliente da aba "Por cliente" a partir de ?account=. Vazio, repetido ou que
+ * não é uuid cai no cliente mais caro do período — um id inválido iria ao
+ * Postgres e voltaria como erro. Um uuid válido fora da lista é mantido: é um
+ * cliente sem custo no período, e a tela mostra o vazio dele.
+ */
+export function pickAccountId(
+  param: string | string[] | undefined,
+  accounts: { accountId: string }[],
+): string | null {
+  const first = Array.isArray(param) ? param[0] : param
+  if (first && UUID.test(first)) return first
+  return accounts[0]?.accountId ?? null
+}
