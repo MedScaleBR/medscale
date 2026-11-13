@@ -657,15 +657,28 @@ describe('handleUnsupportedMessage — mídia que a Clara não entende', () => {
     resetAgentHarness()
   })
 
-  it('deve registrar a mídia recebida e pedir texto ao paciente', async () => {
+  it('deve registrar a mídia recebida sem responder o paciente', async () => {
     const supabase = mergeSupabaseConfig({})
 
     await handleUnsupportedMessage(unsupportedParams)
 
     const inseridas = supabase.callsTo('messages', 'insert')
+    expect(inseridas).toHaveLength(1)
     expect(inseridas[0].payload).toMatchObject({ role: 'user', content: '[áudio recebido]' })
-    expect(lastSentMessage()).toContain('só consigo entender mensagens em texto')
+    expect(sendWhatsAppMessage).not.toHaveBeenCalled()
     expect(claudeCreate).not.toHaveBeenCalled()
+  })
+
+  it('deve enviar a resposta própria quando ela vier (ex.: áudio longo demais)', async () => {
+    const supabase = mergeSupabaseConfig({})
+
+    await handleUnsupportedMessage({ ...unsupportedParams, reply: 'Áudio passou de 2 minutos' })
+
+    expect(supabase.callsTo('messages', 'insert')[1].payload).toMatchObject({
+      role: 'assistant',
+      content: 'Áudio passou de 2 minutos',
+    })
+    expect(lastSentMessage()).toBe('Áudio passou de 2 minutos')
   })
 
   it('deve usar o rótulo genérico para um tipo de mídia desconhecido', async () => {
@@ -703,7 +716,7 @@ describe('handleUnsupportedMessage — mídia que a Clara não entende', () => {
     mergeSupabaseConfig({})
     state.botConfig = { ...DEFAULT_BOT_CONFIG, phoneNumberId: null, metaToken: null }
 
-    await handleUnsupportedMessage(unsupportedParams)
+    await handleUnsupportedMessage({ ...unsupportedParams, reply: 'Áudio passou de 2 minutos' })
 
     expect(sendWhatsAppMessage).not.toHaveBeenCalled()
   })
