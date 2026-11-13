@@ -125,3 +125,12 @@ export function presetRange(p: CalendarPreset, now: Date = new Date()): { from: 
     }
   }
 }
+
+/**
+ * "vs. período anterior" só faz sentido com dias completos: um intervalo que
+ * termina hoje compararia um dia pela metade com um dia cheio do anterior.
+ * Os atalhos 7/30/90 são janelas de N×24h, então comparam o mesmo tamanho.
+ */
+export function showPeriodChange(w: CostWindow, today: string): boolean {
+  return w.kind === 'days' || w.to < today
+}

@@ -14,8 +14,18 @@ import {
 import { presetRange, type CalendarPreset } from '@/lib/admin/cost-range'
 
 const MONTHS = [
-  'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-  'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro',
+  'Janeiro',
+  'Fevereiro',
+  'Março',
+  'Abril',
+  'Maio',
+  'Junho',
+  'Julho',
+  'Agosto',
+  'Setembro',
+  'Outubro',
+  'Novembro',
+  'Dezembro',
 ]
 const WEEKDAYS = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S']
 
@@ -67,7 +77,8 @@ function Month({
               className={cn(
                 'size-8 text-xs tabular-nums outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[var(--cyan)]',
                 state === 'normal' && 'rounded-[9px] text-gray-800 hover:bg-[var(--navy-06)]',
-                state === 'today' && 'rounded-[9px] text-gray-800 ring-1 ring-[var(--cyan)] ring-inset hover:bg-[var(--navy-06)]',
+                state === 'today' &&
+                  'rounded-[9px] text-gray-800 ring-1 ring-[var(--cyan)] ring-inset hover:bg-[var(--navy-06)]',
                 state === 'future' && 'cursor-not-allowed text-gray-300',
                 state === 'in' && 'bg-[var(--cyan)]/12 text-[var(--navy-dark)]',
                 state === 'start' && 'rounded-l-[9px] bg-[var(--navy-dark)] font-medium text-white',
@@ -87,12 +98,10 @@ export function DateRangeCalendar({
   initial,
   today,
   onApply,
-  onClose,
 }: {
   initial: Range | null
   today: string
   onApply: (r: Range) => void
-  onClose: () => void
 }) {
   const [draft, setDraft] = useState<RangeDraft>({ start: initial?.from ?? null, end: initial?.to ?? null })
   // Mostra o mês do fim escolhido (ou de hoje) à direita e o anterior à esquerda.
@@ -108,7 +117,6 @@ export function DateRangeCalendar({
     <div
       role="dialog"
       aria-label="Escolher período"
-      onKeyDown={(e) => e.key === 'Escape' && onClose()}
       className="absolute top-full right-0 z-30 mt-2 flex overflow-hidden rounded-2xl border border-[var(--navy-06)] bg-white shadow-[0_12px_32px_rgba(11,27,63,0.12)]"
     >
       <div className="w-36 border-r border-[var(--navy-06)] bg-[#fafbfd] p-2">
@@ -166,7 +174,11 @@ export function DateRangeCalendar({
 
         <div className="mt-3 flex items-center justify-between gap-4 border-t border-[var(--navy-06)] pt-3 text-xs">
           <span className={cn('text-gray-500', tooLong && 'text-red-500')}>
-            {tooLong ? 'Escolha no máximo 366 dias' : range ? rangeLabel(range) : 'Clique num dia ou em dois para um período'}
+            {tooLong
+              ? 'Escolha no máximo 366 dias'
+              : range
+                ? rangeLabel(range)
+                : 'Clique num dia ou em dois para um período'}
           </span>
           <span className="flex gap-1">
             <button

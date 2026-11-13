@@ -7,6 +7,7 @@ import {
   isSingleDay,
   costWindowQuery,
   presetRange,
+  showPeriodChange,
 } from '@/lib/admin/cost-range'
 
 // Quinta, 12/11/2026, 12:00 em São Paulo.
@@ -99,5 +100,16 @@ describe('costWindowQuery', () => {
       from: '2026-11-03',
       to: '2026-11-11',
     })
+  })
+})
+
+describe('showPeriodChange', () => {
+  it('esconde a variação quando o intervalo termina hoje (dia incompleto)', () => {
+    expect(showPeriodChange(parseCostWindow({ from: '2026-11-12', to: '2026-11-12' }, now), '2026-11-12')).toBe(false)
+    expect(showPeriodChange(parseCostWindow({ from: '2026-11-03', to: '2026-11-12' }, now), '2026-11-12')).toBe(false)
+  })
+  it('mostra para intervalos fechados e para 7/30/90', () => {
+    expect(showPeriodChange(parseCostWindow({ from: '2026-11-03', to: '2026-11-11' }, now), '2026-11-12')).toBe(true)
+    expect(showPeriodChange(windowFromDays(7, now), '2026-11-12')).toBe(true)
   })
 })

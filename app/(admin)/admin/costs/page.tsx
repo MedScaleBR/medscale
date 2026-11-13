@@ -4,7 +4,7 @@ import { CostAlertList } from '@/components/admin/CostAlertList'
 import { ClaraCacheTrendSection } from '@/components/admin/ClaraCacheTrendSection'
 import { getClaraCacheTrend } from '@/lib/admin/clara-cache-trend'
 import { getCostOverview, percentChange, type CostOverviewAccount } from '@/lib/admin/cost-alerts'
-import { costWindowQuery, parseCostWindow } from '@/lib/admin/cost-range'
+import { costWindowQuery, parseCostWindow, showPeriodChange } from '@/lib/admin/cost-range'
 import { getAccountCostDetail, pickAccountId } from '@/lib/admin/account-cost-detail'
 import { CostPeriodPicker } from '@/components/admin/costs/CostPeriodPicker'
 import { CostsTabs } from '@/components/admin/costs/CostsTabs'
@@ -94,7 +94,8 @@ export default async function AdminCostsPage({ searchParams }: { searchParams: P
   const supabase = await createClient()
   // A visão geral sempre carrega: a aba Por cliente usa os totais dela para a
   // faixa de clientes. Alertas e cache da Clara só na aba Geral.
-  const overview = await getCostOverview(supabase, window, now)
+  // A aba Por cliente não mostra variação: pula a consulta do período anterior.
+  const overview = await getCostOverview(supabase, window, now, { withPrevious: tab === 'geral' })
   const selectedId = tab === 'cliente' ? pickAccountId(params.account, overview.accounts) : null
 
   const [taskedRefs, claraTrend, clientDetail, selectedName] = await Promise.all([
@@ -113,7 +114,8 @@ export default async function AdminCostsPage({ searchParams }: { searchParams: P
   ])
 
   const total = overview.summary.total
-  const change = overview.previous ? percentChange(total, overview.previous.total) : null
+  const change =
+    overview.previous && showPeriodChange(window, today) ? percentChange(total, overview.previous.total) : null
   const maxAccountTotal = overview.accounts[0]?.total ?? 0
 
   return (

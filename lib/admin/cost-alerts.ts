@@ -33,7 +33,6 @@ export { COST_PERIODS, DEFAULT_COST_DAYS, normalizeCostDays } from '@/lib/admin/
 // SQL — não aumentar o limite.
 export const MAX_EVENTS = 50_000
 
-
 // Título curto do alerta para listas (fila, Kanban, tarefa criada a partir
 // dele). O `detail` continua sendo a frase com os números.
 export const COST_ALERT_TITLES: Record<CostAlertKind, string> = {
@@ -156,9 +155,12 @@ export async function getCostOverview(
   supabase: SupabaseClient<Database>,
   period: number | CostWindow = DEFAULT_COST_DAYS,
   now: Date = new Date(),
+  /** withPrevious: false pula a consulta do período anterior (a aba Por cliente não mostra variação). */
+  options: { withPrevious?: boolean } = {},
 ): Promise<CostOverview> {
   const window = toWindow(period, now)
   const previous = previousWindow(window, now)
+  const withPrevious = options.withPrevious ?? true
 
   // Tudo sai de cost_events: os dois sinais de bot mal configurado são
   // deriváveis do próprio custo, sem ler conversa nem telefone de paciente.
@@ -170,34 +172,33 @@ export async function getCostOverview(
           .from('cost_events')
           .select('provider, cost_brl, account_id, workspace_id, related_id, accounts(name), workspaces(name)')
           .gte('created_at', window.since)
-        return (window.until ? q.lt('created_at', window.until) : q)
-          .order('created_at')
-          .order('id')
-          .range(from, to)
+        return (window.until ? q.lt('created_at', window.until) : q).order('created_at').order('id').range(from, to)
       },
       { max: MAX_EVENTS },
     ),
-    fetchAllPages<CostTotalRow>(
-      (from, to) =>
-        supabase
-          .from('cost_events')
-          .select('provider, cost_brl')
-          .gte('created_at', previous.since)
-          .lt('created_at', previous.until)
-          .order('created_at')
-          .order('id')
-          .range(from, to),
-      { max: MAX_EVENTS },
-    ),
+    withPrevious
+      ? fetchAllPages<CostTotalRow>(
+          (from, to) =>
+            supabase
+              .from('cost_events')
+              .select('provider, cost_brl')
+              .gte('created_at', previous.since)
+              .lt('created_at', previous.until)
+              .order('created_at')
+              .order('id')
+              .range(from, to),
+          { max: MAX_EVENTS },
+        )
+      : null,
   ])
 
   // Período anterior truncado ou com erro daria uma variação falsa — melhor
   // não mostrar nenhuma.
-  const previousOk = !prior.error && !prior.truncated
+  const previousOk = prior !== null && !prior.error && !prior.truncated
 
   return buildCostOverview({
     events: current.rows as unknown as CostEventRow[],
-    previousEvents: previousOk ? prior.rows : null,
+    previousEvents: previousOk && prior ? prior.rows : null,
     window,
     now,
     truncated: current.truncated,

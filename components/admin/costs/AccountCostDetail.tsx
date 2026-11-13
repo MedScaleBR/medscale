@@ -67,7 +67,10 @@ function FeatureTable({ features, showShare }: { features: FeatureUsage[]; showS
           <tr key={f.feature}>
             <td className="py-2 text-gray-900">
               <span className="flex items-center gap-2">
-                <span aria-hidden className={`size-2 shrink-0 rounded-sm ${GROUP_DOT[COST_FEATURE_GROUP[f.feature]]}`} />
+                <span
+                  aria-hidden
+                  className={`size-2 shrink-0 rounded-sm ${GROUP_DOT[COST_FEATURE_GROUP[f.feature]]}`}
+                />
                 {COST_FEATURE_LABELS[f.feature]}
               </span>
             </td>
@@ -141,7 +144,9 @@ export function AccountCostDetailView({
 
       <section className={`${CARD} p-5`}>
         <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-sm font-medium text-gray-900">{detail.series.mode === 'hour' ? 'Por hora' : 'Por dia'}</h2>
+          <h2 className="text-sm font-medium text-gray-900">
+            {detail.series.mode === 'hour' ? 'Por hora' : 'Por dia'}
+          </h2>
           <ul className="flex items-center gap-4" aria-label="Legenda">
             {PROVIDER_GROUP_ORDER.map((g) => (
               <li key={g} className="flex items-center gap-1.5 text-xs whitespace-nowrap text-gray-500">
@@ -152,6 +157,13 @@ export function AccountCostDetailView({
           </ul>
         </div>
         <CostSeriesChart mode={detail.series.mode} points={detail.series.points} />
+        {detail.series.outside > 0 && detail.series.outsideBefore && (
+          <p className="mt-2 text-xs text-gray-400">
+            Mais {formatBRL(detail.series.outside)} antes de {detail.series.outsideBefore.slice(8, 10)}/
+            {detail.series.outsideBefore.slice(5, 7)} — o período começa no meio desse dia e entra no total, não nas
+            barras.
+          </p>
+        )}
       </section>
 
       <section className="space-y-3">
@@ -166,8 +178,7 @@ export function AccountCostDetailView({
                 )}
               </div>
               <p className="text-sm whitespace-nowrap text-gray-900 tabular-nums">
-                {formatBRL(u.total)}{' '}
-                <span className="text-xs text-gray-400">{share(u.total / detail.total)}</span>
+                {formatBRL(u.total)} <span className="text-xs text-gray-400">{share(u.total / detail.total)}</span>
               </p>
             </div>
             <FeatureTable features={u.features} showShare={false} />

@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { cn } from '@/lib/utils'
 import { formatBRL } from '@/lib/finance/summary'
+import { ScrollCurrentIntoView } from '@/components/admin/costs/ScrollCurrentIntoView'
 
 // Cor do círculo da inicial: estável por cliente, para o olho aprender.
 const AVATAR_COLORS = ['#00b8d4', '#7c4dff', '#ff7043', '#43a047', '#e53935', '#f9a825']
@@ -22,7 +23,12 @@ export function AccountStrip({
   hrefFor: (accountId: string) => string
 }) {
   return (
-    <nav aria-label="Clientes" className="overflow-x-auto rounded-xl bg-[var(--navy-dark)] p-1.5">
+    <nav
+      id="cost-account-strip"
+      aria-label="Clientes"
+      className="overflow-x-auto rounded-xl bg-[var(--navy-dark)] p-1.5"
+    >
+      <ScrollCurrentIntoView containerId="cost-account-strip" selectedId={selectedId} />
       <ul className="flex w-max gap-1">
         {accounts.map((a) => {
           const selected = a.accountId === selectedId

@@ -85,7 +85,14 @@ export interface AccountCostDetail {
   claraResponses: number
   conversations: number
   features: FeatureUsage[]
-  series: { mode: 'day' | 'hour'; points: SeriesPoint[] }
+  series: {
+    mode: 'day' | 'hour'
+    points: SeriesPoint[]
+    /** Custo do dia parcial antes da 1ª barra (atalhos 7/30/90 são N×24h, não N dias de calendário). */
+    outside: number
+    /** Dia da 1ª barra — o texto do gráfico diz "antes de" esse dia. */
+    outsideBefore: string | null
+  }
   units: UnitDetail[]
 }
 
@@ -179,7 +186,12 @@ function buildSeries(rows: AccountCostRow[], window: CostWindow, now: Date): Acc
       points.push(emptyPoint(key, `${key}h`))
     }
   } else {
-    const first = window.kind === 'custom' ? window.from : spDate(window.since)
+    // Atalho de N dias: N barras terminando hoje. A janela é N×24h, então começa
+    // no meio do dia anterior à 1ª barra — esse pedaço vai para `outside`.
+    const first =
+      window.kind === 'custom'
+        ? window.from
+        : new Date(Date.parse(`${spDate(now)}T00:00:00Z`) - (window.days - 1) * DAY_MS).toISOString().slice(0, 10)
     const last = window.kind === 'custom' ? window.to : spDate(now)
     for (let t = Date.parse(`${first}T00:00:00Z`); t <= Date.parse(`${last}T00:00:00Z`); t += DAY_MS) {
       const key = new Date(t).toISOString().slice(0, 10)
@@ -188,15 +200,24 @@ function buildSeries(rows: AccountCostRow[], window: CostWindow, now: Date): Acc
   }
 
   const byKey = new Map(points.map((p) => [p.key, p]))
+  let outside = 0
   for (const row of rows) {
-    const point = byKey.get(hourly ? spHour(row.created_at) : spDate(row.created_at))
-    if (!point) continue
     const cost = toNumber(row.cost_brl)
+    const point = byKey.get(hourly ? spHour(row.created_at) : spDate(row.created_at))
+    if (!point) {
+      outside += cost
+      continue
+    }
     point[PROVIDER_GROUP[row.provider]] += cost
     point.total += cost
   }
 
-  return { mode: hourly ? 'hour' : 'day', points }
+  return {
+    mode: hourly ? 'hour' : 'day',
+    points,
+    outside,
+    outsideBefore: hourly ? null : (points[0]?.key ?? null),
+  }
 }
 
 function buildUnits(rows: AccountCostRow[]): UnitDetail[] {

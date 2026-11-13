@@ -181,6 +181,15 @@ describe('getCostOverview — período', () => {
   })
 })
 
+describe('getCostOverview — sem período anterior', () => {
+  it('withPrevious false faz só a consulta do período e não calcula variação', async () => {
+    const s = createSupabaseMock({ cost_events: { select: { data: [] } } })
+    const overview = await getCostOverview(s.client as never, 30, NOW, { withPrevious: false })
+    expect(s.callsTo('cost_events', 'select')).toHaveLength(1)
+    expect(overview.previous).toBeNull()
+  })
+})
+
 describe('getCostOverview — paginação', () => {
   it('soma todos os eventos além de 1000 linhas, sem truncar', async () => {
     const events = Array.from({ length: 2500 }, (_, i) => event({ related_id: `conv${i}` }))

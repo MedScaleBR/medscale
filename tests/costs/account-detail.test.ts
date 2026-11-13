@@ -126,10 +126,25 @@ describe('buildAccountCostDetail — série', () => {
     expect(d.series.points[2]).toMatchObject({ claude: 1, whisper: 0.5, whatsapp: 0 })
   })
 
-  it('período em dias vai do primeiro ao último dia de São Paulo', () => {
+  it('7 dias mostra 7 barras terminando hoje', () => {
     const d = buildAccountCostDetail([], windowFromDays(7, now), now)
-    expect(d.series.points[0].key).toBe('2026-11-05')
+    expect(d.series.points).toHaveLength(7)
+    expect(d.series.points[0].key).toBe('2026-11-06')
     expect(d.series.points.at(-1)!.key).toBe('2026-11-12')
+    expect(d.series.outside).toBe(0)
+  })
+
+  it('custo do dia parcial antes da 1ª barra fica fora do gráfico e é informado', () => {
+    // since = 05/11 12:00 BRT; 05/11 15:00 BRT está no período mas antes da 1ª barra (06/11).
+    const d = buildAccountCostDetail(
+      [row({ created_at: '2026-11-05T18:00:00Z', cost_brl: 2 }), row({ created_at: '2026-11-06T18:00:00Z', cost_brl: 1 })],
+      windowFromDays(7, now),
+      now,
+    )
+    expect(d.series.outside).toBe(2)
+    expect(d.series.outsideBefore).toBe('2026-11-06')
+    expect(d.series.points[0].total).toBe(1)
+    expect(d.total).toBe(3)
   })
 
   it('um dia só vira série por hora', () => {

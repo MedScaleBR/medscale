@@ -34,8 +34,17 @@ export function CostPeriodPicker({
     const onDown = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
+    // No documento, não no popover: logo depois de abrir, o foco ainda está no
+    // botão do calendário, fora do popover.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
     document.addEventListener('mousedown', onDown)
-    return () => document.removeEventListener('mousedown', onDown)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('mousedown', onDown)
+      document.removeEventListener('keydown', onKey)
+    }
   }, [open])
 
   return (
@@ -81,7 +90,6 @@ export function CostPeriodPicker({
         <DateRangeCalendar
           initial={custom}
           today={today}
-          onClose={() => setOpen(false)}
           onApply={(r) => {
             setOpen(false)
             router.push(href(basePath, { ...extraQuery, from: r.from, to: r.to }))

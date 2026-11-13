@@ -36,20 +36,19 @@ export function CostSeriesChart({ mode, points }: { mode: 'day' | 'hour'; points
         />
         <Tooltip
           cursor={{ fill: 'var(--navy-06)' }}
-          formatter={(v, name) => [formatBRL(Number(v ?? 0)), PROVIDER_GROUP_LABELS[name as keyof typeof PROVIDER_GROUP_LABELS] ?? name]}
+          formatter={(v, name) => [
+            formatBRL(Number(v ?? 0)),
+            PROVIDER_GROUP_LABELS[name as keyof typeof PROVIDER_GROUP_LABELS] ?? name,
+          ]}
           labelFormatter={(label, payload) => {
             const total = payload?.[0]?.payload?.total ?? 0
             return `${label} · ${formatBRL(Number(total))}`
           }}
         />
-        {SERIES.map((s, i) => (
-          <Bar
-            key={s.key}
-            dataKey={s.key}
-            stackId="custo"
-            fill={s.fill}
-            radius={i === SERIES.length - 1 ? [4, 4, 0, 0] : undefined}
-          />
+        {/* Sem cantos arredondados: numa pilha, só a série do topo arredondaria, e o
+            topo muda de dia para dia (nem todo dia tem WhatsApp). */}
+        {SERIES.map((s) => (
+          <Bar key={s.key} dataKey={s.key} stackId="custo" fill={s.fill} />
         ))}
       </BarChart>
     </ResponsiveContainer>
