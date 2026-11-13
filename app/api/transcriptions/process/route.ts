@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
       ctx: { accountId: transcription.account_id, workspaceId: transcription.workspace_id },
       durationSeconds: transcription.duration_seconds ?? 0,
       transcriptionId: transcription_id,
+      source: 'consulta',
     })
 
     await trackTranscriptionCompleted(transcription.recorded_by, {

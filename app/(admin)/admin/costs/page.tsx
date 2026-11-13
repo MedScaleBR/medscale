@@ -16,7 +16,10 @@ import {
   PROVIDER_GROUP_ORDER,
   PROVIDER_LABELS,
   PROVIDER_ORDER,
+  WHISPER_SOURCE_LABELS,
+  WHISPER_SOURCE_ORDER,
   type ProviderGroup,
+  type WhisperSource,
 } from '@/lib/costs/aggregate'
 import { formatBRL } from '@/lib/finance/summary'
 
@@ -45,9 +48,19 @@ function formatShare(fraction: number): string {
 
 // Tooltip da barra: a quebra fina por agente/provedor que a barra de 3 grupos esconde.
 function providerBreakdown(account: CostOverviewAccount): string[] {
-  return PROVIDER_ORDER.filter((p) => account.byProvider[p] > 0).map(
-    (p) => `${PROVIDER_LABELS[p]}: ${formatBRL(account.byProvider[p])}`,
+  return PROVIDER_ORDER.filter((p) => account.byProvider[p] > 0).flatMap((p) =>
+    p === 'whisper'
+      ? whisperSplit(account.whisperBySource).map((s) => `Whisper ${s.label}: ${formatBRL(s.value)}`)
+      : [`${PROVIDER_LABELS[p]}: ${formatBRL(account.byProvider[p])}`],
   )
+}
+
+// Whisper dividido entre consulta gravada e áudio do paciente na Clara.
+function whisperSplit(bySource: Record<WhisperSource, number>): { label: string; value: number }[] {
+  return WHISPER_SOURCE_ORDER.filter((s) => bySource[s] > 0).map((s) => ({
+    label: WHISPER_SOURCE_LABELS[s],
+    value: bySource[s],
+  }))
 }
 
 function formatChange(change: number): string {
@@ -121,6 +134,13 @@ export default async function AdminCostsPage({ searchParams }: { searchParams: P
             {total > 0 && (
               <p className="mt-1 text-xs text-gray-400">{formatShare(overview.byGroup[group] / total)} do total</p>
             )}
+            {group === 'whisper' && overview.byGroup.whisper > 0 && (
+              <p className="mt-0.5 text-xs text-gray-400">
+                {whisperSplit(overview.summary.whisperBySource)
+                  .map((s) => `${s.label} ${formatBRL(s.value)}`)
+                  .join(' · ')}
+              </p>
+            )}
           </div>
         ))}
       </div>
@@ -188,6 +208,13 @@ export default async function AdminCostsPage({ searchParams }: { searchParams: P
                       <li key={group} className="flex items-center gap-1.5 whitespace-nowrap">
                         <span aria-hidden className={`size-2 rounded-sm ${GROUP_BAR[group]}`} />
                         {PROVIDER_GROUP_LABELS[group]} · {formatBRL(account.byGroup[group])}
+                        {group === 'whisper' && (
+                          <span className="text-gray-400">
+                            ({whisperSplit(account.whisperBySource)
+                              .map((s) => `${s.label} ${formatBRL(s.value)}`)
+                              .join(' · ')})
+                          </span>
+                        )}
                       </li>
                     ))}
                   </ul>

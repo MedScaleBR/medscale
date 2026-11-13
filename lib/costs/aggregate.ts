@@ -15,6 +15,27 @@ export const PROVIDER_LABELS: Record<CostProvider, string> = {
 
 export const PROVIDER_ORDER = Object.keys(PROVIDER_LABELS) as CostProvider[]
 
+// O Whisper tem duas origens com perfis bem diferentes: áudio curto do paciente
+// que a Clara transcreve no WhatsApp, e consulta inteira gravada pelo médico.
+// O áudio da Clara grava related_id null (não vira linha em transcriptions);
+// a consulta aponta para a transcription — é isso que separa as duas.
+export type WhisperSource = 'clara' | 'consulta'
+
+export const WHISPER_SOURCE_LABELS: Record<WhisperSource, string> = {
+  clara: 'Clara (áudio)',
+  consulta: 'Transcrição',
+}
+
+export const WHISPER_SOURCE_ORDER: WhisperSource[] = ['consulta', 'clara']
+
+export function whisperSourceOf(row: Pick<CostEventRow, 'related_id'>): WhisperSource {
+  return row.related_id ? 'consulta' : 'clara'
+}
+
+function emptyWhisperBySource(): Record<WhisperSource, number> {
+  return { clara: 0, consulta: 0 }
+}
+
 /** Uma linha de cost_events, só com o que a agregação usa. */
 export interface CostEventRow {
   provider: CostProvider
@@ -37,12 +58,14 @@ export interface AccountCost {
   name: string
   total: number
   byProvider: Record<CostProvider, number>
+  whisperBySource: Record<WhisperSource, number>
   units: UnitCost[]
 }
 
 export interface CostSummary {
   total: number
   byProvider: Record<CostProvider, number>
+  whisperBySource: Record<WhisperSource, number>
   accounts: AccountCost[]
 }
 
@@ -64,6 +87,7 @@ export const NO_UNIT_LABEL = 'Sem unidade'
 
 export function summarizeCosts(rows: CostEventRow[]): CostSummary {
   const byProvider = emptyByProvider()
+  const whisperBySource = emptyWhisperBySource()
   const accounts = new Map<string, AccountCost>()
   const units = new Map<string, Map<string, UnitCost>>()
   let total = 0
@@ -72,6 +96,8 @@ export function summarizeCosts(rows: CostEventRow[]): CostSummary {
     const cost = toNumber(row.cost_brl)
     total += cost
     if (row.provider in byProvider) byProvider[row.provider] += cost
+    const whisperSource = row.provider === 'whisper' ? whisperSourceOf(row) : null
+    if (whisperSource) whisperBySource[whisperSource] += cost
 
     let account = accounts.get(row.account_id)
     if (!account) {
@@ -80,6 +106,7 @@ export function summarizeCosts(rows: CostEventRow[]): CostSummary {
         name: row.accounts?.name ?? 'Cliente removido',
         total: 0,
         byProvider: emptyByProvider(),
+        whisperBySource: emptyWhisperBySource(),
         units: [],
       }
       accounts.set(row.account_id, account)
@@ -87,6 +114,7 @@ export function summarizeCosts(rows: CostEventRow[]): CostSummary {
     }
     account.total += cost
     if (row.provider in account.byProvider) account.byProvider[row.provider] += cost
+    if (whisperSource) account.whisperBySource[whisperSource] += cost
 
     const unitKey = row.workspace_id ?? '__none__'
     const accountUnits = units.get(row.account_id)!
@@ -109,6 +137,7 @@ export function summarizeCosts(rows: CostEventRow[]): CostSummary {
   return {
     total,
     byProvider,
+    whisperBySource,
     accounts: [...accounts.values()].sort((a, b) => b.total - a.total),
   }
 }

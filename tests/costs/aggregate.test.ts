@@ -40,6 +40,21 @@ describe('summarizeCosts', () => {
     ])
   })
 
+  // O áudio do paciente no WhatsApp grava related_id null (não vira linha em
+  // transcriptions); a transcrição de consulta aponta para a transcription.
+  it('separa o Whisper entre áudio da Clara e transcrição de consulta', () => {
+    const summary = summarizeCosts([
+      event({ provider: 'whisper', cost_brl: 0.25, related_id: null }),
+      event({ provider: 'whisper', cost_brl: 0.75, related_id: 'tr1' }),
+      event({ provider: 'whisper', cost_brl: 2, related_id: 'tr2', account_id: 'acc2', accounts: { name: 'B' } }),
+      event({ provider: 'claude_agendamento', cost_brl: 9, related_id: null }),
+    ])
+
+    expect(summary.whisperBySource).toEqual({ clara: 0.25, consulta: 2.75 })
+    const a = summary.accounts.find((x) => x.accountId === 'acc1')!
+    expect(a.whisperBySource).toEqual({ clara: 0.25, consulta: 0.75 })
+  })
+
   it('ordena clientes do mais caro para o mais barato', () => {
     const summary = summarizeCosts([
       event({ cost_brl: 1, account_id: 'a', accounts: { name: 'Barato' } }),
