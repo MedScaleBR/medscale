@@ -13,14 +13,14 @@ import {
   type ProviderGroup,
 } from '@/lib/costs/aggregate'
 import { fetchAllPages } from '@/lib/supabase/paginate'
+import { DEFAULT_COST_DAYS } from '@/lib/admin/cost-range'
 
 // Visão de custos do /admin: a consulta a cost_events que antes vivia na
 // página de custos, mais o que o dashboard e a fila precisam (grupos de
 // provedor, período anterior, ref estável de cada alerta). A parte pura fica
 // em buildCostOverview para ser testada sem Supabase.
 
-export const COST_PERIODS = [7, 30, 90] as const
-export const DEFAULT_COST_DAYS = 30
+export { COST_PERIODS, DEFAULT_COST_DAYS, normalizeCostDays } from '@/lib/admin/cost-range'
 
 // Teto de segurança: o painel agrega em memória (lendo em blocos de 1000, ver
 // fetchAllPages). Se algum dia bater neste número, a agregação precisa virar
@@ -86,11 +86,6 @@ export function saoPauloMonth(now: Date): string {
 // seguinte, sem duplicar dentro do mês (índice único em source_type+source_ref).
 export function costAlertRef(alert: Pick<CostAlert, 'kind' | 'accountId'>, now: Date): string {
   return `${alert.kind}:${alert.accountId}:${saoPauloMonth(now)}`
-}
-
-export function normalizeCostDays(value: string | number | null | undefined): number {
-  const n = Number(value)
-  return COST_PERIODS.includes(n as (typeof COST_PERIODS)[number]) ? n : DEFAULT_COST_DAYS
 }
 
 export function sumCostTotals(rows: CostTotalRow[]): CostPeriodTotals {
