@@ -13,21 +13,25 @@ import {
   type ProviderGroup,
 } from '@/lib/costs/aggregate'
 import { fetchAllPages } from '@/lib/supabase/paginate'
+import {
+  DEFAULT_COST_DAYS,
+  previousWindow,
+  windowDayCount,
+  windowFromDays,
+  type CostWindow,
+} from '@/lib/admin/cost-range'
 
 // Visão de custos do /admin: a consulta a cost_events que antes vivia na
 // página de custos, mais o que o dashboard e a fila precisam (grupos de
 // provedor, período anterior, ref estável de cada alerta). A parte pura fica
 // em buildCostOverview para ser testada sem Supabase.
 
-export const COST_PERIODS = [7, 30, 90] as const
-export const DEFAULT_COST_DAYS = 30
+export { COST_PERIODS, DEFAULT_COST_DAYS, normalizeCostDays } from '@/lib/admin/cost-range'
 
 // Teto de segurança: o painel agrega em memória (lendo em blocos de 1000, ver
 // fetchAllPages). Se algum dia bater neste número, a agregação precisa virar
 // SQL — não aumentar o limite.
 export const MAX_EVENTS = 50_000
-
-const DAY_MS = 24 * 60 * 60 * 1000
 
 // Título curto do alerta para listas (fila, Kanban, tarefa criada a partir
 // dele). O `detail` continua sendo a frase com os números.
@@ -55,7 +59,9 @@ export interface CostPeriodTotals {
 }
 
 export interface CostOverview {
+  /** Dias do período (N, ou dias do intervalo personalizado). */
   days: number
+  window: CostWindow
   /** Início do período, ISO. */
   since: string
   summary: CostSummary
@@ -88,11 +94,6 @@ export function costAlertRef(alert: Pick<CostAlert, 'kind' | 'accountId'>, now: 
   return `${alert.kind}:${alert.accountId}:${saoPauloMonth(now)}`
 }
 
-export function normalizeCostDays(value: string | number | null | undefined): number {
-  const n = Number(value)
-  return COST_PERIODS.includes(n as (typeof COST_PERIODS)[number]) ? n : DEFAULT_COST_DAYS
-}
-
 export function sumCostTotals(rows: CostTotalRow[]): CostPeriodTotals {
   const byProvider = {} as Record<CostProvider, number>
   let total = 0
@@ -113,12 +114,12 @@ export function percentChange(current: number, previous: number | null | undefin
 export function buildCostOverview(input: {
   events: CostEventRow[]
   previousEvents: CostTotalRow[] | null
-  days: number
+  window: CostWindow
   now: Date
   truncated?: boolean
   error?: string | null
 }): CostOverview {
-  const { events, previousEvents, days, now } = input
+  const { events, previousEvents, window, now } = input
   const summary = summarizeCosts(events)
   const byGroup = groupByProviderGroup(summary.byProvider)
 
@@ -133,8 +134,9 @@ export function buildCostOverview(input: {
   )
 
   return {
-    days,
-    since: new Date(now.getTime() - days * DAY_MS).toISOString(),
+    days: windowDayCount(window),
+    window,
+    since: window.since,
     summary,
     byGroup,
     accounts,
@@ -145,51 +147,59 @@ export function buildCostOverview(input: {
   }
 }
 
+function toWindow(period: number | CostWindow, now: Date): CostWindow {
+  return typeof period === 'number' ? windowFromDays(period, now) : period
+}
+
 export async function getCostOverview(
   supabase: SupabaseClient<Database>,
-  days: number = DEFAULT_COST_DAYS,
+  period: number | CostWindow = DEFAULT_COST_DAYS,
   now: Date = new Date(),
+  /** withPrevious: false pula a consulta do período anterior (a aba Por cliente não mostra variação). */
+  options: { withPrevious?: boolean } = {},
 ): Promise<CostOverview> {
-  const since = new Date(now.getTime() - days * DAY_MS).toISOString()
-  const previousSince = new Date(now.getTime() - 2 * days * DAY_MS).toISOString()
+  const window = toWindow(period, now)
+  const previous = previousWindow(window, now)
+  const withPrevious = options.withPrevious ?? true
 
   // Tudo sai de cost_events: os dois sinais de bot mal configurado são
   // deriváveis do próprio custo, sem ler conversa nem telefone de paciente.
   // Paginado (o PostgREST corta em 1000 linhas) com ordem estável.
-  const [current, previous] = await Promise.all([
+  const [current, prior] = await Promise.all([
     fetchAllPages(
-      (from, to) =>
-        supabase
+      (from, to) => {
+        const q = supabase
           .from('cost_events')
           .select('provider, cost_brl, account_id, workspace_id, related_id, accounts(name), workspaces(name)')
-          .gte('created_at', since)
-          .order('created_at')
-          .order('id')
-          .range(from, to),
+          .gte('created_at', window.since)
+        return (window.until ? q.lt('created_at', window.until) : q).order('created_at').order('id').range(from, to)
+      },
       { max: MAX_EVENTS },
     ),
-    fetchAllPages<CostTotalRow>(
-      (from, to) =>
-        supabase
-          .from('cost_events')
-          .select('provider, cost_brl')
-          .gte('created_at', previousSince)
-          .lt('created_at', since)
-          .order('created_at')
-          .order('id')
-          .range(from, to),
-      { max: MAX_EVENTS },
-    ),
+    withPrevious
+      ? fetchAllPages<CostTotalRow>(
+          (from, to) =>
+            supabase
+              .from('cost_events')
+              .select('provider, cost_brl')
+              .gte('created_at', previous.since)
+              .lt('created_at', previous.until)
+              .order('created_at')
+              .order('id')
+              .range(from, to),
+          { max: MAX_EVENTS },
+        )
+      : null,
   ])
 
   // Período anterior truncado ou com erro daria uma variação falsa — melhor
   // não mostrar nenhuma.
-  const previousOk = !previous.error && !previous.truncated
+  const previousOk = prior !== null && !prior.error && !prior.truncated
 
   return buildCostOverview({
     events: current.rows as unknown as CostEventRow[],
-    previousEvents: previousOk ? previous.rows : null,
-    days,
+    previousEvents: previousOk && prior ? prior.rows : null,
+    window,
     now,
     truncated: current.truncated,
     error: current.error,
@@ -199,19 +209,15 @@ export async function getCostOverview(
 /** Só os totais (dashboard sem a visão completa): não traz account/unidade nem roda os alertas. */
 export async function getCostTotals(
   supabase: SupabaseClient<Database>,
-  days: number = DEFAULT_COST_DAYS,
+  period: number | CostWindow = DEFAULT_COST_DAYS,
   now: Date = new Date(),
 ): Promise<CostPeriodTotals> {
-  const since = new Date(now.getTime() - days * DAY_MS).toISOString()
+  const window = toWindow(period, now)
   const { rows } = await fetchAllPages<CostTotalRow>(
-    (from, to) =>
-      supabase
-        .from('cost_events')
-        .select('provider, cost_brl')
-        .gte('created_at', since)
-        .order('created_at')
-        .order('id')
-        .range(from, to),
+    (from, to) => {
+      const q = supabase.from('cost_events').select('provider, cost_brl').gte('created_at', window.since)
+      return (window.until ? q.lt('created_at', window.until) : q).order('created_at').order('id').range(from, to)
+    },
     { max: MAX_EVENTS },
   )
   return sumCostTotals(rows)

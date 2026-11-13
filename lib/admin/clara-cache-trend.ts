@@ -2,13 +2,13 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Database } from '@/types/database'
 import { fetchAllPages } from '@/lib/supabase/paginate'
 import { MAX_EVENTS } from '@/lib/admin/cost-alerts'
+import { windowFromDays, type CostWindow } from '@/lib/admin/cost-range'
 
 // Efeito do cache de prompt no custo da Clara, para o /admin/costs. Compara as
 // respostas antes e depois da primeira que usou cache — o corte sai dos dados,
 // não de uma data no código. A parte pura (buildClaraCacheTrend) é testada sem
 // Supabase.
 
-const DAY_MS = 24 * 60 * 60 * 1000
 
 export type ClaraCostRow = {
   created_at: string
@@ -124,22 +124,22 @@ export function buildClaraCacheTrend(
 
 export async function getClaraCacheTrend(
   supabase: SupabaseClient<Database>,
-  days: number,
+  period: number | CostWindow,
   now: Date = new Date(),
 ): Promise<ClaraCacheTrend> {
-  const since = new Date(now.getTime() - days * DAY_MS).toISOString()
+  const window = typeof period === 'number' ? windowFromDays(period, now) : period
   // Só a Clara em produção: o simulador do /admin gasta tokens de teste e
   // distorceria o custo por resposta.
   const result = await fetchAllPages<ClaraCostRow>(
     (from, to) =>
-      supabase
+    {
+      const q = supabase
         .from('cost_events')
         .select('created_at, cost_brl, input_tokens, related_id, metadata')
         .eq('provider', 'claude_agendamento')
-        .gte('created_at', since)
-        .order('created_at')
-        .order('id')
-        .range(from, to),
+        .gte('created_at', window.since)
+      return (window.until ? q.lt('created_at', window.until) : q).order('created_at').order('id').range(from, to)
+    },
     { max: MAX_EVENTS },
   )
   return buildClaraCacheTrend(result.rows, { truncated: result.truncated, error: result.error })
