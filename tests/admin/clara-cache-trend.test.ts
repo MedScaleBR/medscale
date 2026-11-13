@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { buildClaraCacheTrend, type ClaraCostRow } from '@/lib/admin/clara-cache-trend'
+import { buildClaraCacheTrend, getClaraCacheTrend, type ClaraCostRow } from '@/lib/admin/clara-cache-trend'
+import { createSupabaseMock } from '../helpers/supabase-mock'
+import { parseCostWindow } from '@/lib/admin/cost-range'
 
 // O painel compara o custo da Clara antes e depois do cache de prompt. O corte
 // é a primeira resposta que leu ou gravou cache — não uma data fixa no código,
@@ -75,5 +77,23 @@ describe('buildClaraCacheTrend', () => {
     expect(trend.before).toMatchObject({ responses: 1, conversations: 0 })
     expect(trend.before!.cost).toBeCloseTo(0.2, 8)
     expect(trend.before!.perConversation).toBeNull()
+  })
+})
+
+describe('getClaraCacheTrend — período', () => {
+  const now = new Date('2026-11-12T15:00:00Z')
+
+  it('número: só o início', async () => {
+    const s = createSupabaseMock({ cost_events: { select: { data: [] } } })
+    await getClaraCacheTrend(s.client as never, 7, now)
+    expect(s.callsTo('cost_events', 'select')[0].filters.some((f) => f[0] === 'lt')).toBe(false)
+  })
+
+  it('intervalo: início e fim em dias de São Paulo', async () => {
+    const s = createSupabaseMock({ cost_events: { select: { data: [] } } })
+    await getClaraCacheTrend(s.client as never, parseCostWindow({ from: '2026-11-03', to: '2026-11-11' }, now), now)
+    const f = s.callsTo('cost_events', 'select')[0].filters
+    expect(f).toContainEqual(['gte', 'created_at', '2026-11-03T03:00:00.000Z'])
+    expect(f).toContainEqual(['lt', 'created_at', '2026-11-12T03:00:00.000Z'])
   })
 })

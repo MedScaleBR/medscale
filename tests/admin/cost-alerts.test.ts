@@ -1,9 +1,11 @@
 import { describe, it, expect } from 'vitest'
 import { createSupabaseMock, type RecordedCall } from '../helpers/supabase-mock'
+import { parseCostWindow, windowFromDays } from '@/lib/admin/cost-range'
 import {
   buildCostOverview,
   costAlertRef,
   getCostOverview,
+  getCostTotals,
   MAX_EVENTS,
   normalizeCostDays,
   percentChange,
@@ -74,7 +76,7 @@ describe('buildCostOverview', () => {
         event({ provider: 'whatsapp_conversation', cost_brl: 2, account_id: 'acc2', accounts: { name: 'B' } }),
       ],
       previousEvents: null,
-      days: 30,
+      window: windowFromDays(30, NOW),
       now: NOW,
     })
 
@@ -86,11 +88,20 @@ describe('buildCostOverview', () => {
     ])
     expect(overview.previous).toBeNull()
     expect(overview.since).toBe('2026-09-02T13:00:00.000Z')
+    expect(overview.days).toBe(30)
+  })
+
+  it('intervalo personalizado de um dia conta 1 dia', () => {
+    const window = parseCostWindow({ from: '2026-09-30', to: '2026-09-30' }, NOW)
+    const overview = buildCostOverview({ events: [], previousEvents: null, window, now: NOW })
+    expect(overview.days).toBe(1)
+    expect(overview.window).toEqual(window)
+    expect(overview.since).toBe('2026-09-30T03:00:00.000Z')
   })
 
   it('alertas ganham ref e título', () => {
     const loop = Array.from({ length: LOOP_TURN_THRESHOLD }, () => event({ related_id: 'loop' }))
-    const overview = buildCostOverview({ events: loop, previousEvents: [], days: 30, now: NOW })
+    const overview = buildCostOverview({ events: loop, previousEvents: [], window: windowFromDays(30, NOW), now: NOW })
 
     expect(overview.alerts).toHaveLength(1)
     expect(overview.alerts[0]).toMatchObject({
@@ -104,7 +115,7 @@ describe('buildCostOverview', () => {
     const overview = buildCostOverview({
       events: [],
       previousEvents: [{ provider: 'whisper', cost_brl: 4 }],
-      days: 7,
+      window: windowFromDays(7, NOW),
       now: NOW,
     })
     expect(overview.previous).toEqual({ total: 4, byGroup: { claude: 0, whisper: 4, whatsapp: 0 } })
@@ -140,6 +151,44 @@ function paged<T>(rows: T[]) {
     return { data: rows.slice(from, to + 1), error: null }
   }
 }
+
+describe('getCostOverview — período', () => {
+  it('número continua sem teto no período atual', async () => {
+    const s = createSupabaseMock({ cost_events: { select: { data: [] } } })
+    const overview = await getCostOverview(s.client as never, 30, NOW)
+    const [current, previous] = s.callsTo('cost_events', 'select')
+    expect(current.filters).toContainEqual(['gte', 'created_at', '2026-09-02T13:00:00.000Z'])
+    expect(current.filters.some((f) => f[0] === 'lt')).toBe(false)
+    expect(previous.filters).toContainEqual(['lt', 'created_at', '2026-09-02T13:00:00.000Z'])
+    expect(overview.days).toBe(30)
+  })
+
+  it('intervalo personalizado limita os dois lados e compara com o intervalo anterior', async () => {
+    const s = createSupabaseMock({ cost_events: { select: { data: [] } } })
+    await getCostOverview(s.client as never, parseCostWindow({ from: '2026-09-28', to: '2026-09-30' }, NOW), NOW)
+    const [current, previous] = s.callsTo('cost_events', 'select')
+    expect(current.filters).toContainEqual(['gte', 'created_at', '2026-09-28T03:00:00.000Z'])
+    expect(current.filters).toContainEqual(['lt', 'created_at', '2026-10-01T03:00:00.000Z'])
+    expect(previous.filters).toContainEqual(['gte', 'created_at', '2026-09-25T03:00:00.000Z'])
+    expect(previous.filters).toContainEqual(['lt', 'created_at', '2026-09-28T03:00:00.000Z'])
+  })
+
+  it('getCostTotals com intervalo também limita o fim', async () => {
+    const s = createSupabaseMock({ cost_events: { select: { data: [{ provider: 'whisper', cost_brl: 2 }] } } })
+    const totals = await getCostTotals(s.client as never, parseCostWindow({ from: '2026-09-30', to: '2026-09-30' }, NOW), NOW)
+    expect(totals.total).toBe(2)
+    expect(s.callsTo('cost_events', 'select')[0].filters).toContainEqual(['lt', 'created_at', '2026-10-01T03:00:00.000Z'])
+  })
+})
+
+describe('getCostOverview — sem período anterior', () => {
+  it('withPrevious false faz só a consulta do período e não calcula variação', async () => {
+    const s = createSupabaseMock({ cost_events: { select: { data: [] } } })
+    const overview = await getCostOverview(s.client as never, 30, NOW, { withPrevious: false })
+    expect(s.callsTo('cost_events', 'select')).toHaveLength(1)
+    expect(overview.previous).toBeNull()
+  })
+})
 
 describe('getCostOverview — paginação', () => {
   it('soma todos os eventos além de 1000 linhas, sem truncar', async () => {
