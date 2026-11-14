@@ -6,7 +6,26 @@ import OpenAI from 'openai'
 // valida a apiKey na construção e lança erro se estiver vazia — no module
 // scope isso quebra a coleta de dados de rota do `next build` quando
 // OPENAI_API_KEY ainda não foi configurada localmente.
-export async function transcribeAudio(audioUrl: string): Promise<string> {
+// O gpt-4o-mini-transcribe é bem mais rápido que o whisper-1, mas recusa áudio
+// acima de 1500s (25 min). A gravação vai até 30 min
+// (lib/transcriptions/recording-limits.ts), então consulta longa, ou sem
+// duração conhecida, continua no whisper-1. A margem cobre a diferença entre a
+// duração medida no navegador e a que a OpenAI mede no arquivo.
+export const FAST_TRANSCRIPTION_MODEL = 'gpt-4o-mini-transcribe'
+export const FALLBACK_TRANSCRIPTION_MODEL = 'whisper-1'
+const FAST_MODEL_MAX_SECONDS = 1400
+
+export function pickConsultationModel(durationSeconds: number | null | undefined): string {
+  if (!durationSeconds || durationSeconds <= 0 || durationSeconds > FAST_MODEL_MAX_SECONDS) {
+    return FALLBACK_TRANSCRIPTION_MODEL
+  }
+  return FAST_TRANSCRIPTION_MODEL
+}
+
+export async function transcribeAudio(
+  audioUrl: string,
+  model: string = FALLBACK_TRANSCRIPTION_MODEL
+): Promise<string> {
   const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY })
   const response = await fetch(audioUrl)
   if (!response.ok) throw new Error(`Failed to fetch audio: ${response.status}`)
@@ -18,7 +37,7 @@ export async function transcribeAudio(audioUrl: string): Promise<string> {
 
   const transcription = await openai.audio.transcriptions.create({
     file,
-    model: 'whisper-1',
+    model,
     language: process.env.WHISPER_LANGUAGE ?? 'pt',
     response_format: 'text',
   })

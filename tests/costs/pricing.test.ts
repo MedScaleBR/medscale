@@ -71,6 +71,12 @@ describe('whisperCostUsd', () => {
     expect(whisperCostUsd(30)).toBeCloseTo(0.003, 10)
   })
 
+  it('cobra pelo preço do modelo, com whisper-1 como padrão para modelo desconhecido', () => {
+    expect(whisperCostUsd(60, 'gpt-4o-mini-transcribe')).toBeCloseTo(0.003, 10)
+    expect(whisperCostUsd(60, 'whisper-1')).toBeCloseTo(0.006, 10)
+    expect(whisperCostUsd(60, 'modelo-novo')).toBeCloseTo(0.006, 10)
+  })
+
   it('duração inválida ou ausente não vira custo negativo nem NaN', () => {
     expect(whisperCostUsd(0)).toBe(0)
     expect(whisperCostUsd(-10)).toBe(0)

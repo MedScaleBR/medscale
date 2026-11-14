@@ -142,15 +142,18 @@ export async function recordWhisperCost(params: {
   /** Null para o áudio do paciente no WhatsApp (não vira linha em transcriptions). */
   transcriptionId: string | null
   source?: 'consulta' | 'whatsapp_audio'
+  /** Modelo que transcreveu; o padrão é o whisper-1 do áudio do WhatsApp. */
+  model?: string
 }): Promise<void> {
   if (!params.durationSeconds || params.durationSeconds <= 0) return
 
-  const usd = whisperCostUsd(params.durationSeconds)
+  const model = params.model ?? 'whisper-1'
+  const usd = whisperCostUsd(params.durationSeconds, model)
 
   await insertCostEvent({
     ...params.ctx,
     provider: 'whisper',
-    model: 'whisper-1',
+    model,
     quantity: params.durationSeconds,
     costBrl: toBrl(usd),
     relatedId: params.transcriptionId,

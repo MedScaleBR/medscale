@@ -186,6 +186,16 @@ describe('recordWhisperCost', () => {
     expect(row.cost_brl).toBeCloseTo(0.012 * USD_BRL, 4)
   })
 
+  it('grava o modelo informado e cobra pelo preço dele', async () => {
+    const mock = setup()
+
+    await recordWhisperCost({ ctx: CTX, durationSeconds: 120, transcriptionId: 'tr1', model: 'gpt-4o-mini-transcribe' })
+
+    const row = inserted(mock)
+    expect(row).toMatchObject({ model: 'gpt-4o-mini-transcribe', quantity: 120 })
+    expect(row.cost_brl).toBeCloseTo(0.006 * USD_BRL, 4)
+  })
+
   it('duração ausente ou zerada não vira linha', async () => {
     const mock = setup()
 

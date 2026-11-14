@@ -13,9 +13,13 @@ vi.mock('@/lib/supabase/server', () => ({
   createAdminClient: () => g.supabase.client,
   createClient: async () => g.supabase.client,
 }))
-vi.mock('@/lib/transcriptions/whisper', () => ({
-  transcribeAudio: (...args: unknown[]) => g.transcribeAudio(...args),
-}))
+vi.mock('@/lib/transcriptions/whisper', async () => {
+  const actual = await vi.importActual<typeof import('@/lib/transcriptions/whisper')>('@/lib/transcriptions/whisper')
+  return {
+    pickConsultationModel: actual.pickConsultationModel,
+    transcribeAudio: (...args: unknown[]) => g.transcribeAudio(...args),
+  }
+})
 vi.mock('@/lib/transcriptions/notify-error', () => ({
   notifyTranscriptionFailed: (...args: unknown[]) => g.notifyTranscriptionFailed(...args),
 }))
@@ -113,12 +117,32 @@ describe('POST /api/transcriptions/process — etapa Whisper', () => {
     )
   })
 
+  it('deve usar o modelo rápido em consulta curta e o whisper-1 em consulta longa', async () => {
+    setup({ transcriptions: { select: { data: pendingRow({ duration_seconds: 540 }) }, update: { data: null } } })
+    await processRoute(request({ transcription_id: 't1' }))
+    expect(g.transcribeAudio).toHaveBeenLastCalledWith(expect.any(String), 'gpt-4o-mini-transcribe')
+
+    setup({ transcriptions: { select: { data: pendingRow({ duration_seconds: 1700 }) }, update: { data: null } } })
+    await processRoute(request({ transcription_id: 't1' }))
+    expect(g.transcribeAudio).toHaveBeenLastCalledWith(expect.any(String), 'whisper-1')
+  })
+
+  it('deve registrar o custo com o modelo que transcreveu', async () => {
+    const supabase = setup({
+      transcriptions: { select: { data: pendingRow({ duration_seconds: 300 }) }, update: { data: null } },
+    })
+    await processRoute(request({ transcription_id: 't1' }))
+
+    const cost = supabase.callsTo('cost_events', 'insert')[0]?.payload as Record<string, unknown>
+    expect(cost).toMatchObject({ model: 'gpt-4o-mini-transcribe', quantity: 300 })
+  })
+
   it('deve transcrever a partir da signed URL do Storage', async () => {
     const supabase = setup({ transcriptions: { select: { data: pendingRow() }, update: { data: null } } })
     await processRoute(request({ transcription_id: 't1' }))
 
     expect(supabase.storage.createSignedUrl).toHaveBeenCalledWith('w1/a1/123.webm', 3600)
-    expect(g.transcribeAudio).toHaveBeenCalledWith('https://storage.test/audio.webm')
+    expect(g.transcribeAudio).toHaveBeenCalledWith('https://storage.test/audio.webm', expect.any(String))
   })
 
   it('deve voltar para pending com retry_count 1 e re-disparar quando o Whisper falha na primeira tentativa', async () => {
@@ -195,6 +219,14 @@ describe('transcribeAudio — integração com o Whisper', () => {
     )
   })
 
+  it('deve mandar para a OpenAI o modelo escolhido', async () => {
+    const { transcribeAudio: real } = await vi.importActual<typeof import('@/lib/transcriptions/whisper')>(
+      '@/lib/transcriptions/whisper'
+    )
+    await real('https://storage.test/audio.webm', 'gpt-4o-mini-transcribe')
+    expect(g.openaiCreate).toHaveBeenCalledWith(expect.objectContaining({ model: 'gpt-4o-mini-transcribe' }))
+  })
+
   it('deve lançar quando o download do áudio falha', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 404 })))
     const { transcribeAudio: real } = await vi.importActual<typeof import('@/lib/transcriptions/whisper')>(
@@ -202,5 +234,19 @@ describe('transcribeAudio — integração com o Whisper', () => {
     )
     await expect(real('https://storage.test/sumiu.webm')).rejects.toThrow(/Failed to fetch audio: 404/)
     expect(g.openaiCreate).not.toHaveBeenCalled()
+  })
+})
+
+describe('pickConsultationModel', () => {
+  it('usa o modelo rápido até 1400s e o whisper-1 acima disso ou sem duração', async () => {
+    const { pickConsultationModel } = await vi.importActual<typeof import('@/lib/transcriptions/whisper')>(
+      '@/lib/transcriptions/whisper'
+    )
+    expect(pickConsultationModel(60)).toBe('gpt-4o-mini-transcribe')
+    expect(pickConsultationModel(1400)).toBe('gpt-4o-mini-transcribe')
+    expect(pickConsultationModel(1401)).toBe('whisper-1')
+    expect(pickConsultationModel(1800)).toBe('whisper-1')
+    expect(pickConsultationModel(null)).toBe('whisper-1')
+    expect(pickConsultationModel(0)).toBe('whisper-1')
   })
 })

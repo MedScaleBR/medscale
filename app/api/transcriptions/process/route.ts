@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireCronAuth } from '@/lib/cron-auth'
 import { createAdminClient } from '@/lib/supabase/server'
-import { transcribeAudio } from '@/lib/transcriptions/whisper'
+import { pickConsultationModel, transcribeAudio } from '@/lib/transcriptions/whisper'
 import { trackTranscriptionCompleted, trackTranscriptionError } from '@/lib/analytics/posthog-server'
 import { notifyTranscriptionFailed } from '@/lib/transcriptions/notify-error'
 import { recordWhisperCost } from '@/lib/costs/record'
 
-export const maxDuration = 60
+// O Whisper leva mais que 60s numa consulta de ~9 min. Se a Vercel corta a
+// função no meio, o catch não roda e a linha fica presa em 'transcribing' —
+// quem destrava é app/api/cron/stuck-transcriptions.
+export const maxDuration = 300
 
 // Disparado via pg_net por trigger_transcription_process (upload ou retry) —
 // mesma autenticação Bearer CRON_SECRET das rotas em app/api/cron/*.
@@ -35,7 +38,8 @@ export async function POST(req: NextRequest) {
 
     if (!signedData?.signedUrl) throw new Error('Could not generate signed URL')
 
-    const transcriptText = await transcribeAudio(signedData.signedUrl)
+    const model = pickConsultationModel(transcription.duration_seconds)
+    const transcriptText = await transcribeAudio(signedData.signedUrl, model)
 
     await supabase
       .from('transcriptions')
@@ -50,6 +54,7 @@ export async function POST(req: NextRequest) {
       durationSeconds: transcription.duration_seconds ?? 0,
       transcriptionId: transcription_id,
       source: 'consulta',
+      model,
     })
 
     await trackTranscriptionCompleted(transcription.recorded_by, {
