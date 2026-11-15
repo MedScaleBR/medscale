@@ -5,7 +5,9 @@ import { generateSOAP } from '@/lib/transcriptions/generate-soap'
 import { trackSoapGenerated, trackTranscriptionError } from '@/lib/analytics/posthog-server'
 import { notifyTranscriptionFailed } from '@/lib/transcriptions/notify-error'
 
-export const maxDuration = 60
+// Mesma folga da etapa de transcrição: corte por tempo deixa a linha presa em
+// 'generating' (ver app/api/cron/stuck-transcriptions).
+export const maxDuration = 300
 
 // Disparado via pg_net por trigger_transcription_generate — mesma
 // autenticação Bearer CRON_SECRET das rotas em app/api/cron/*.

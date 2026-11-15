@@ -218,7 +218,8 @@ interface UnsupportedMessageParams {
   profileName?: string | null
 }
 
-// A Clara só entende texto. Isso avisa o paciente e pede pra escrever.
+// Mídia que a Clara não entende: registra na conversa e só responde quando
+// houver uma resposta própria (ex.: áudio acima de 2 minutos).
 export async function handleUnsupportedMessage(params: UnsupportedMessageParams) {
   const { accountId, patientPhone, messageType, whatsappMessageId } = params
   const supabase = createAdminClient()
@@ -260,11 +261,12 @@ export async function handleUnsupportedMessage(params: UnsupportedMessageParams)
     return
   }
 
-  if (!botConfig.phoneNumberId || !botConfig.metaToken) return
+  // Sem resposta própria (imagem, figurinha, vídeo...), a Clara não fala nada:
+  // a mídia fica registrada na conversa para a equipe ver.
+  const reply = params.reply
+  if (!reply) return
 
-  const reply =
-    params.reply ??
-    `Recebi seu ${label}, mas por enquanto só consigo entender mensagens em texto — pode escrever o que você precisa? 🙂`
+  if (!botConfig.phoneNumberId || !botConfig.metaToken) return
 
   await supabase.from('messages').insert({ conversation_id: conversation.id, role: 'assistant', content: reply })
   await sendWhatsAppMessage({

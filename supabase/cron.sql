@@ -135,6 +135,25 @@ select cron.schedule(
   $$
 );
 
+-- STUCK-TRANSCRIPTIONS: re-dispara transcrição parada em 'transcribing' ou
+-- 'generating' há mais de 6 min (função cortada por tempo na Vercel). Só olha
+-- as últimas 2h; na 3ª tentativa marca erro e avisa o médico. A cada 5 min.
+-- Ver app/api/cron/stuck-transcriptions.
+select cron.schedule(
+  'stuck-transcriptions',
+  '*/5 * * * *',
+  $$
+    select net.http_post(
+      url     := 'https://medscalebr.com/api/cron/stuck-transcriptions',
+      headers := jsonb_build_object(
+        'Content-Type',  'application/json',
+        'Authorization', 'Bearer ' || public.cron_secret()
+      ),
+      body    := '{}'::jsonb
+    );
+  $$
+);
+
 -- CLEANUP-RECORDINGS: apaga áudios de transcrições assinadas há mais de
 -- RECORDING_RETENTION_DAYS dias (ver supabase/transcriptions.sql) — 3h da manhã
 select cron.schedule(

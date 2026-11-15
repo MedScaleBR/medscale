@@ -69,13 +69,19 @@ export function claudeCostUsd(
   )
 }
 
-// Whisper (OpenAI) cobra por minuto de áudio, arredondado ao segundo.
-const WHISPER_USD_PER_MINUTE = 0.006
+// Transcrição (OpenAI), em USD por minuto de áudio. O gpt-4o-mini-transcribe
+// cobra por token de áudio; US$0,003/min é a estimativa por minuto que a
+// própria OpenAI publica. Modelo desconhecido cai no preço do whisper-1.
+const TRANSCRIPTION_USD_PER_MINUTE: Record<string, number> = {
+  'whisper-1': 0.006,
+  'gpt-4o-mini-transcribe': 0.003,
+}
 
 /** Custo em USD de uma transcrição, pela duração do áudio. */
-export function whisperCostUsd(durationSeconds: number): number {
+export function whisperCostUsd(durationSeconds: number, model = 'whisper-1'): number {
   if (!isFinite(durationSeconds) || durationSeconds <= 0) return 0
-  return (durationSeconds / 60) * WHISPER_USD_PER_MINUTE
+  const perMinute = TRANSCRIPTION_USD_PER_MINUTE[model] ?? TRANSCRIPTION_USD_PER_MINUTE['whisper-1']
+  return (durationSeconds / 60) * perMinute
 }
 
 // Janela de 24h do WhatsApp aberta pelo paciente (conversa de serviço da Meta).
