@@ -5,6 +5,7 @@ import { pickConsultationModel, transcribeAudio } from '@/lib/transcriptions/whi
 import { trackTranscriptionCompleted, trackTranscriptionError } from '@/lib/analytics/posthog-server'
 import { notifyTranscriptionFailed } from '@/lib/transcriptions/notify-error'
 import { recordWhisperCost } from '@/lib/costs/record'
+import { cleanTranscript, NO_SPEECH_ERROR } from '@/lib/transcriptions/silence'
 
 // O Whisper leva mais que 60s numa consulta de ~9 min. Se a Vercel corta a
 // função no meio, o catch não roda e a linha fica presa em 'transcribing' —
@@ -39,12 +40,9 @@ export async function POST(req: NextRequest) {
     if (!signedData?.signedUrl) throw new Error('Could not generate signed URL')
 
     const model = pickConsultationModel(transcription.duration_seconds)
-    const transcriptText = await transcribeAudio(signedData.signedUrl, model)
-
-    await supabase
-      .from('transcriptions')
-      .update({ transcript_text: transcriptText, status: 'transcribed', retry_count: 0, error_message: null })
-      .eq('id', transcription_id)
+    // Tira as frases que o Whisper inventa em cima de silêncio (microfone
+    // mudo no meio da consulta) e marca o trecho — ver lib/transcriptions/silence.
+    const cleaned = cleanTranscript(await transcribeAudio(signedData.signedUrl, model))
 
     // O Whisper cobra por duração, então o custo só é conhecido aqui, depois
     // de transcrever. Uma tentativa que falhou não gera linha: a OpenAI não
@@ -56,6 +54,28 @@ export async function POST(req: NextRequest) {
       source: 'consulta',
       model,
     })
+
+    // Gravação inteira muda: não há o que virar prontuário, e tentar de novo
+    // só transcreveria o mesmo silêncio. Vai direto para erro, sem retry.
+    if (!cleaned.hasSpeech) {
+      await supabase
+        .from('transcriptions')
+        .update({ transcript_text: cleaned.text, status: 'error', error_message: NO_SPEECH_ERROR })
+        .eq('id', transcription_id)
+      await notifyTranscriptionFailed({
+        id: transcription.id,
+        workspace_id: transcription.workspace_id,
+        patient_id: transcription.patient_id,
+        patient_name: transcription.patient_name,
+        recorded_by: transcription.recorded_by,
+      })
+      return NextResponse.json({ ok: false, error: NO_SPEECH_ERROR })
+    }
+
+    await supabase
+      .from('transcriptions')
+      .update({ transcript_text: cleaned.text, status: 'transcribed', retry_count: 0, error_message: null })
+      .eq('id', transcription_id)
 
     await trackTranscriptionCompleted(transcription.recorded_by, {
       workspace_id: transcription.workspace_id,

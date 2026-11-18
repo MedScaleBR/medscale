@@ -185,6 +185,36 @@ describe('POST /api/transcriptions/process — etapa Whisper', () => {
     })
   })
 
+  it('deve tirar a alucinação de silêncio do Whisper e marcar o trecho mudo', async () => {
+    g.transcribeAudio = vi.fn(async () => `${TRANSCRIPT} Legendas pela comunidade Amara.org Legendas pela comunidade Amara.org`)
+    const supabase = setup({ transcriptions: { select: { data: pendingRow() }, update: { data: null } } })
+    await processRoute(request({ transcription_id: 't1' }))
+
+    expect(supabase.callsTo('transcriptions', 'update').at(-1)?.payload).toMatchObject({
+      transcript_text: `${TRANSCRIPT} [trecho sem áudio]`,
+      status: 'transcribed',
+    })
+    expect(supabase.rpc).toHaveBeenCalledWith('trigger_transcription_generate', expect.anything())
+  })
+
+  it('deve marcar error sem retry e avisar o médico quando a gravação inteira veio muda', async () => {
+    g.transcribeAudio = vi.fn(async () => 'Legendas pela comunidade Amara.org')
+    const supabase = setup({
+      transcriptions: { select: { data: pendingRow({ duration_seconds: 600, workspace_id: 'w1', recorded_by: 'u1' }) }, update: { data: null } },
+    })
+    const res = await processRoute(request({ transcription_id: 't1' }))
+
+    expect(res.status).toBe(200)
+    expect(supabase.callsTo('transcriptions', 'update').at(-1)?.payload).toMatchObject({
+      status: 'error',
+      error_message: expect.stringMatching(/^NO_SPEECH/),
+    })
+    expect(supabase.rpc).not.toHaveBeenCalled()
+    expect(g.notifyTranscriptionFailed).toHaveBeenCalledWith(expect.objectContaining({ id: 't1' }))
+    // A OpenAI cobrou o áudio mesmo assim.
+    expect(supabase.callsTo('cost_events', 'insert')).toHaveLength(1)
+  })
+
   it('deve cair no retry quando a signed URL do Storage não pode ser gerada', async () => {
     const supabase = setup({ transcriptions: { select: { data: pendingRow() }, update: { data: null } } })
     supabase.storage.createSignedUrl.mockResolvedValueOnce({ data: null, error: { message: 'objeto não encontrado' } })
