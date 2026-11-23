@@ -223,18 +223,47 @@ describe('processIncomingMessage — montagem de contexto', () => {
     expect(sendWhatsAppMessage).not.toHaveBeenCalled()
   })
 
+  // Echo anterior do celular (a secretária já estava atendendo) — consulta
+  // identificada pelo filtro whatsapp_id não nulo.
+  const messagesWithPreviousEcho = (previousEcho: boolean) => ({
+    insert: { data: null },
+    select: (call: Parameters<typeof filterValue>[0]) =>
+      call.filters.some((f) => f[0] === 'not' && f[1] === 'whatsapp_id')
+        ? { data: previousEcho ? { id: 'echo-anterior' } : null }
+        : { data: [{ role: 'user', content: PARAMS.message }] },
+  })
+
   it('desfaz a pausa criada pela saudação automática que chegou antes da mensagem (áudio transcrevendo)', async () => {
     const sentAt = new Date(Date.now() - 8000)
     // Saudação gravada 1s depois de o paciente enviar → pausa até +4h dali.
     const pausedUntil = secretaryPauseUntil(new Date(sentAt.getTime() + 1000))
     const supabase = mergeSupabaseConfig({
       conversations: { select: { data: { id: 'c1', status: 'open', bot_paused: false, bot_paused_until: pausedUntil, archived_at: null } } },
+      messages: messagesWithPreviousEcho(false),
     })
 
     await processIncomingMessage({ ...PARAMS, sentAt })
 
     expect(supabase.callsTo('conversations', 'update').some((c) => (c.payload as { bot_paused_until?: unknown }).bot_paused_until === null)).toBe(true)
     expect(claudeCreate).toHaveBeenCalled()
+  })
+
+  it('mantém a pausa quando a secretária já atendia e respondeu segundos depois de uma foto (caso real 23/11)', async () => {
+    // Paciente manda a carteirinha às 08:33:07; a confirmação da secretária
+    // chega às 08:33:11, antes de a foto terminar de ser salva. Ela já tinha
+    // respondido às 08:30 — não é saudação automática.
+    const sentAt = new Date(Date.now() - 6000)
+    const pausedUntil = secretaryPauseUntil(new Date(sentAt.getTime() + 4000))
+    const supabase = mergeSupabaseConfig({
+      conversations: { select: { data: { id: 'c1', status: 'open', bot_paused: false, bot_paused_until: pausedUntil, archived_at: null } } },
+      messages: messagesWithPreviousEcho(true),
+    })
+
+    await processIncomingMessage({ ...PARAMS, sentAt })
+
+    expect(supabase.callsTo('conversations', 'update').some((c) => (c.payload as { bot_paused_until?: unknown }).bot_paused_until === null)).toBe(false)
+    expect(claudeCreate).not.toHaveBeenCalled()
+    expect(sendWhatsAppMessage).not.toHaveBeenCalled()
   })
 
   it('mantém a pausa quando a secretária respondeu antes do paciente escrever', async () => {
@@ -774,6 +803,25 @@ describe('recordBusinessEcho — secretária respondeu pelo celular', () => {
     expect(supabase.callsTo('messages', 'insert')).toHaveLength(1)
     const pauses = supabase.callsTo('conversations', 'update').filter((c) => 'bot_paused_until' in (c.payload as object))
     expect(pauses).toHaveLength(0)
+  })
+
+  it('com a secretária já atendendo, resposta segundos depois do paciente renova a pausa', async () => {
+    const supabase = mergeSupabaseConfig({
+      conversations: { select: { data: { id: 'c1', status: 'open', bot_paused: false, bot_paused_until: secretaryPauseUntil(new Date(Date.now() - 3 * 60 * 1000)), archived_at: null } } },
+      messages: {
+        insert: { data: null },
+        select: (call) =>
+          filterValue(call, 'eq', 'role') === 'user'
+            ? { data: { sent_at: new Date(Date.now() - 2000).toISOString() } }
+            : { data: null },
+      },
+    })
+
+    await recordBusinessEcho(PARAMS.accountId, echo)
+
+    const update = supabase.callsTo('conversations', 'update').at(-1)
+    const until = new Date((update?.payload as { bot_paused_until: string }).bot_paused_until).getTime()
+    expect(until).toBeGreaterThan(Date.now() + 3.9 * 60 * 60 * 1000)
   })
 
   it('resposta da secretária minutos depois do paciente pausa', async () => {

@@ -15,7 +15,15 @@ import {
   recordPendingExternalRequest,
 } from '@/lib/bot/external-request'
 import { executeHandoff, logHandoffUnavailable } from '@/lib/bot/handoff'
-import { echoTimeFromPause, isAutoReply, isBotPaused, secretaryPauseUntil, type BusinessEcho } from '@/lib/bot/pause'
+import {
+  AUTO_REPLY_WINDOW_SECONDS,
+  SECRETARY_PAUSE_HOURS,
+  echoTimeFromPause,
+  isAutoReply,
+  isBotPaused,
+  secretaryPauseUntil,
+  type BusinessEcho,
+} from '@/lib/bot/pause'
 import { sendExternalRequestEmail } from '@/lib/bot/request-email'
 import { broadcastToWorkspace } from '@/lib/realtime/broadcast'
 import { createBookingRevenueEntry } from '@/lib/revenue/cycle'
@@ -312,8 +320,14 @@ export async function recordBusinessEcho(accountId: string, echo: BusinessEcho) 
   }
 
   // Saudação/ausência automática do app sai segundos depois da mensagem do
-  // paciente — não é a secretária, então a Clara segue respondendo.
+  // paciente — não é a secretária, então a Clara segue respondendo. Se a
+  // secretária já estava atendendo (pausa dela em vigor), qualquer echo é dela.
   const now = new Date()
+  if (!conversation.bot_paused && isBotPaused(conversation, now)) {
+    await supabase.from('conversations').update({ bot_paused_until: secretaryPauseUntil(now) }).eq('id', conversation.id)
+    console.log(`[coexistence] secretária segue atendendo pelo celular — pausa renovada na conversa ${conversation.id}`)
+    return
+  }
   const { data: lastPatientMessage } = await supabase
     .from('messages')
     .select('sent_at')
@@ -329,6 +343,24 @@ export async function recordBusinessEcho(accountId: string, echo: BusinessEcho) 
 
   await supabase.from('conversations').update({ bot_paused_until: secretaryPauseUntil(now) }).eq('id', conversation.id)
   console.log(`[coexistence] secretária respondeu pelo celular — Clara pausada na conversa ${conversation.id}`)
+}
+
+// A clínica já tinha respondido pelo celular antes do echo que criou a pausa?
+// Echo do celular é a única mensagem 'assistant' gravada com whatsapp_id.
+async function hadEarlierPhoneEcho(supabase: SupabaseAdmin, conversationId: string, echoAt: Date): Promise<boolean> {
+  const windowStart = new Date(echoAt.getTime() - SECRETARY_PAUSE_HOURS * 60 * 60 * 1000)
+  const before = new Date(echoAt.getTime() - AUTO_REPLY_WINDOW_SECONDS * 1000)
+  const { data } = await supabase
+    .from('messages')
+    .select('id')
+    .eq('conversation_id', conversationId)
+    .eq('role', 'assistant')
+    .not('whatsapp_id', 'is', null)
+    .gte('sent_at', windowStart.toISOString())
+    .lt('sent_at', before.toISOString())
+    .limit(1)
+    .maybeSingle()
+  return Boolean(data)
 }
 
 // O bot conversa e agenda 24/7 — nunca fica "fechado". Só o handoff para um
@@ -405,12 +437,15 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
 
   // A saudação automática do app chegou antes desta mensagem ser gravada (ex.:
   // áudio esperando a transcrição) e pausou a Clara. Não era a secretária:
-  // desfaz a pausa.
+  // desfaz a pausa. Só vale se não houver resposta anterior pelo celular — com a
+  // secretária já atendendo, um echo segundos depois da mensagem é dela (ex.:
+  // confirmação enviada enquanto a foto da carteirinha ainda era salva).
   if (
     !conversation.bot_paused &&
     conversation.bot_paused_until &&
     isBotPaused(conversation) &&
-    isAutoReply(echoTimeFromPause(conversation.bot_paused_until), params.sentAt ?? new Date())
+    isAutoReply(echoTimeFromPause(conversation.bot_paused_until), params.sentAt ?? new Date()) &&
+    !(await hadEarlierPhoneEcho(supabase, conversation.id, echoTimeFromPause(conversation.bot_paused_until)))
   ) {
     console.log(`[coexistence] pausa veio de resposta automática do app — Clara segue ativa na conversa ${conversation.id}`)
     await supabase.from('conversations').update({ bot_paused_until: null }).eq('id', conversation.id)
