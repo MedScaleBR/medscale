@@ -2,7 +2,7 @@
 //
 // Dois tipos:
 // - bot_paused: pausa até a equipe reativar pelo painel (handoff, resposta
-//   manual pelo painel).
+//   manual pelo painel, conversa iniciada pela secretária no celular).
 // - bot_paused_until: pausa temporária. Usada quando a secretária responde o
 //   paciente pelo app do WhatsApp Business no celular (coexistência). Cada
 //   nova resposta dela empurra o prazo.
@@ -31,6 +31,17 @@ export function isAutoReply(echoAt: Date, patientMessageAt: Date): boolean {
   const diff = echoAt.getTime() - patientMessageAt.getTime()
   // -1s de folga: o timestamp da Meta vem em segundos inteiros.
   return diff >= -1000 && diff <= AUTO_REPLY_WINDOW_SECONDS * 1000
+}
+
+// Secretária escrevendo pelo celular sem o paciente ter falado nesse intervalo
+// = conversa iniciada por ela (cobrança de documento, retorno de autorização,
+// confirmação de cirurgia). A resposta do paciente pode vir dias depois e é
+// para ela, não para a Clara — por isso a pausa vai até reativar no painel.
+export const SECRETARY_INITIATED_GAP_HOURS = 24
+
+export function isSecretaryInitiated(echoAt: Date, lastPatientMessageAt: Date | null): boolean {
+  if (!lastPatientMessageAt) return true
+  return echoAt.getTime() - lastPatientMessageAt.getTime() > SECRETARY_INITIATED_GAP_HOURS * 60 * 60 * 1000
 }
 
 // Timestamp da Meta: segundos Unix em string ("1762431628").

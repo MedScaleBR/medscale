@@ -21,6 +21,7 @@ import {
   echoTimeFromPause,
   isAutoReply,
   isBotPaused,
+  isSecretaryInitiated,
   secretaryPauseUntil,
   type BusinessEcho,
 } from '@/lib/bot/pause'
@@ -319,15 +320,10 @@ export async function recordBusinessEcho(accountId: string, echo: BusinessEcho) 
     })
   }
 
-  // Saudação/ausência automática do app sai segundos depois da mensagem do
-  // paciente — não é a secretária, então a Clara segue respondendo. Se a
-  // secretária já estava atendendo (pausa dela em vigor), qualquer echo é dela.
+  // Já pausada até reativar (handoff, painel): nada a mudar.
+  if (conversation.bot_paused) return
+
   const now = new Date()
-  if (!conversation.bot_paused && isBotPaused(conversation, now)) {
-    await supabase.from('conversations').update({ bot_paused_until: secretaryPauseUntil(now) }).eq('id', conversation.id)
-    console.log(`[coexistence] secretária segue atendendo pelo celular — pausa renovada na conversa ${conversation.id}`)
-    return
-  }
   const { data: lastPatientMessage } = await supabase
     .from('messages')
     .select('sent_at')
@@ -336,7 +332,30 @@ export async function recordBusinessEcho(accountId: string, echo: BusinessEcho) 
     .order('sent_at', { ascending: false })
     .limit(1)
     .maybeSingle()
-  if (lastPatientMessage?.sent_at && isAutoReply(now, new Date(lastPatientMessage.sent_at))) {
+  const lastPatientAt = lastPatientMessage?.sent_at ? new Date(lastPatientMessage.sent_at) : null
+
+  // Secretária iniciou a conversa: a resposta do paciente é para ela, mesmo
+  // que chegue depois das horas da pausa comum. bot_paused_until vai junto só
+  // para marcar a hora do echo — se for a saudação automática chegando antes
+  // da mensagem do paciente ser gravada, processIncomingMessage desfaz.
+  if (isSecretaryInitiated(now, lastPatientAt)) {
+    await supabase
+      .from('conversations')
+      .update({ bot_paused: true, bot_paused_until: secretaryPauseUntil(now) })
+      .eq('id', conversation.id)
+    console.log(`[coexistence] secretária iniciou a conversa pelo celular — Clara pausada até reativar na conversa ${conversation.id}`)
+    return
+  }
+
+  // Saudação/ausência automática do app sai segundos depois da mensagem do
+  // paciente — não é a secretária, então a Clara segue respondendo. Se a
+  // secretária já estava atendendo (pausa dela em vigor), qualquer echo é dela.
+  if (isBotPaused(conversation, now)) {
+    await supabase.from('conversations').update({ bot_paused_until: secretaryPauseUntil(now) }).eq('id', conversation.id)
+    console.log(`[coexistence] secretária segue atendendo pelo celular — pausa renovada na conversa ${conversation.id}`)
+    return
+  }
+  if (lastPatientAt && isAutoReply(now, lastPatientAt)) {
     console.log(`[coexistence] resposta automática do app — Clara segue ativa na conversa ${conversation.id}`)
     return
   }
@@ -440,15 +459,18 @@ export async function processIncomingMessage(params: ProcessMessageParams) {
   // desfaz a pausa. Só vale se não houver resposta anterior pelo celular — com a
   // secretária já atendendo, um echo segundos depois da mensagem é dela (ex.:
   // confirmação enviada enquanto a foto da carteirinha ainda era salva).
+  // Com paciente novo, a saudação parece a secretária iniciando a conversa e
+  // pausa até reativar (bot_paused) — desfaz também, exceto handoff.
   if (
-    !conversation.bot_paused &&
+    conversation.status !== 'handoff' &&
     conversation.bot_paused_until &&
-    isBotPaused(conversation) &&
+    isBotPaused({ bot_paused: false, bot_paused_until: conversation.bot_paused_until }) &&
     isAutoReply(echoTimeFromPause(conversation.bot_paused_until), params.sentAt ?? new Date()) &&
     !(await hadEarlierPhoneEcho(supabase, conversation.id, echoTimeFromPause(conversation.bot_paused_until)))
   ) {
     console.log(`[coexistence] pausa veio de resposta automática do app — Clara segue ativa na conversa ${conversation.id}`)
-    await supabase.from('conversations').update({ bot_paused_until: null }).eq('id', conversation.id)
+    await supabase.from('conversations').update({ bot_paused: false, bot_paused_until: null }).eq('id', conversation.id)
+    conversation.bot_paused = false
     conversation.bot_paused_until = null
   }
 
