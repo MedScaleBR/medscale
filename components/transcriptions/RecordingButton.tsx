@@ -5,10 +5,17 @@ import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { ConsentDialog } from './ConsentDialog'
-import { Mic, Square, Loader2 } from 'lucide-react'
+import { Mic, MicOff, Square, Loader2 } from 'lucide-react'
 import { useAnalyticsBase } from '@/lib/session/session-context'
 import { trackRecordingStarted, trackRecordingUploaded } from '@/lib/analytics/posthog'
 import { getRecordingLimitState } from '@/lib/transcriptions/recording-limits'
+import {
+  getMicAlert,
+  levelForMeter,
+  rmsFromTimeDomain,
+  SILENCE_RMS_THRESHOLD,
+  type MicAlert,
+} from '@/lib/transcriptions/mic-health'
 import { friendlyErrorMessage } from '@/lib/friendly-errors'
 
 type RecordingButtonProps = {
@@ -68,6 +75,19 @@ export function RecordingButton({ appointmentId, patientId, patientName, unitNam
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const autoStopTriggeredRef = useRef(false)
 
+  // Saúde do microfone (ver lib/transcriptions/mic-health): o navegador pode
+  // cortar o som (tela bloqueada, outro app, Bluetooth caiu) sem o
+  // MediaRecorder falhar — ele segue gravando silêncio.
+  const [level, setLevel] = useState(0)
+  const [meterAvailable, setMeterAvailable] = useState(false)
+  const [micAlert, setMicAlert] = useState<MicAlert | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const levelTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const lastSoundAtRef = useRef<number>(0)
+  const micFlagsRef = useRef({ trackEnded: false, trackMuted: false, recorderError: false })
+  const alertKindRef = useRef<MicAlert['kind'] | null>(null)
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null)
+
   useEffect(() => {
     onBusyChange?.(state !== 'idle')
   }, [state, onBusyChange])
@@ -75,9 +95,119 @@ export function RecordingButton({ appointmentId, patientId, patientName, unitNam
   useEffect(() => {
     return () => {
       if (timerRef.current) clearInterval(timerRef.current)
+      teardownMicMonitoring()
       streamRef.current?.getTracks().forEach((t) => t.stop())
     }
   }, [])
+
+  // O navegador solta o Wake Lock sozinho quando a aba sai de vista; ao
+  // voltar, pede de novo e acorda o AudioContext, que alguns aparelhos suspendem.
+  useEffect(() => {
+    if (state !== 'recording') return
+    function onVisibilityChange() {
+      if (document.visibilityState !== 'visible') return
+      void requestWakeLock()
+      void audioCtxRef.current?.resume().catch(() => {})
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange)
+  }, [state])
+
+  async function requestWakeLock() {
+    try {
+      if (!('wakeLock' in navigator) || wakeLockRef.current?.released === false) return
+      wakeLockRef.current = await navigator.wakeLock.request('screen')
+    } catch {
+      // Sem suporte, bateria fraca ou aba em segundo plano: segue sem.
+    }
+  }
+
+  function updateMicAlert(silentSeconds: number) {
+    const alert = getMicAlert({ ...micFlagsRef.current, silentSeconds })
+    if (alert && alertKindRef.current !== alert.kind) {
+      // Vibra no celular para chamar atenção mesmo com o médico olhando o paciente.
+      navigator.vibrate?.([200, 100, 200])
+    }
+    alertKindRef.current = alert?.kind ?? null
+    setMicAlert(alert)
+  }
+
+  function startMicMonitoring(stream: MediaStream, recorder: MediaRecorder) {
+    micFlagsRef.current = { trackEnded: false, trackMuted: false, recorderError: false }
+    alertKindRef.current = null
+    lastSoundAtRef.current = Date.now()
+    setMicAlert(null)
+    setLevel(0)
+
+    const track = stream.getAudioTracks()[0]
+    if (track) {
+      track.onmute = () => {
+        micFlagsRef.current.trackMuted = true
+        updateMicAlert(0)
+      }
+      track.onunmute = () => {
+        micFlagsRef.current.trackMuted = false
+        lastSoundAtRef.current = Date.now()
+        updateMicAlert(0)
+      }
+      track.onended = () => {
+        micFlagsRef.current.trackEnded = true
+        updateMicAlert(0)
+      }
+    }
+    recorder.onerror = () => {
+      micFlagsRef.current.recorderError = true
+      updateMicAlert(0)
+    }
+
+    try {
+      const Ctx =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext
+      if (!Ctx) return
+      const ctx = new Ctx()
+      void ctx.resume().catch(() => {})
+      const analyser = ctx.createAnalyser()
+      analyser.fftSize = 2048
+      ctx.createMediaStreamSource(stream).connect(analyser)
+      const samples = new Uint8Array(analyser.fftSize)
+      audioCtxRef.current = ctx
+      setMeterAvailable(true)
+
+      levelTimerRef.current = setInterval(() => {
+        // Com o AudioContext suspenso não dá para medir: não conta como
+        // silêncio (os eventos de mute/ended da trilha seguem valendo).
+        if (ctx.state !== 'running') {
+          lastSoundAtRef.current = Date.now()
+          setLevel(0)
+          updateMicAlert(0)
+          return
+        }
+        analyser.getByteTimeDomainData(samples)
+        const rms = rmsFromTimeDomain(samples)
+        setLevel(levelForMeter(rms))
+        if (rms >= SILENCE_RMS_THRESHOLD) lastSoundAtRef.current = Date.now()
+        updateMicAlert((Date.now() - lastSoundAtRef.current) / 1000)
+      }, 250)
+    } catch (err) {
+      console.warn('[RecordingButton] medidor de áudio indisponível:', err)
+    }
+  }
+
+  function teardownMicMonitoring() {
+    if (levelTimerRef.current) clearInterval(levelTimerRef.current)
+    levelTimerRef.current = null
+    void audioCtxRef.current?.close().catch(() => {})
+    audioCtxRef.current = null
+    void wakeLockRef.current?.release().catch(() => {})
+    wakeLockRef.current = null
+    const track = streamRef.current?.getAudioTracks()[0]
+    if (track) {
+      track.onmute = null
+      track.onunmute = null
+      track.onended = null
+    }
+  }
 
   async function startRecording() {
     setError(null)
@@ -95,6 +225,8 @@ export function RecordingButton({ appointmentId, patientId, patientName, unitNam
 
       recorder.start(10_000)
       mediaRecorderRef.current = recorder
+      startMicMonitoring(stream, recorder)
+      void requestWakeLock()
       startedAtRef.current = Date.now()
       autoStopTriggeredRef.current = false
       trackRecordingStarted(analyticsBase)
@@ -141,7 +273,10 @@ export function RecordingButton({ appointmentId, patientId, patientName, unitNam
     })
     recorder.stop()
     await stopped
+    teardownMicMonitoring()
     streamRef.current?.getTracks().forEach((t) => t.stop())
+    setMicAlert(null)
+    setMeterAvailable(false)
 
     setState('uploading')
 
@@ -231,11 +366,37 @@ export function RecordingButton({ appointmentId, patientId, patientName, unitNam
             />
             {formatDuration(elapsed)}
           </span>
+          {meterAvailable && (
+            <span
+              className="h-2 w-16 overflow-hidden rounded-full bg-muted"
+              role="meter"
+              aria-label="Volume do microfone"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(level * 100)}
+            >
+              <span
+                className={`block h-full rounded-full transition-[width] duration-200 ${
+                  micAlert ? 'bg-red-600' : 'bg-emerald-500'
+                }`}
+                style={{ width: `${Math.round(level * 100)}%` }}
+              />
+            </span>
+          )}
           <Button variant="destructive" onClick={stopRecording} className="gap-2">
             <Square className="h-4 w-4" />
             Encerrar gravação
           </Button>
         </div>
+        {micAlert && (
+          <p
+            role="alert"
+            className="flex max-w-sm items-start gap-1.5 rounded-md border border-red-300 bg-red-50 px-2.5 py-1.5 text-xs font-medium text-red-700"
+          >
+            <MicOff className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+            {micAlert.message}
+          </p>
+        )}
         {limit.showWarning && (
           <p className="text-xs text-amber-600">
             Encerra automaticamente em {formatDuration(limit.secondsUntilStop)}

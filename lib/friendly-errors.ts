@@ -32,6 +32,10 @@ export function friendlyErrorMessage(error: unknown, fallback = DEFAULT_ERROR): 
 export function transcriptionErrorMessage(error: unknown): string {
   const message = errorText(error) ?? ''
   const action = 'Clique em “Tentar novamente”. Se o problema continuar, entre em contato com o suporte.'
+  // NO_SPEECH_ERROR (lib/transcriptions/silence): tentar de novo não adianta.
+  if (message.startsWith('NO_SPEECH')) {
+    return 'Nenhuma fala foi captada nesta gravação. Confira se o microfone está funcionando e grave a consulta novamente.'
+  }
   if (/SOAP|prontuário|generate|Claude/i.test(message)) {
     return `Não foi possível gerar o prontuário desta consulta. ${action}`
   }

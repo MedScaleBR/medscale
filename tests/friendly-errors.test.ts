@@ -37,6 +37,10 @@ describe('friendly error messages', () => {
     expect(transcriptionErrorMessage('Error: Claude returned an invalid SOAP record: SOAPValidationError: soap.S.queixa_principal é obrigatório e deve ser uma string não vazia'))
       .toBe('Não foi possível gerar o prontuário desta consulta. Clique em “Tentar novamente”. Se o problema continuar, entre em contato com o suporte.')
   })
+  it('tells the doctor to record again when no speech was captured', () => {
+    expect(transcriptionErrorMessage('NO_SPEECH: nenhuma fala captada na gravação'))
+      .toBe('Nenhuma fala foi captada nesta gravação. Confira se o microfone está funcionando e grave a consulta novamente.')
+  })
   it('handles old stored technical errors', () => {
     expect(transcriptionErrorMessage('Error: 429 insufficient_quota')).toBe('Não foi possível processar esta consulta agora. Clique em “Tentar novamente”. Se o problema continuar, entre em contato com o suporte.')
   })
